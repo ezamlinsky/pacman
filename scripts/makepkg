@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.4'
+myver='2.7.5'
 startdir=`pwd`
 USE_COLOR="n"
 

@@ -1,7 +1,7 @@
 /*
  *  pacsync.c
  * 
- *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -346,7 +346,7 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 syncpkg_t* find_pkginsync(char *needle, PMList *haystack)
 {
 	PMList *i;
-	syncpkg_t *sync;
+	syncpkg_t *sync = NULL;
 	int found = 0;
 
 	for(i = haystack; i && !found; i = i->next) {

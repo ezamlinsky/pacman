@@ -1,5 +1,10 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.5         - "replaces" packages were ignoring IgnorePkg in pacman.conf
+              - fixed another bug in conflict handling
+              - found an out-dated reference to /usr/abs, fixed
+              - added a --recursive option for package removal, which removes
+                all deps of a target that aren't required by other packages
 2.7.4         - fixed a bug in conflict handling, where installing a
                 conflicting package would fail even if the new package
                 "provided" it

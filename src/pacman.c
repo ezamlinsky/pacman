@@ -69,6 +69,7 @@ unsigned short pmo_q_list     = 0;
 unsigned short pmo_q_orphans  = 0;
 unsigned short pmo_q_owns     = 0;
 unsigned short pmo_r_cascade  = 0;
+unsigned short pmo_r_recurse  = 0;
 unsigned short pmo_s_upgrade  = 0;
 unsigned short pmo_s_downloadonly = 0;
 unsigned short pmo_s_sync     = 0;
@@ -549,10 +550,14 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					for(m = pm_packages; m; m = m->next) {
 						pkginfo_t *p = (pkginfo_t*)m->data;
 						if(!strcmp(k->data, p->name)) {
-							/* if confirmed, add this to the 'final' list, designating 'p' as
-							 * the package to replace.
-							 */
-							if(yesno(":: Replace %s with %s from \"%s\"? [Y/n] ", p->name, pkg->name, dbs->db->treename)) {
+							if(is_in(p->name, pmo_ignorepkg)) {
+								fprintf(stderr, ":: %s-%s: ignoring package upgrade (to be replaced by %s-%s)\n",
+									p->name, p->version, pkg->name, pkg->version);
+								ignore = 1;
+							} else if(yesno(":: Replace %s with %s from \"%s\"? [Y/n] ", p->name, pkg->name, dbs->db->treename)) {
+								/* if confirmed, add this to the 'final' list, designating 'p' as
+								 * the package to replace.
+								 */
 								syncpkg_t *sync = NULL;
 								/* we save the dependency info so we can move p's requiredby stuff
 								 * over to the replacing package
@@ -909,6 +914,15 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		/* any packages in rmtargs need to be removed from final. */
 		/* rather than ripping out nodes from final, we just copy over */
 		/* our "good" nodes to a new list and reassign. */
+
+		/* XXX: this fails for cases where a requested package wants
+		 *      a dependency that conflicts with an older version of
+		 *      the package.  It will be removed from final, and the user
+		 *      has to re-request it to get it installed properly.
+		 *
+		 *      Not gonna happen very often, but should be dealt with...
+		 *
+		 */
 		k = NULL;
 		for(i = final; i; i = i->next) {
 			syncpkg_t *s = (syncpkg_t*)i->data;
@@ -1114,11 +1128,36 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 		}
 
+		if(allgood) {
+			/* Check dependencies of packages in rmtargs and make sure
+			 * we won't be breaking anything by removing them.
+			 * If a broken dep is detected, make sure it's not from a
+			 * package that's in our final (upgrade) list.
+			 */
+			vprint("checking dependencies...\n");
+			i = checkdeps(db, PM_REMOVE, rmtargs);
+			for(j = i; j; j = j->next) {
+				depmissing_t* miss = (depmissing_t*)j->data;
+				syncpkg_t *s = find_pkginsync(miss->depend.name, final);
+				if(s == NULL) {
+					if(allgood) {
+						fprintf(stderr, "error: this will break the following dependencies:\n");
+						allgood = 0;
+					}
+					printf("  %s: is required by %s\n", miss->target, miss->depend.name);
+				}
+			}
+			FREELIST(i);
+		}
+
 		if(!pmo_s_downloadonly && allgood) {
-			/* remove any conflicting packages (WITH dep checks) */
+			/* remove any conflicting packages (WITHOUT dep checks) */
 			if(rmtargs) {
 				int retcode;
+				int oldupg = pmo_upgrade;
+				pmo_upgrade = 1;
 				retcode	= pacman_remove(db, rmtargs);
+				pmo_upgrade = oldupg;
 				FREELIST(rmtargs);
 				if(retcode == 1) {
 					fprintf(stderr, "\nupgrade aborted.\n");
@@ -1820,19 +1859,11 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 						depmissing_t* miss = (depmissing_t*)j->data;
 						info = db_scan(db, miss->depend.name, INFRQ_ALL);
 						if(!is_pkgin(info, alltargs)) {
-							list_add(alltargs, info);
+							alltargs = list_add(alltargs, info);
 						}
 					}
 					list_free(lp);
 					lp = checkdeps(db, PM_REMOVE, alltargs);
-				}
-				/* list targets */
-				list_display("\nTargets:", alltargs);
-				/* get confirmation */
-				if(yesno("\nDo you want to remove these packages? [Y/n] ") == 0) {
-					list_free(alltargs);
-					list_free(lp);
-					return(1);
 				}
 			} else {
 				fprintf(stderr, "error: this will break the following dependencies:\n");
@@ -1845,7 +1876,21 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 				return(1);
 			}
 		}
-		list_free(lp);
+
+		if(pmo_r_recurse) {
+			vprint("finding removable dependencies...\n");
+			alltargs = removedeps(db, alltargs);
+		}
+
+		if(pmo_r_recurse || pmo_r_cascade) {
+			/* list targets */
+			list_display("\nTargets:", alltargs);
+			/* get confirmation */
+			if(yesno("\nDo you want to remove these packages? [Y/n] ") == 0) {
+				list_free(alltargs);
+				return(1);
+			}
+		}
 	}
 
 	for(targ = alltargs; targ; targ = targ->next) {
@@ -2287,6 +2332,49 @@ PMList* sortbydeps(PMList *targets)
 		clean = 1;
 	}
 	return(targets);
+}
+
+/* return a new PMList target list containing all packages in the original
+ * target list, as well as all their un-needed dependencies.  By un-needed,
+ * I mean dependencies that are *only* required for packages in the target
+ * list, so they can be safely removed.  This function is recursive.
+ */
+PMList* removedeps(pacdb_t *db, PMList *targs)
+{
+	PMList *i, *j, *k;
+	PMList *newtargs = targs;
+
+	for(i = targs; i; i = i->next) {
+		pkginfo_t *pkg = (pkginfo_t*)i->data;
+		for(j = pkg->depends; j; j = j->next) {
+			depend_t depend;
+			pkginfo_t *dep;
+			int needed = 0;
+			if(splitdep(j->data, &depend)) {
+				continue;
+			}
+			dep = db_scan(db, depend.name, INFRQ_DESC | INFRQ_DEPENDS);
+			if(is_pkgin(dep, targs)) {
+				continue;
+			}
+			/* see if other packages need it */
+			for(k = dep->requiredby; k && !needed; k = k->next) {
+				pkginfo_t *dummy = db_scan(db, k->data, INFRQ_DESC);
+				if(!is_pkgin(dummy, targs)) {
+					needed = 1;
+				}
+			}
+			if(!needed) {
+				/* add it to the target list */
+				freepkg(dep);
+				dep = db_scan(db, depend.name, INFRQ_ALL);
+				newtargs = list_add(newtargs, dep);
+				newtargs = removedeps(db, newtargs);
+			}
+		}
+	}
+
+	return(newtargs);
 }
 
 /* populates *list with packages that need to be installed to satisfy all
@@ -2814,6 +2902,7 @@ int parseargs(int op, int argc, char **argv)
 		{"downloadonly", no_argument,     0, 'w'},
 		{"refresh",    no_argument,       0, 'y'},
 		{"cascade",    no_argument,       0, 'c'},
+		{"recursive",  no_argument,       0, 's'},
 		{"groups",     no_argument,       0, 'g'},
 		{0, 0, 0, 0}
 	};
@@ -2850,7 +2939,7 @@ int parseargs(int op, int argc, char **argv)
 									perror("bad root path");
 									return(1);
 								} break;
-			case 's': pmo_s_search = 1; break;
+			case 's': pmo_s_search = 1; pmo_r_recurse = 1; break;
 			case 'u': pmo_s_upgrade = 1; break;
 			case 'v': pmo_verbose = 1; break;
 			case 'w': pmo_s_downloadonly = 1; break;
@@ -3113,6 +3202,7 @@ void usage(int op, char *myname)
 			printf("  -c, --cascade       remove packages and all packages that depend on them\n");
 			printf("  -d, --nodeps        skip dependency checks\n");
 			printf("  -n, --nosave        remove configuration files as well\n");
+			printf("  -s, --recursive     remove dependencies also (that won't break packages)\n");
 		} else if(op == PM_UPGRADE) {
 			if(pmo_freshen) {
 				printf("usage:  %s {-F --freshen} [options] <file>\n", myname);
@@ -3157,7 +3247,7 @@ void version(void)
 {
 	printf("\n");
 	printf(" .--.                  Pacman v%s\n", PACVER);
-	printf("/ _.-' .-.  .-.  .-.   Copyright (C) 2002-2003 Judd Vinet <jvinet@zeroflux.org>\n");
+	printf("/ _.-' .-.  .-.  .-.   Copyright (C) 2002-2004 Judd Vinet <jvinet@zeroflux.org>\n");
 	printf("\\  '-. '-'  '-'  '-'  \n");
 	printf(" '--'                  This program may be freely redistributed under\n");
 	printf("                       the terms of the GNU General Public License\n\n");
