@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.8"
+#define PACVER    "2.8.1"
 #endif
 
 #ifndef PKGDIR
@@ -71,6 +71,7 @@ void version(void);
 void vprint(char *fmt, ...);
 void logaction(FILE *fp, char *fmt, ...);
 char* buildstring(PMList *strlist);
+int yesno(char* fmt, ...);
 int lckmk(char *file, int retries, unsigned int sleep_secs);
 int lckrm(char *lckfile);
 void cleanup(int signum);

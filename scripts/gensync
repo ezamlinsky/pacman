@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.8'
+myver='2.8.1'
 
 usage() {
   echo "gensync $myver"

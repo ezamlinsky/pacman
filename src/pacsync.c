@@ -40,9 +40,9 @@ static int log_progress(netbuf *ctl, int xfered, void *arg);
 static char sync_fnm[25];
 static int offset;
 static struct timeval t0, t;
-	static float rate;
-	static int xfered1;
-	static unsigned char eta_h, eta_m, eta_s;
+static float rate;
+static int xfered1;
+static unsigned char eta_h, eta_m, eta_s;
 
 /* pacman options */
 extern char *pmo_root;
@@ -455,6 +455,31 @@ syncpkg_t* find_pkginsync(char *needle, PMList *haystack)
 	}
 
 	return sync;
+}
+
+/* Remove a package from a list of syncpkg_t elements
+ */
+PMList* rm_pkginsync(char *needle, PMList *haystack)
+{
+	PMList *i;
+	syncpkg_t *sync = NULL;
+	PMList *newlist = NULL;
+
+	for(i = haystack; i; i = i->next) {
+		sync = (syncpkg_t*)i->data;
+		if(!sync) continue;
+		if(strcmp(sync->pkg->name, needle)) {
+			newlist = list_add(newlist, sync);
+		} else {
+			FREEPKG(sync->pkg);
+			FREELISTPKGS(sync->replaces);
+			FREE(sync);
+		}
+		i->data = NULL;
+	}
+	FREELIST(haystack);
+
+	return newlist;
 }
 
 /* vim: set ts=2 sw=2 noet: */

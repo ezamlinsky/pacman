@@ -62,6 +62,7 @@ unsigned short pmo_nodeps     = 0;
 unsigned short pmo_upgrade    = 0;
 unsigned short pmo_freshen    = 0;
 unsigned short pmo_nosave     = 0;
+unsigned short pmo_noconfirm  = 0;
 unsigned short pmo_d_vertest  = 0;
 unsigned short pmo_d_resolve  = 0;
 unsigned short pmo_q_isfile   = 0;
@@ -88,6 +89,7 @@ unsigned short pmo_proxyport    = 0;
 char          *pmo_xfercommand  = NULL;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
+PMList        *pmo_holdpkg      = NULL;
 unsigned short pmo_usesyslog    = 0;
 unsigned short pmo_nopassiveftp = 0;
 
@@ -884,11 +886,16 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				}
 				if(!errorout) {
 					int found;
+					PMList *exfinal = NULL;
 					errorout = 0;
 					/* no unresolvable deps, so look for conflicts */
 					for(i = deps; i && !errorout; i = i->next) {
 						depmissing_t *miss = (depmissing_t*)i->data;
 						if(miss->type != CONFLICT) {
+							continue;
+						}
+						/* make sure this package wasn't already removed from the final list */
+						if(is_in(miss->target, exfinal)) {
 							continue;
 						}
 
@@ -920,9 +927,41 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 									 * over to the replacing package
 									 */
 									pkginfo_t *q = db_scan(db, miss->depend.name, INFRQ_DESC | INFRQ_DEPENDS);
-									/* append to the replaces list */
-									sync->replaces = list_add(sync->replaces, q);
-									solved = 1;
+									if(q) {
+										/* append to the replaces list */
+										sync->replaces = list_add(sync->replaces, q);
+										solved = 1;
+									} else {
+										char *rmpkg = NULL;
+										/* hmmm, depend.name isn't installed, so it must be conflicting
+										 * with another package in our final list.  For example:
+										 * 
+										 *     pacman -S blackbox xfree86
+										 *
+										 * If no x-servers are installed and blackbox pulls in xorg, then
+										 * xorg and xfree86 will conflict with each other.  In this case,
+										 * we should follow the user's preference and rip xorg out of final,
+										 * opting for xfree86 instead.
+										 */
+
+										/* figure out which one was requested in targets.  If they both were,
+										 * then it's still an unresolvable conflict. */
+										if(is_in(miss->depend.name, targets) && !is_in(miss->target, targets)) {
+											/* remove miss->target */
+											rmpkg = strdup(miss->target);
+										} else if(is_in(miss->target, targets) && !is_in(miss->depend.name, targets)) {
+											/* remove miss->depend.name */
+											rmpkg = strdup(miss->depend.name);
+										} else {
+											/* something's not right, bail out with a conflict error */
+										}
+										if(rmpkg) {
+											final = rm_pkginsync(rmpkg, final);
+											/* add to the exfinal list */
+											exfinal = list_add(exfinal, rmpkg);
+											solved = 1;
+										}
+									}
 								}
 							}
 							if(!solved) {
@@ -930,8 +969,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 								 */
 								pkginfo_t p1;
 								/* build a "fake" pkginfo_t so we can search with is_pkgin() */
-								snprintf(p1.name, sizeof(p1.name), miss->depend.name);
-								sprintf(p1.version, "1.0-1");
+								strncpy(p1.name, miss->depend.name, sizeof(p1.name));
+								strcpy(p1.version, "1.0-1");
 
 								if(is_pkgin(&p1, pm_packages)) {
 									if(yesno(":: %s conflicts with %s. Remove %s? [Y/n] ",
@@ -953,6 +992,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							}
 						}
 					}
+					FREELIST(exfinal);
 				}
 				list_free(deps);
 				if(errorout) {
@@ -1040,13 +1080,21 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		confirm = 0;
 		if(allgood && final && final->data) {
 			if(pmo_s_downloadonly) {
-				confirm = yesno("\nProceed with download? [Y/n] ");
+				if(pmo_noconfirm) {
+					printf("\nBeginning upgrade process...\n");
+				} else {
+					confirm = yesno("\nProceed with download? [Y/n] ");
+				}
 			} else {
 				/* don't get any confirmation if we're called from makepkg */
 				if(pmo_d_resolve || pmo_s_printuris) {
 					confirm = 1;
 				} else {
-					confirm = yesno("\nProceed with upgrade? [Y/n] ");
+					if(pmo_noconfirm) {
+						printf("\nBeginning download...\n");
+					} else {
+						confirm = yesno("\nProceed with upgrade? [Y/n] ");
+					}
 				}
 			}
 		}
@@ -1587,6 +1635,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			}
 			printf("\n");
 			FREELIST(lp);
+			printf("\nerrors occurred, no packages were upgraded.\n");
 			return(1);
 		}
 		printf("done.\n");
@@ -2044,6 +2093,18 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			FREELIST(groups);
 			fprintf(stderr, "error: could not find %s in database\n", (char*)lp->data);
 			return(1);
+		}
+		if(pmo_op == PM_REMOVE) {
+			/* check if the package is in the HoldPkg list.  If so, ask
+			 * confirmation first */
+			for(j = pmo_holdpkg; j && j->data; j = j->next) {
+				if(!strcmp(info->name, j->data)) {
+					if(!yesno(":: %s is designated as a HoldPkg.  Remove anyway? [Y/n] ", info->name)) {
+						return(1);
+					}
+					break;
+				}
+			}
 		}
 		alltargs = list_add(alltargs, info);
 	}
@@ -3194,6 +3255,7 @@ int parseargs(int op, int argc, char **argv)
 		{"cascade",    no_argument,       0, 'c'},
 		{"recursive",  no_argument,       0, 's'},
 		{"groups",     no_argument,       0, 'g'},
+		{"noconfirm",  no_argument,       0, 999},
 		{0, 0, 0, 0}
 	};
 
@@ -3203,6 +3265,7 @@ int parseargs(int op, int argc, char **argv)
 		}
 		switch(opt) {
 			case 0:   break;
+			case 999: pmo_noconfirm = 1; break;
 			case 'A': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_ADD);     break;
 			case 'R': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_REMOVE);  break;
 			case 'U': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); break;
@@ -3360,6 +3423,18 @@ int parseconfig(char *configfile)
 						}
 						pmo_ignorepkg = list_add(pmo_ignorepkg, strdup(p));
 						vprint("config: ignorepkg: %s\n", p);
+					} else if(!strcmp(key, "HOLDPKG")) {
+						char *p = ptr;
+						char *q;
+						while((q = strchr(p, ' '))) {
+							*q = '\0';
+							pmo_holdpkg = list_add(pmo_holdpkg, strdup(p));
+							vprint("config: holdpkg: %s\n", p);
+							p = q;
+							p++;
+						}
+						pmo_holdpkg = list_add(pmo_holdpkg, strdup(p));
+						vprint("config: holdpkg: %s\n", p);
 					} else if(!strcmp(key, "DBPATH")) {
 						/* shave off the leading slash, if there is one */
 						if(*ptr == '/') {
@@ -3530,9 +3605,10 @@ void usage(int op, char *myname)
 			printf("  -p, --print-uris    print out download URIs for each package to be installed\n");
 			printf("  -s, --search        search remote repositories for matching strings\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
-			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");
+			printf("  -w, --downloadonly  download packages but do not install/upgrade anything\n");
 			printf("  -y, --refresh       download fresh package databases from the server\n");
 		}
+		printf("      --noconfirm     do not ask for any confirmation\n");
 		printf("  -v, --verbose       be verbose\n");
 		printf("  -r, --root <path>   set an alternate installation root\n");
 		printf("  -b, --dbpath <path> set an alternate database location\n");
@@ -3618,6 +3694,29 @@ char* buildstring(PMList *strlist)
 	return(str);
 }
 
+/* presents a prompt and gets a Y/N answer */
+int yesno(char *fmt, ...)
+{
+	char response[32];
+	va_list args;
+
+	if(pmo_noconfirm) {
+		/* --noconfirm was set, we don't have to ask permission! */
+		return(1);
+	}
+
+	va_start(args, fmt);
+	vprintf(fmt, args);
+	va_end(args);
+	fflush(stdout);
+	if(fgets(response, 32, stdin)) {
+		trim(response);
+		if(!strcasecmp(response, "Y") || !strcasecmp(response, "YES") || !strlen(response)) {
+			return(1);
+		}
+	}
+	return(0);
+}
 
 int lckmk(char *file, int retries, unsigned int sleep_secs)
 {
@@ -3690,5 +3789,6 @@ void cleanup(int signum)
 
 	exit(signum);
 }
+ 
 
 /* vim: set ts=2 sw=2 noet: */

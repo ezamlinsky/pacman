@@ -34,7 +34,6 @@ int copyfile(char *src, char *dest);
 int makepath(char *path);
 int rmrf(char *path);
 void indentprint(char *str, int indent);
-int yesno(char* fmt, ...);
 char* trim(char *str);
 char* strtoupper(char *str);
 int grep(const char *fn, const char *needle);

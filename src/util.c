@@ -202,25 +202,6 @@ int rmrf(char *path)
 	return(0);
 }
 
-/* presents a prompt and gets a Y/N answer */
-int yesno(char *fmt, ...)
-{
-	char response[32];
-	va_list args;
-
-	va_start(args, fmt);
-	vprintf(fmt, args);
-	va_end(args);
-	fflush(stdout);
-	if(fgets(response, 32, stdin)) {
-		trim(response);
-		if(!strcasecmp(response, "Y") || !strcasecmp(response, "YES") || !strlen(response)) {
-			return(1);
-		}
-	}
-	return(0);
-}
- 
 /* output a string, but wrap words properly with a specified indentation
  */
 void indentprint(char *str, int indent)

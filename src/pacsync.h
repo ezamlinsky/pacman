@@ -50,6 +50,7 @@ typedef struct __syncpkg_t {
 int sync_synctree();
 int downloadfiles(PMList *servers, const char *localpath, PMList *files);
 syncpkg_t* find_pkginsync(char *needle, PMList *haystack);
+PMList* rm_pkginsync(char *needle, PMList *haystack);
 
 #endif
 

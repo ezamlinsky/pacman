@@ -25,6 +25,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <libgen.h>
+#include <unistd.h>
 #include "package.h"
 #include "util.h"
 #include "db.h"
@@ -540,6 +542,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	char *str = NULL;
 	struct stat buf;
 	PMList *conflicts = NULL;
+	char *sym = NULL, *symw = NULL, *symlink = NULL, *tempsym = NULL;
 
 	/* CHECK 1: check every db package against every target package */
 	/* XXX: I've disabled the database-against-targets check for now, as the
@@ -615,6 +618,114 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 				if(dbpkg && is_in(j->data, dbpkg->files)) {
 					ok = 1;
 				}
+				/* Make sure that the supposedly-conflicting file is not actually just
+				 * a symlink that points to a path that used to exist in the package.
+				 */
+/* XXX: Chu */
+				/* Check if any part of the conflicting file's path is a symlink */
+				if(dbpkg && !ok) {
+					if(!sym) MALLOC(sym, PATH_MAX);
+					if(!symlink) MALLOC(symlink, PATH_MAX);
+					if(!tempsym) MALLOC(tempsym, PATH_MAX);
+
+					strncpy(sym, path, PATH_MAX);
+					symw = sym;
+					do {
+						/* Is it a symlink? */
+						if(!lstat(sym, &buf) && S_ISLNK(buf.st_mode)) {
+							memset(symlink, 0, PATH_MAX);
+							readlink(sym, symlink, PATH_MAX);
+							if(symlink[0] != '/') {
+								char *temp = NULL;
+								MALLOC(temp, PATH_MAX);
+								strncpy(tempsym, symlink, PATH_MAX);
+								strncpy(temp, sym, PATH_MAX);
+								snprintf(symlink, PATH_MAX, "%s/%s", dirname(temp), tempsym);
+								FREE(temp);
+							}
+							if(strstr(symlink, root) == symlink) {
+								strncpy(tempsym, symlink+strlen(root), PATH_MAX-strlen(root));
+								/* If that part of the path used to exist in the package */
+								if(is_in(tempsym, dbpkg->files)) {
+									/* See if the modified path used to */
+									snprintf(tempsym, PATH_MAX, "%s%s", symlink+strlen(root), path+strlen(sym)+strlen(root));
+									printf("check1: is_in(%s, %s->files)\n", tempsym, p->name);
+									if(is_in(tempsym, dbpkg->files)) {
+										ok = 1;
+										break;
+									}
+								}
+								strncpy(tempsym, symlink, PATH_MAX);
+								snprintf(symlink, PATH_MAX, "%s/", tempsym);
+								strncpy(tempsym, symlink+strlen(root), PATH_MAX-strlen(root));
+								/* If that part of the path (explicitly check for directory) used to exist in the package */
+								if(is_in(tempsym, dbpkg->files)) {
+									/* See if the modified path used to */
+									snprintf(tempsym, PATH_MAX, "%s%s", symlink+strlen(root), path+strlen(sym)+strlen(root));
+									printf("check2: is_in(%s, %s->files)\n", tempsym, p->name);
+									if(is_in(tempsym, dbpkg->files)) {
+										ok = 1;
+										break;
+									}
+								}
+							}
+						}
+						symw = dirname(sym);
+						strncpy(sym, symw, PATH_MAX);
+					} while (strncmp(sym, root, PATH_MAX));
+				}
+				if(dbpkg && !ok) {
+					if(!sym) MALLOC(sym, PATH_MAX);
+					if(!symlink) MALLOC(symlink, PATH_MAX);
+					if(!tempsym) MALLOC(tempsym, PATH_MAX);
+					for(k = dbpkg->files; k; k = k->next) {
+						snprintf(sym, PATH_MAX, "%s%s", root, (char *)k->data);
+						/* If the last part of the path is '/' then toss it */
+						if(rindex(sym, '/') == sym+strlen(sym)-1) {
+							sym[strlen(sym)-1] = '\0';
+						}
+
+						/* Is that a symlink? */
+						if(!lstat(sym, &buf) && S_ISLNK(buf.st_mode)) {
+							memset(symlink, 0, PATH_MAX);
+							readlink(sym, symlink, PATH_MAX);
+							/* It's not an absolute symlink, make it one */
+							if(symlink[0] != '/') {
+								strncpy(tempsym, symlink, PATH_MAX);
+								snprintf(symlink, PATH_MAX, "%s/%s", dirname(sym), tempsym);
+							}
+							/* Does the symlink point to a part of the conflicting path? */
+							if(strstr(path, symlink) == path)
+							{
+								/* Replace one with the other and check if it really did exist in the old package */
+								snprintf(tempsym, PATH_MAX, "%s%s", symlink, path+strlen(symlink));
+								printf("check3: !strncmp(%s, %s)\n", tempsym, path);
+								if(!strncmp(tempsym, path, PATH_MAX)) {
+									ok = 1;
+									break;
+								}
+							}
+						}
+					}
+				}
+				/* Check if the conflicting file has been moved to another package/target */
+				if(!ok) {
+					/* Look at all the targets */
+					for(k = targets; k && !ok; k = k->next) {
+						pkginfo_t *p1 = (pkginfo_t*)k->data;
+						/* As long as they're not the current package */
+						if(strcmp(p1->name, p->name)) {
+							pkginfo_t *dbpkg2 = NULL;
+							dbpkg2 = db_scan(db, p1->name, INFRQ_DESC | INFRQ_FILES);
+							/* If it used to exist in there, but doesn't anymore */
+							if(!is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
+								ok = 1;
+							}
+							FREE(dbpkg2);
+						}
+					}
+				}
+/* XXX: Chu */
 				if(!ok) {
 					MALLOC(str, 512);
 					snprintf(str, 512, "%s: exists in filesystem", path);
@@ -625,6 +736,9 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 		FREEPKG(dbpkg);
 	}
 
+	if(sym) FREE(sym);
+	if(symlink) FREE(symlink);
+	if(tempsym) FREE(tempsym);
 	return(conflicts);
 }
 

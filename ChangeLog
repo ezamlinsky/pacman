@@ -1,5 +1,18 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.8.1         - Added a HoldPkg option in pacman.conf, for the more
+                exploratory users who run things like "pacman -R pacman".  It
+                will ask for confirmation before removing any packages listed
+                in the HoldPkg list
+              - Added a --noconfirm switch for use with script automation
+              - Modified dependency resolution to prefer packages explicitly
+                requested on the cmdline instead of those pulled in by
+                resolvedeps().  Example, if neither "xorg" nor "xfree86" is
+                installed and "blackbox xfree86" is requested, "xfree86" will
+                be used instead of "xorg"
+              - Added patch from Jason Chu:
+                - Smarter file-conflict checking with symlinked paths and
+                  with files that move from one package to another
 2.8           - Bugfixes:
                 - #861:  file:/// urls not handled properly with XferCommand
                 - #1003: set umask before scriptlet calls
