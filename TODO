@@ -1,27 +1,30 @@
+- add a way to clean /var/cache/pacman/src
+- add other options to config file: db location, overwrite behaviour, etc.
+- don't skip the db update when a package fails to upgrade - we lose the entry
 - have "group" designations
-- use 'set -e' in makepkg?
-- if a package fails, ask before aborting the full operation
-- ask, then remove conflicting packages with --sync
-- use a provides tag (instead of an OR operator in depends)
+? use 'set -e' in makepkg?
+x if a package fails, ask before aborting the full operation
+  - can't -- further dependent packages may fail b/c of the first failure
+? ask, then remove conflicting packages with --sync
+? use a provides tag (instead of an OR operator in depends)
 - add a freshen operation
 - add a 'cascade' option to --remove that will remove a package and
   all requiredby packages under it
 - check $PACCONF env var
 - ftp transfer progress bar breaks after ~42000 K
-- use a 'trust pacman' config option for downgrading?
+? use a 'trust pacman' config option for downgrading?
 - instead of 'conflicts' use a ! operator in depends
 - add a --pretend option
 - add a consistency/sanity check operation
 - add a --dbpath option
-- build-time (source) dependencies in makepkg
+? build-time (source) dependencies in makepkg
 - auto-resolve dependencies in makepkg
 - use package caches more for performance
-+ add an "ignore package" option in either pacman.conf or in each package
-  record. this will prevent it from being upgraded from the sync set
+- IgnorePkg option in pacman.conf to ignore updates from the sync repo
 - if a package is removed with --nodeps and re-installed, the requiredby
   fields of it's required packages are not updated
 - duplicate dep checks occur with sync (one in sync, one in add)
 - clean up output a bit (message queue?)
-- run ldd on every executable in a newly built package to find required so's
+? run ldd on every executable in a newly built package to find required so's
 - use a files.cache gdbm (or whatever) for --owns and db_find_conflicts
 

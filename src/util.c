@@ -55,6 +55,7 @@ extern unsigned short pmo_s_sync;
 extern unsigned short pmo_s_search;
 extern unsigned short pmo_s_clean;
 extern unsigned short pmo_s_upgrade;
+extern unsigned short pmo_s_downloadonly;
 extern PMList        *pmo_noupgrade;
 
 extern PMList *pmc_syncs;
@@ -156,11 +157,12 @@ int parseargs(int op, int argc, char **argv)
 		{"file",       no_argument,       0, 'p'},
 		{"info",       no_argument,       0, 'i'},
 		{"sysupgrade", no_argument,       0, 'u'},
+		{"downloadonly", no_argument,     0, 'w'},
 		{"refresh",    no_argument,       0, 'y'},
 		{0, 0, 0, 0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ARUQSTYr:vhscVfnoldpiuy", opts, &option_index))) {
+	while((opt = getopt_long(argc, argv, "ARUQSTYr:vhscVfnoldpiuwy", opts, &option_index))) {
 		if(opt < 0) {
 			break;
 		}
@@ -184,6 +186,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'i': pmo_q_info = 1; break;
 			case 'o': pmo_q_owns = 1; break;
 			case 'u': pmo_s_upgrade = 1; break;
+			case 'w': pmo_s_downloadonly = 1; break;
 			case 'y': pmo_s_sync = 1; break;
 			case 's': pmo_s_search = 1; break;
 			case 'c': pmo_s_clean = 1; break;
@@ -510,12 +513,13 @@ void usage(int op, char *myname)
 		} else if(op == PM_SYNC) {
 			printf("usage:  %s {-S --sync} [options] [package]\n", myname);
 			printf("options:\n");
-			printf("  -s, --search       search sync database for matching strings\n");
-			printf("  -f, --force        force install, overwrite conflicting files\n");
-			printf("  -d, --nodeps       skip dependency checks\n");
-			printf("  -y, --refresh      download a fresh package sync database from the server\n");
-			printf("  -u, --sysupgrade   upgrade all packages that are out of date\n");
-			printf("  -c, --clean        remove packages from cache directory to free up diskspace\n");
+			printf("  -s, --search        search sync database for matching strings\n");
+			printf("  -f, --force         force install, overwrite conflicting files\n");
+			printf("  -d, --nodeps        skip dependency checks\n");
+			printf("  -y, --refresh       download a fresh package sync database from the server\n");
+			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
+			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");
+			printf("  -c, --clean         remove packages from cache directory to free up diskspace\n");
 		}
 		printf("  -v, --verbose      be verbose\n");
 		printf("  -r, --root <path>  set an alternate installation root\n");

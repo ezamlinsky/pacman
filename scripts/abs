@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.1'
+myver='2.2'
 ABS_ROOT=/usr/abs
 
 usage() {

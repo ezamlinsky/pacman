@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.1'
+myver='2.2'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -138,6 +138,7 @@ for netfile in ${source[@]}; do
     fi
     mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
   fi
+  unset cmd
   case $file in
 	    *.tar.gz|*.tar.Z|*.tgz)
     cmd="tar --use-compress-program=gzip -xf $file" ;;
@@ -150,8 +151,10 @@ for netfile in ${source[@]}; do
 	    *.gz)
     cmd="gunzip $file" ;;
   esac
-  msg "==> $cmd"
-  $cmd
+  if [ "$cmd" != "" ]; then
+    msg "==> $cmd"
+    $cmd
+  fi
 done
 
 # check for existing pkg directory

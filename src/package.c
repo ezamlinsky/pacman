@@ -62,11 +62,11 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 			/* parse the info file */
 			parse_descfile(descfile, info, &backup, output);
 			if(!strlen(info->name)) {
-				fprintf(stderr, "error: missing package name in description file.\n");
+				fprintf(stderr, "load_pkg: missing package name in %s.\n", pkgfile);
 				return(NULL);
 			}
 			if(!strlen(info->version)) {
-				fprintf(stderr, "error: missing package version in description file.\n");
+				fprintf(stderr, "load_pkg: missing package version in %s.\n", pkgfile);
 				return(NULL);
 			}
 			for(lp = backup; lp; lp = lp->next) {
@@ -85,7 +85,9 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 		}
 
 		if(TH_ISREG(tar) && tar_skip_regfile(tar)) {
-			perror("bad package file");
+			char errorstr[255];
+			snprintf(errorstr, 255, "bad package file in %s", pkgfile);
+			perror(errorstr);
 			return(NULL);
 		}
 		expath = NULL;
@@ -94,7 +96,7 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 	FREE(descfile);
 
 	if(!strlen(info->name) || !strlen(info->version)) {
-		fprintf(stderr, "Error: Missing .PKGINFO file in %s\n", pkgfile);
+		fprintf(stderr, "load_pkg: missing package info file in %s\n", pkgfile);
 		return(NULL);
 	}
 
@@ -136,7 +138,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 		ptr = line;
 		key = strsep(&ptr, "=");
 		if(key == NULL || ptr == NULL) {
-			fprintf(stderr, "Syntax error in description file line %d\n", linenum);
+			fprintf(stderr, "%s: syntax error in description file line %d\n",
+				info->name[0] != '\0' ? info->name : "error", linenum);
 		} else {
 			trim(key);
 			key = strtoupper(key);
@@ -167,7 +170,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				char *s = strdup(ptr);
 				bak = list_add(bak, s);
 			} else {
-				fprintf(stderr, "Syntax error in description file line %d\n", linenum);
+				fprintf(stderr, "%s: syntax error in description file line %d\n",
+					info->name[0] != '\0' ? info->name : "error", linenum);
 			}
 		}
 		line[0] = '\0';

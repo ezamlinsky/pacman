@@ -55,3 +55,8 @@ licensed through the GNU General Public License (see COPYING).
 pacman uses "libtar", a library for reading/writing tar-files. This 
 library is Copyright (c) 1998-2001 Mark D. Roth <roth@uiuc.edu> (see 
 libtar-X.X.X/COPYRIGHT for further details).
+
+pacman uses "ftplib", a library for sending/receiving files via FTP.  This
+library is copyright (c) 1996-2000 Thomas Pfau, pfau@cnj.digex.net (see
+libftp/ftplib.c for furthur details).
+

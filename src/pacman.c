@@ -69,6 +69,7 @@ unsigned short pmo_q_info     = 0;
 unsigned short pmo_q_list     = 0;
 unsigned short pmo_q_owns     = 0;
 unsigned short pmo_s_upgrade  = 0;
+unsigned short pmo_s_downloadonly = 0;
 unsigned short pmo_s_sync     = 0;
 unsigned short pmo_s_search   = 0;
 unsigned short pmo_s_clean    = 0;
@@ -382,13 +383,27 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				/* versions are identical */
 				continue;
 			} else {
+				PMList *lp = NULL;
+				int found = 0;
 				/* re-fetch the package record with dependency info */
 				sync->pkg = db_scan(sync->dbs->db, sync->pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
 				/* add to the targets list */
-				if(!list_isin(final, sync)) {
+				for(found = 0, lp = final; lp && !found; lp = lp->next) {
+					syncpkg_t *s = (syncpkg_t*)lp->data;
+					if(s && !strcmp(s->pkg->name, sync->pkg->name)) {
+						found = 1;
+					}
+				}
+				if(!found) {
 					allgood = !resolvedeps(db, databases, sync, final, trail);
 					/* check again, as resolvedeps could have added our target for us */
-					if(!list_isin(final, sync)) {
+					for(found = 0, lp = final; lp && !found; lp = lp->next) {
+						syncpkg_t *s = (syncpkg_t*)lp->data;
+						if(s && !strcmp(s->pkg->name, sync->pkg->name)) {
+							found = 1;
+						}
+					}
+					if(!found) {
 						final = list_add(final, sync);
 					}
 				}
@@ -407,7 +422,6 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				MALLOC(sync, sizeof(syncpkg_t));
 
 				local = db_scan(db, (char*)i->data, INFRQ_DESC);
-				//sync = db_scan(db_sync, (char*)i->data, INFRQ_DESC | INFRQ_DEPENDS);
 				for(j = databases; !found && j; j = j->next) {
 					dbsync_t *dbs = (dbsync_t*)j->data;
 					for(k = dbs->pkgcache; !found && k; k = k->next) {
@@ -479,6 +493,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				list = list_add(list, s->pkg);
 			}
 		}
+
 		deps = checkdeps(db, PM_UPGRADE, list);
 		if(deps) {
 			fprintf(stderr, "error: unresolvable conflicts/dependencies:\n");
@@ -538,7 +553,11 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		/* get confirmation */
 		confirm = 0;
 		if(allgood && final && final->data) {
-			confirm = yesno("\nDo you want to install/upgrade these packages? [Y/n] ");
+			if(pmo_s_downloadonly) {
+				confirm = yesno("\nDo you want to download these packages? [Y/n] ");
+			} else {
+				confirm = yesno("\nDo you want to install/upgrade these packages? [Y/n] ");
+			}
 		}
 	}
 
@@ -625,21 +644,24 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			list_free(files);
 			files = NULL;
 		}
-		/* install targets */
-		for(i = final; allgood && i; i = i->next) {
-			char *str;
-			syncpkg_t *sync = (syncpkg_t*)i->data;
-			if(sync->pkg) {
-				MALLOC(str, PATH_MAX);
-				snprintf(str, PATH_MAX, "%s/%s-%s.pkg.tar.gz", ldir, sync->pkg->name, sync->pkg->version);
-				files = list_add(files, str);
+
+		if(!pmo_s_downloadonly) {
+			/* install targets */
+			for(i = final; allgood && i; i = i->next) {
+				char *str;
+				syncpkg_t *sync = (syncpkg_t*)i->data;
+				if(sync->pkg) {
+					MALLOC(str, PATH_MAX);
+					snprintf(str, PATH_MAX, "%s/%s-%s.pkg.tar.gz", ldir, sync->pkg->name, sync->pkg->version);
+					files = list_add(files, str);
+				}
+			}
+			if(allgood) {
+				pacman_upgrade(db, files);
 			}
 		}
-		if(allgood) {
-			pacman_upgrade(db, files);
-		}
 
-		if(!varcache) {
+		if(!varcache && !pmo_s_downloadonly) {
 			/* delete packages */
 			for(i = files; i; i = i->next) {
 				unlink(i->data);
@@ -688,7 +710,8 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		return(0);
 	}
 
-	vprint("Loading all target data...\n");
+	printf("loading package data... ");
+	fflush(stdout);
 	for(targ = targets; targ; targ = targ->next) {
 		/* Populate the package struct */
 		vprint("  %s\n", (char*)targ->data);
@@ -699,9 +722,10 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		alltargs = list_add(alltargs, info);
 		filenames = list_add(filenames, strdup(targ->data));
 	}
+	printf("done.\n");
 
 	if(!pmo_nodeps) {
-		vprint("Checking dependencies...\n");
+		vprint("checking dependencies...\n");
 		lp = checkdeps(db, (pmo_upgrade ? PM_UPGRADE : PM_ADD), alltargs);
 		if(lp) {
 			fprintf(stderr, "error: unsatisfied dependencies:\n");
@@ -1516,9 +1540,15 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 				pkginfo_t *p;
 				found = 0;
 				if((p = db_scan(db, j->data, INFRQ_DESC | INFRQ_DEPENDS)) == NULL) {
+					/* hmmm... package isn't installed.. */
+					continue;
+				}
+				if(is_pkgin(p, targets)) {
+					/* this package is also in the upgrade list, so don't worry about it */
 					continue;
 				}
 				for(k = p->depends; k && !found; k = k->next) {
+					/* find the dependency info in p->depends */
 					if(splitdep(k->data, &depend)) {
 						continue;
 					}
@@ -1527,6 +1557,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 					}
 				}
 				if(found == 0) {
+					/* not found */
 					continue;
 				}
 				found = 0;

@@ -1,4 +1,4 @@
-.TH pacman 8 "August 18, 2002" "pacman #VERSION#" ""
+.TH pacman 8 "November 7, 2002" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -98,6 +98,9 @@ installed/upgraded if necessary.
 .B "\-s, \-\-search <string>"
 This will search each package in the package list for names or descriptions
 that contains <string>.
+.TP
+.B "\-w, \-\-downloadonly"
+Retrieve all packages from the server, but do not install/upgrade anything.
 .TP
 .B "\-c, \-\-clean"
 Remove packages from the cache.  When pacman downloads packages,
