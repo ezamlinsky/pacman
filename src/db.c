@@ -529,6 +529,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	return(conflicts);
 }
 
+/* return a PMList of packages in "db" that provide "package" */
 PMList *whatprovides(pacdb_t *db, char* package)
 {
 	PMList *pkgs, *i = NULL;

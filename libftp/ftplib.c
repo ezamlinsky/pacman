@@ -1309,3 +1309,245 @@ GLOBALDEF void FtpQuit(netbuf *nControl)
     free(nControl->buf);
     free(nControl);
 }
+
+/*
+ * HttpConnect - connect to remote server
+ *
+ * return 1 if connected, 0 if not
+ */
+GLOBALREF int HttpConnect(const char *host, netbuf **nControl)
+{
+    int sControl;
+    struct sockaddr_in sin;
+    struct hostent *phe;
+    struct servent *pse;
+    int on=1;
+    netbuf *ctrl;
+    char *lhost;
+    char *pnum;
+
+    memset(&sin,0,sizeof(sin));
+    sin.sin_family = AF_INET;
+    lhost = strdup(host);
+    pnum = strchr(lhost,':');
+    if (pnum == NULL)
+    {
+#if defined(VMS)
+    	sin.sin_port = htons(21);
+#else
+    	if ((pse = getservbyname("http","tcp")) == NULL)
+    	{
+	    perror("getservbyname");
+	    return 0;
+    	}
+    	sin.sin_port = pse->s_port;
+#endif
+    }
+    else
+    {
+	*pnum++ = '\0';
+	if (isdigit(*pnum))
+	    sin.sin_port = htons(atoi(pnum));
+	else
+	{
+	    pse = getservbyname(pnum,"tcp");
+	    sin.sin_port = pse->s_port;
+	}
+    }
+    if ((sin.sin_addr.s_addr = inet_addr(lhost)) == -1)
+    {
+    	if ((phe = gethostbyname(lhost)) == NULL)
+    	{
+	    perror("gethostbyname");
+	    return 0;
+    	}
+    	memcpy((char *)&sin.sin_addr, phe->h_addr, phe->h_length);
+    }
+    free(lhost);
+    sControl = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sControl == -1)
+    {
+	perror("socket");
+	return 0;
+    }
+    if (setsockopt(sControl,SOL_SOCKET,SO_REUSEADDR,
+		   SETSOCKOPT_OPTVAL_TYPE &on, sizeof(on)) == -1)
+    {
+	perror("setsockopt");
+	net_close(sControl);
+	return 0;
+    }
+    if (connect(sControl, (struct sockaddr *)&sin, sizeof(sin)) == -1)
+    {
+	perror("connect");
+	net_close(sControl);
+	return 0;
+    }
+    ctrl = calloc(1,sizeof(netbuf));
+    if (ctrl == NULL)
+    {
+	perror("calloc");
+	net_close(sControl);
+	return 0;
+    }
+    ctrl->buf = NULL;
+    ctrl->handle = sControl;
+    ctrl->dir = FTPLIB_CONTROL;
+    ctrl->ctrl = NULL;
+    ctrl->cmode = FTPLIB_DEFMODE;
+    ctrl->idlecb = NULL;
+    ctrl->idletime.tv_sec = ctrl->idletime.tv_usec = 0;
+    ctrl->idlearg = NULL;
+    ctrl->xfered = 0;
+    ctrl->xfered1 = 0;
+    ctrl->cbbytes = 0;
+    *nControl = ctrl;
+    return 1;
+}
+
+/*
+ * HttpSendCmd - send a command
+ *
+ * return 1 if proper response received, 0 otherwise
+ */
+static int HttpSendCmd(const char *cmd, char expresp, netbuf *nControl)
+{
+    int ret = 0;
+    char *buf = nControl->response;
+    if (nControl->dir != FTPLIB_CONTROL)
+	return 0;
+    if (ftplib_debug > 2)
+	fprintf(stderr,"%s\n",cmd);
+    if (net_write(nControl->handle,cmd,strlen(cmd)) <= 0)
+    {
+	perror("write");
+	return 0;
+    }
+    while (ret < 256) {
+        if (socket_wait(nControl) != 1)
+            return 0;
+        if (net_read(nControl->handle,buf,1) != 1)
+            break;
+        ret++;
+        if (*buf == '\r') continue;
+        if (*buf == '\n') break;
+        buf++;
+    }
+    *buf = 0;
+    if (nControl->response[9] == expresp)
+        return 1;
+    return 0;
+}
+
+/*
+ * HttpXfer - issue a command and transfer data
+ *
+ * return 1 if successful, 0 otherwise
+ */
+static int HttpXfer(const char *localfile, const char *path,
+	netbuf *nControl, int typ, int mode)
+{
+    int l,c;
+    char *dbuf;
+    FILE *local = NULL;
+    int rv=1;
+
+    if (localfile != NULL)
+    {
+	char ac[4] = "a";
+	if (typ == FTPLIB_FILE_WRITE)
+	    ac[0] = 'r';
+	if (mode == FTPLIB_IMAGE)
+	    ac[1] = 'b';
+	local = fopen(localfile, ac);
+	if (local == NULL)
+	{
+	    strncpy(nControl->response, strerror(errno),
+                    sizeof(nControl->response));
+	    return 0;
+	}
+    }
+    if (local == NULL)
+	local = (typ == FTPLIB_FILE_WRITE) ? stdin : stdout;
+    dbuf = malloc(FTPLIB_BUFSIZ);
+    if (typ == FTPLIB_FILE_WRITE)
+    {
+	while ((l = fread(dbuf, 1, FTPLIB_BUFSIZ, local)) > 0)
+	    if ((c = FtpWrite(dbuf, l, nControl)) < l)
+	    {
+		printf("short write: passed %d, wrote %d\n", l, c);
+		rv = 0;
+		break;
+	    }
+    }
+    else
+    {
+        nControl->dir = FTPLIB_READ;
+    	while ((l = FtpRead(dbuf, FTPLIB_BUFSIZ, nControl)) > 0)
+	    if (fwrite(dbuf, 1, l, local) <= 0)
+	    {
+		perror("localfile write");
+		rv = 0;
+		break;
+	    }
+    }
+    free(dbuf);
+    fflush(local);
+    if (localfile != NULL)
+	fclose(local);
+    free(nControl->data);
+    return rv;
+}
+
+/*
+ * HttpGet - issue a GET command and write received data to output
+ *
+ * return 1 if successful, 0 otherwise
+ */
+GLOBALREF int HttpGet(const char *outputfile, const char *path, int *size,
+	netbuf *nControl)
+{
+    char buf[256];
+
+    sprintf(buf, "GET %s HTTP/1.0\r\n\r\n\r\n", path);
+    if(!HttpSendCmd(buf,'2',nControl))
+    {
+        if (nControl->response[9] == '3')
+	    printf("redirection not supported\n");
+        return 0;
+    }
+
+    while (1)
+    {
+        int ret = 0;
+        char *buf = nControl->response;
+        while (ret < 256) {
+            if (socket_wait(nControl) != 1)
+                return 0;
+            if (net_read(nControl->handle,buf,1) != 1)
+                break;
+            ret++;
+            if (*buf == '\r') continue;
+            if (*buf == '\n') break;
+            buf++;
+        }
+        *buf = 0;
+        if (strstr(nControl->response,"Content-Length"))
+            sscanf(nControl->response,"Content-Length: %d",size);
+        if (strlen(nControl->response) == 0)
+            break;
+    }
+
+    return HttpXfer(outputfile, path, nControl, FTPLIB_FILE_READ, FTPLIB_IMAGE);
+}
+
+/*
+ * HttpQuit - disconnect from remote
+ *
+ * return 1 if successful, 0 otherwise
+ */
+GLOBALREF void HttpQuit(netbuf *nControl)
+{
+    net_close(nControl->handle);
+    free(nControl);
+}

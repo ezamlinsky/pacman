@@ -136,12 +136,25 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			} else {
 				vprint("FTP passive mode not set\n");
 			}
+		} else if(!strcmp(server->protocol, "http")) {
+			if(!HttpConnect(server->server, &control)) {
+				fprintf(stderr, "error: cannot connect to %s\n", server->server);
+				continue;
+			}
+		}
+
+		/* set up our progress bar's callback */
+		if(strcmp(server->protocol, "file")) {
+			FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+			FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+			FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+			FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
 		}
 
 		/* get each file in the list */
 		for(lp = files; lp; lp = lp->next) {
 			char output[PATH_MAX];
-			int j;
+			int j, filedone = 0;
 			char *fn = (char*)lp->data;
 			struct stat st;
 
@@ -150,7 +163,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			}
 
 			snprintf(output, PATH_MAX, "%s/%s.part", localpath, fn);
-			strncpy(sync_fnm, lp->data, 24);
+			strncpy(sync_fnm, fn, 24);
 			for(j = strlen(sync_fnm); j < 24; j++) {
 				sync_fnm[j] = ' ';
 			}
@@ -170,48 +183,61 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 						unlink(output);
 					}
 				}
-				/* set up our progress bar's callback */
-				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
-
-				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
+				if(!FtpGet(output, fn, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
 						fn, server->server, FtpLastResponse(control));
 					/* we leave the partially downloaded file in place so it can be resumed later */
 				} else {
+					filedone = 1;
+				}
+			} else if(!strcmp(server->protocol, "http")) {
+				char src[PATH_MAX];
+				if(!stat(output, &st)) {
+					/* no resume support yet */
+					unlink(output);
+				}
+				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
+				if(!HttpGet(output, src, &fsz, control)) {
+					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+						fn, server->server, FtpLastResponse(control));
+					/* no resume support yet */
+					 unlink(output); 
+				} else {
+					filedone = 1;
+				}
+			} else if(!strcmp(server->protocol, "file")) {
+				char src[PATH_MAX];
+				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
+				vprint("copying %s to %s/%s\n", src, localpath, fn);
+				/* local repository, just copy the file */
+				if(copyfile(src, output)) {
+					fprintf(stderr, "failed copying %s\n", src);
+				} else {
+					filedone = 1;
+				}
+			}
+
+			if(filedone) {
 					char completefile[PATH_MAX];
-					log_progress(control, fsz-offset, &fsz);
+					if(!strcmp(server->protocol, "file")) {
+						char out[56];
+						printf(" %s [", sync_fnm);
+						strncpy(out, server->path, 33);
+						printf("%s", out);
+						for(j = strlen(out); j < maxcols-44; j++) {
+							printf(" ");
+						}
+						fputs("] 100% |   LOCAL\n", stdout);
+					} else {
+						log_progress(control, fsz-offset, &fsz);
+					}
 					complete = list_add(complete, fn);
 					/* rename "output.part" file to "output" file */
 					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
 					rename(output, completefile);
-				}
-				printf("\n");
-				fflush(stdout);
-			} else if(!strcmp(server->protocol, "file")) {
-				/* local repository, just copy the file */
-				char src[PATH_MAX], dest[PATH_MAX];
-				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
-				snprintf(dest, PATH_MAX, "%s/%s", localpath, fn);
-				vprint("copying %s to %s\n", src, dest);
-				if(copyfile(src, dest)) {
-					fprintf(stderr, "failed copying %s\n", src);
-				} else {
-					char out[56];
-					printf(" %s [", sync_fnm);
-					strncpy(out, server->path, 33);
-					printf("%s", out);
-					for(j = strlen(out); j < maxcols-44; j++) {
-						printf(" ");
-					}
-					fputs("] 100% |   LOCAL\n", stdout);
-					fflush(stdout);
-
-					complete = list_add(complete, fn);
-				}
 			}
+			printf("\n");
+			fflush(stdout);
 		}
 		if(list_count(complete) == list_count(files)) {
 			done = 1;
@@ -219,6 +245,8 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 
 		if(!strcmp(server->protocol, "ftp")) {
 			FtpQuit(control);
+		} else if(!strcmp(server->protocol, "http")) {
+			HttpQuit(control);
 		}
 	}
 
@@ -230,12 +258,6 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 	int fsz = *(int*)arg;
 	int pct = ((float)(xfered+offset) / fsz) * 100;
 	int i, cur;
-	char *cenv = NULL;
-
-	cenv = getenv("COLUMNS");
-	if(cenv) {
-		maxcols = atoi(cenv);
-	}
 
 	printf(" %s [", sync_fnm);
 	cur = (int)((maxcols-44)*pct/100);

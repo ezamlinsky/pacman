@@ -1,5 +1,6 @@
 - fix the broken pipe bug
 - handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
+- add post_remove, pre_install, pre_upgrade functions to scriptlets
 - record md5sums of all files in a package
 ? use 'set -e' in makepkg?
 x if a package fails, ask before aborting the full operation

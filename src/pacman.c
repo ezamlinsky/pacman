@@ -66,6 +66,7 @@ unsigned short pmo_d_resolve  = 0;
 unsigned short pmo_q_isfile   = 0;
 unsigned short pmo_q_info     = 0;
 unsigned short pmo_q_list     = 0;
+unsigned short pmo_q_orphans  = 0;
 unsigned short pmo_q_owns     = 0;
 unsigned short pmo_r_cascade  = 0;
 unsigned short pmo_s_upgrade  = 0;
@@ -1716,6 +1717,9 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 				/* look for a provides package */
 				PMList *provides = whatprovides(db, depend.name);
 				if(provides) {
+					/* TODO: should check _all_ packages listed in provides, not just
+					 *       the first one.
+					 */
 					/* use the first one */
 					depinfo = db_scan(db, provides->data, INFRQ_ALL);
 					list_free(provides);
@@ -1885,6 +1889,14 @@ int pacman_query(pacdb_t *db, PMList *targets)
 						printf("%s %s%s\n", info->name, pmo_root, (char*)q->data);
 					}
 					freepkg(info);
+				} else if(pmo_q_orphans) {
+					info = db_scan(db, tmpp->name, INFRQ_DESC | INFRQ_DEPENDS);
+					if(info == NULL) {
+						return(1);
+					}
+					if(info->requiredby == NULL) {
+						printf("%s %s\n", tmpp->name, tmpp->version);
+					}
 				} else {
 					printf("%s %s\n", tmpp->name, tmpp->version);
 				}
@@ -1907,6 +1919,15 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				}
 				for(lp = info->files; lp; lp = lp->next) {
 					printf("%s %s%s\n", info->name, pmo_root, (char*)lp->data);
+				}
+			} else if(pmo_q_orphans) {
+				info = db_scan(db, package, INFRQ_DESC | INFRQ_DEPENDS);
+				if(info == NULL) {
+					fprintf(stderr, "Package \"%s\" was not found.\n", package);
+					return(2);
+				}
+				if(info->requiredby == NULL) {
+					printf("%s %s\n", info->name, info->version);
 				}
 			} else {
 				info = db_scan(db, package, INFRQ_DESC);
@@ -1953,7 +1974,7 @@ PMList* sortbydeps(PMList *targets)
 	int clean = 0;
 
 	/* count the number of targets */
-	for(i = targets; i; i = i->next, numtargs++);	
+	numtargs = list_count(targets);	
 
 	while(change) {
 		change = 0;
@@ -2261,14 +2282,16 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 			/* PROVIDES -- check to see if another package already provides what
 			 *             we offer
 			 */
+			/* XXX: disabled -- we allow multiple packages to provide the same thing.
+			 *      list packages in conflicts if they really do conflict.
 			for(j = tp->provides; j; j = j->next) {
 				PMList *provs = whatprovides(db, j->data);
 				for(k = provs; k; k = k->next) {
 					if(!strcmp(tp->name, k->data)) {
-						/* this is the same package -- skip it */
+						// this is the same package -- skip it
 						continue;
 					}
-					/* we treat this just like a conflict */
+					// we treat this just like a conflict
 					MALLOC(miss, sizeof(depmissing_t));
 					miss->type = CONFLICT;
 					miss->depend.mod = DEP_ANY;
@@ -2279,7 +2302,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 						baddeps = list_add(baddeps, miss);
 					}
 				}
-			}
+			}*/
 
 			/* DEPENDENCIES -- look for unsatisfied dependencies */
 			for(j = tp->depends; j; j = j->next) {
@@ -2518,6 +2541,7 @@ int parseargs(int op, int argc, char **argv)
 		{"clean",      no_argument,       0, 'c'},
 		{"force",      no_argument,       0, 'f'},
 		{"nodeps",     no_argument,       0, 'd'},
+		{"orphans",    no_argument,       0, 'e'},
 		{"nosave",     no_argument,       0, 'n'},
 		{"owns",       no_argument,       0, 'o'},
 		{"list",       no_argument,       0, 'l'},
@@ -2531,7 +2555,7 @@ int parseargs(int op, int argc, char **argv)
 		{0, 0, 0, 0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vhscVfnoldpiuwyg", opts, &option_index))) {
+	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vhscVfnoldepiuwyg", opts, &option_index))) {
 		if(opt < 0) {
 			break;
 		}
@@ -2548,25 +2572,26 @@ int parseargs(int op, int argc, char **argv)
 			case 'D': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST); pmo_d_resolve = 1; break;
 			case 'h': pmo_help = 1; break;
 			case 'V': pmo_version = 1; break;
-			case 'v': pmo_verbose = 1; break;
-			case 'f': pmo_force = 1; break;
-			case 'd': pmo_nodeps = 1; break;
-			case 'n': pmo_nosave = 1; break;
-			case 'l': pmo_q_list = 1; break;
-			case 'p': pmo_q_isfile = 1; break;
-			case 'i': pmo_q_info = 1; break;
-			case 'o': pmo_q_owns = 1; break;
-			case 'u': pmo_s_upgrade = 1; break;
-			case 'w': pmo_s_downloadonly = 1; break;
-			case 'y': pmo_s_sync = 1; break;
-			case 's': pmo_s_search = 1; break;
+			case 'b': strcpy(pmo_dbpath, optarg); break;
 			case 'c': pmo_s_clean = 1; pmo_r_cascade = 1; break;
+			case 'd': pmo_nodeps = 1; break;
+			case 'e': pmo_q_orphans = 1; break;
+			case 'f': pmo_force = 1; break;
 			case 'g': pmo_group = 1; break;
+			case 'i': pmo_q_info = 1; break;
+			case 'l': pmo_q_list = 1; break;
+			case 'n': pmo_nosave = 1; break;
+			case 'p': pmo_q_isfile = 1; break;
+			case 'o': pmo_q_owns = 1; break;
 			case 'r': if(realpath(optarg, pmo_root) == NULL) {
 									perror("bad root path");
 									return(1);
 								} break;
-			case 'b': strcpy(pmo_dbpath, optarg); break;
+			case 's': pmo_s_search = 1; break;
+			case 'u': pmo_s_upgrade = 1; break;
+			case 'v': pmo_verbose = 1; break;
+			case 'w': pmo_s_downloadonly = 1; break;
+			case 'y': pmo_s_sync = 1; break;
 			case '?': return(1);
 			default:  return(1);
 		}
@@ -2725,13 +2750,8 @@ int parseconfig(char *configfile)
 							return(1);
 						}
 						server->protocol = strdup(ptr);
-						if(strcmp(server->protocol, "file")) {
+						if(!strcmp(server->protocol, "ftp") || !strcmp(server->protocol, "http")) {
 							char *slash;
-							/* no http support yet */
-							if(strcmp(ptr, "ftp")) {
-								fprintf(stderr, "config: line %d: protocol %s is not supported\n", linenum, ptr);
-								return(1);
-							}
 							/* split the url into domain and path */
 							slash = strchr(p, '/');
 							if(slash == NULL) {
@@ -2748,7 +2768,7 @@ int parseconfig(char *configfile)
 								*slash = '\0';
 							}
 							server->server = strdup(p);
-						} else {
+						} else if(!strcmp(server->protocol, "file")){
 							/* add a trailing slash if we need to */
 							if(p[strlen(p)-1] == '/') {
 								server->path = strdup(p);
@@ -2756,9 +2776,12 @@ int parseconfig(char *configfile)
 								MALLOC(server->path, strlen(p)+2);
 								sprintf(server->path, "%s/", p);
 							}
+						} else {
+							fprintf(stderr, "config: line %d: protocol %s is not supported\n", linenum, ptr);
+							return(1);
 						}
 						/* add to the list */
-						vprint("config: %s: server: %s %s\n", section, server->server, server->path);
+						vprint("config: %s: server: %s %s %s\n", section, server->protocol, server->server, server->path);
 						sync->servers = list_add(sync->servers, server);
 					} else {
 						fprintf(stderr, "config: line %d: syntax error\n", linenum);

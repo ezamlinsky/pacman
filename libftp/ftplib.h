@@ -119,6 +119,11 @@ GLOBALREF int FtpRename(const char *src, const char *dst, netbuf *nControl);
 GLOBALREF int FtpDelete(const char *fnm, netbuf *nControl);
 GLOBALREF void FtpQuit(netbuf *nControl);
 
+GLOBALREF int HttpConnect(const char *host, netbuf **nControl);
+GLOBALREF int HttpGet(const char *output, const char *path, int *size,
+	netbuf *nControl);
+GLOBALREF void HttpQuit(netbuf *nControl);
+
 #ifdef __cplusplus
 };
 #endif

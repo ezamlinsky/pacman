@@ -1,5 +1,14 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.6.1         - Added http download support (Aurelien Foret)
+              - Improved makepkg's --builddeps behaviour when called via
+                makeworld
+              - makepkg's md5 validation now occurs before source extraction
+              - makepkg delays fakeroot entry until after option parsing
+              - Fixed an argument-passing bug in fakeroot
+              - Modified pacman's behaviour wrt provides -- it now allows
+                multiple packages to be installed, even if they provide the
+                same thing (they were treated as conflicts before)
 2.6           - Added group handling, so one can run 'pacman -S kde' and
                 install all files from the KDE group
               - Fixed a duplication bug in cascade package removal

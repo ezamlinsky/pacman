@@ -20,13 +20,13 @@
 #   USA.
 #
 
-myver='2.6'
+myver='2.6.1'
 startdir=`pwd`
 
-msg() {
-	echo "$1" >&2
-}
+# source Arch's abs.conf if it's present
+[ -f /etc/abs/abs.conf ] && source /etc/abs/abs.conf
 
+# makepkg configuration
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
 
 INFAKEROOT=
@@ -35,34 +35,15 @@ if [ "$1" = "-F" ]; then
 	shift
 fi
 
-if [ "`id -u`" != "0" ]; then
-	if [ "$USE_FAKEROOT" = "y" -o "$USE_FAKEROOT" = "Y" ]; then
-		if [ `type -p fakeroot` ]; then
-			msg "==> Entering fakeroot environment"
-			fakeroot -- $0 -F $@
-			exit $?
-		else
-			msg "==> WARNING: Fakeroot is not installed.  Building as an unprivileged user"
-			msg "==>          will result in non-root ownership of the packaged files."
-			msg "==>          Install the fakeroot package to correctly build as a non-root"
-			msg "==>          user."
-			msg ""
-			sleep 1
-		fi
-	else
-		msg "==> WARNING: Running makepkg as an unprivileged user will result in non-root"		
-		msg "==>          ownership of the packaged files.  Try using the fakeroot"
-		msg "==>          environment.  (USE_FAKEROOT=y in makepkg.conf)"
-		msg ""
-		sleep 1
-	fi
-fi
+### SUBROUTINES ###
 
+msg() {
+	echo "$1" >&2
+}
 
 strip_url() {
 	echo $1 | sed 's|^.*://.*/||g'
 }
-
 
 checkdeps() {
 	local missdep=`pacman -T $*`
@@ -131,6 +112,8 @@ FORCE=0
 NOSTRIP=0
 PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
+
+ARGLIST=$@
 
 while [ "$#" -ne "0" ]; do
 	case $1 in
@@ -220,8 +203,39 @@ if [ `echo $pkgrel | grep '-'` ]; then
 fi
 
 if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" -a "$GENMD5" = "0" ]; then
-	msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
-	exit 1
+	if [ "$INSTALL" = "1" ]; then
+		msg "==> WARNING: a package has already been built, installing existing package."
+		pacman --upgrade $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
+		exit $?
+	else
+		msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
+		exit 1
+	fi
+fi
+
+# Enter the fakeroot environment if necessary.  This will call the makepkg script again
+# as the fake root user.  We detect this by passing a sentinel option (-F) to makepkg
+if [ "`id -u`" != "0" ]; then
+	if [ "$USE_FAKEROOT" = "y" -o "$USE_FAKEROOT" = "Y" ]; then
+		if [ `type -p fakeroot` ]; then
+			msg "==> Entering fakeroot environment"
+			fakeroot -- $0 -F $ARGLIST
+			exit $?
+		else
+			msg "==> WARNING: Fakeroot is not installed.  Building as an unprivileged user"
+			msg "==>          will result in non-root ownership of the packaged files."
+			msg "==>          Install the fakeroot package to correctly build as a non-root"
+			msg "==>          user."
+			msg ""
+			sleep 1
+		fi
+	else
+		msg "==> WARNING: Running makepkg as an unprivileged user will result in non-root"		
+		msg "==>          ownership of the packaged files.  Try using the fakeroot"
+		msg "==>          environment.  (USE_FAKEROOT=y in makepkg.conf)"
+		msg ""
+		sleep 1
+	fi
 fi
 
 msg "==> Making package: $pkgname  (`date`)"
@@ -285,7 +299,7 @@ fi
 
 cd $startdir
 
-# extract source
+# retrieve sources
 msg "==> Retrieving Sources..."
 mkdir -p src
 cd $startdir/src
@@ -329,33 +343,68 @@ for netfile in ${source[@]}; do
 			cp $file ..
 		fi
 	fi
-	if [ "$GENMD5" = "0" ]; then
-		unset cmd
-		case $file in
-			*.tar.gz|*.tar.Z|*.tgz)
-				cmd="tar --use-compress-program=gzip -xf $file" ;;
-			*.tar.bz2)
-				cmd="tar --use-compress-program=bzip2 -xf $file" ;;
-			*.tar)
-				cmd="tar -xf $file" ;;
-			*.zip)
-				cmd="unzip -qq $file" ;;
-			*.gz)
-				cmd="gunzip $file" ;;
-		esac
-		if [ "$cmd" != "" ]; then
-			msg "  |=> $cmd"
-			$cmd
-			if [ $? -ne 0 ]; then
-				msg "==> ERROR:  Failed to extract $file"
-				msg "==> Aborting..."
-				exit 1
-			fi
-		fi
-	fi
 done
 
-if [ "$GENMD5" = "1" ]; then
+if [ "$GENMD5" = "0" ]; then
+# MD5 validation
+	if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
+		msg "==> WARNING: MD5sums are missing or incomplete.  Cannot verify source integrity."
+		#sleep 1
+	elif [ `type -p md5sum` ]; then
+		msg "==> Validating source files with MD5sums"
+		errors=0
+		idx=0
+		for netfile in ${source[@]}; do
+			file=`strip_url $netfile`
+			echo -n "  |=> $file ... " >&2
+			echo "${md5sums[$idx]}  $file" | md5sum -c - >/dev/null 2>&1
+			if [ $? -ne 0 ]; then
+				echo "FAILED" >&2
+				errors=1
+			else
+				echo "Passed" >&2
+			fi	
+			idx=$(($idx+1))
+		done
+		if [ $errors -gt 0 ]; then
+			msg "==> ERROR: One or more files did not pass the validity check!"
+			exit 1
+		fi
+	else
+		msg "==> WARNING: The md5sum program is missing.  Cannot verify source files!"
+		sleep 1
+	fi
+# extract sources
+	msg "==> Extracting Sources..."
+	for netfile in ${source[@]}; do
+		file=`strip_url $netfile`
+			unset cmd
+			case $file in
+				*.tar.gz|*.tar.Z|*.tgz)
+					cmd="tar --use-compress-program=gzip -xf $file" ;;
+				*.tar.bz2)
+					cmd="tar --use-compress-program=bzip2 -xf $file" ;;
+				*.tar)
+					cmd="tar -xf $file" ;;
+				*.zip)
+					cmd="unzip -qq $file" ;;
+				*.gz)
+					cmd="gunzip $file" ;;
+				*.bz2)
+					cmd="bunzip2 $file" ;;
+			esac
+			if [ "$cmd" != "" ]; then
+				msg "  |=> $cmd"
+				$cmd
+				if [ $? -ne 0 ]; then
+					msg "==> ERROR:  Failed to extract $file"
+					msg "==> Aborting..."
+					exit 1
+				fi
+			fi
+	done
+else
+# generate md5 hashes
 	if [ ! `type -p md5sum` ]; then
 		msg "==> ERROR: Cannot find the md5sum program."
 		exit 1
@@ -384,34 +433,6 @@ if [ "$GENMD5" = "1" ]; then
 	exit 0
 fi
 
-# MD5 Validation
-if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
-	msg "==> WARNING: MD5sums are missing or incomplete.  Cannot verify source integrity."
-#	sleep 1
-elif [ `type -p md5sum` ]; then
-	msg "==> Validating source files with MD5sums"
-	errors=0
-	idx=0
-	for netfile in ${source[@]}; do
-		file=`strip_url $netfile`
-		echo -n "  |=> $file ... " >&2
-		echo "${md5sums[$idx]}  $file" | md5sum -c - >/dev/null 2>&1
-		if [ $? -ne 0 ]; then
-			echo "FAILED" >&2
-			errors=1
-		else
-			echo "Passed" >&2
-		fi	
-		idx=$(($idx+1))
-	done
-	if [ $errors -gt 0 ]; then
-		msg "==> ERROR: One or more files did not pass the validity check!"
-		exit 1
-	fi
-else
-	msg "==> WARNING: The md5sum program is missing.  Cannot verify source files!"
-	sleep 1
-fi
 
 if [ "`id -u`" = "0" ]; then
 	# chown all source files to root.root
@@ -481,7 +502,7 @@ if [ "$NOSTRIP" = "0" ]; then
 fi
 
 # get some package meta info
-builddate=`LC_ALL= ; date -u "+%a %b %d %k:%M:%S %Y"`
+builddate=`LC_ALL= ; date -u "+%a %b %e %k:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
 	packager="$PACKAGER"
 else
@@ -531,9 +552,7 @@ fi
 # build a filelist
 msg "==> Generating .FILELIST file..."
 cd $startdir/pkg
-tar cv * >/dev/null 2>.FILELIST.tmp
-cat .FILELIST.tmp | sort >.FILELIST
-rm -f .FILELIST.tmp
+tar cvf /dev/null * | sort >.FILELIST
 
 # tar it up
 msg "==> Compressing package..."
@@ -555,7 +574,8 @@ msg "==> Finished making: $pkgname  (`date`)"
 
 if [ "$INSTALL" = "1" ]; then
 	msg "==> Running pacman --upgrade"
-	pacman --upgrade $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz
+	pacman --upgrade $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
+	exit $?
 fi
 
 exit 0

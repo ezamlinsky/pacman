@@ -1,4 +1,4 @@
-.TH makepkg 8 "May 27, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "September 01, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS

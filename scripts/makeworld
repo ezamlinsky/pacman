@@ -21,7 +21,7 @@
 #
 
 toplevel=`pwd`
-version="2.6"
+version="2.6.1"
 
 usage() {
 	echo "makeworld version $version"
