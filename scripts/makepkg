@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.2'
+myver='2.7.3'
 startdir=`pwd`
 USE_COLOR="n"
 
@@ -559,31 +559,33 @@ if [ -d pkg/usr/share ]; then
 fi
 
 # compress man pages
-if [ -d pkg/usr/man ]; then
-	msg "Compressing man pages..."
-	for i in `find pkg/usr/man -type f`; do
-		ext=`echo $i | sed 's|.*\.||g'`
-		fn=`echo $i | sed 's|.*/||g'`
-		if [ "$ext" != "gz" ]; then
-			# update symlinks to this manpage
-			for ln in `find pkg/usr/man -lname "$fn"`; do
-				rm -f $ln
-				ln -sf ${fn}.gz ${ln}.gz
-			done
-			# compress the original
-			gzip -9 $i
-		fi
-	done
-fi
+msg "Compressing man pages..."
+for i in `find pkg/{usr{,/local},opt/*}/man -type f 2>/dev/null`; do
+	ext=${i##*.}
+	fn=${i##*/}
+	if [ "$ext" != "gz" ]; then
+		# update symlinks to this manpage
+		for ln in `find pkg/{usr{,/local},opt/*}/man -lname "$fn" 2>/dev/null`; do
+			rm -f $ln
+			ln -sf ${fn}.gz ${ln}.gz
+		done
+		# compress the original
+		gzip -9 $i
+	fi
+done
 
 cd $startdir
 
 # strip binaries
 if [ "$NOSTRIP" = "0" ]; then
 	msg "Stripping debugging symbols from libraries..."
-	find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' \; 2>&1 | grep -v "No such file"
+	find pkg/{,usr,usr/local,opt/*}/lib -type f -not -name "*.dll" -not -name "*.exe" \
+		-exec /usr/bin/strip --strip-debug '{}' \; 2>&1 \
+		| grep -v "No such file" | grep -v "format not recognized"
 	msg "Stripping symbols from binaries..."
-	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' \; 2>&1 | grep -v "No such file"
+	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -not -name "*.dll" -not -name "*.exe" \
+		-exec /usr/bin/strip '{}' \; 2>&1 \
+		| grep -v "No such file" | grep -v "format not recognized"
 fi
 
 # get some package meta info

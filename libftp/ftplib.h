@@ -1,24 +1,24 @@
 /***************************************************************************/
-/*									   */
+/*                                                                         */
 /* ftplib.h - header file for callable ftp access routines                 */
 /* Copyright (C) 1996, 1997 Thomas Pfau, pfau@cnj.digex.net                */
-/*	73 Catherine Street, South Bound Brook, NJ, 08880		   */
-/*									   */
-/* This library is free software; you can redistribute it and/or	   */
-/* modify it under the terms of the GNU Library General Public		   */
-/* License as published by the Free Software Foundation; either		   */
-/* version 2 of the License, or (at your option) any later version.	   */
-/* 									   */
-/* This library is distributed in the hope that it will be useful,	   */
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of	   */
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU	   */
-/* Library General Public License for more details.			   */
-/* 									   */
-/* You should have received a copy of the GNU Library General Public	   */
-/* License along with this progam; if not, write to the			   */
-/* Free Software Foundation, Inc., 59 Temple Place - Suite 330,		   */
-/* Boston, MA 02111-1307, USA.						   */
-/*									   */
+/* 73 Catherine Street, South Bound Brook, NJ, 08880                       */
+/*                                                                         */
+/* This library is free software; you can redistribute it and/or           */
+/* modify it under the terms of the GNU Library General Public             */
+/* License as published by the Free Software Foundation; either            */
+/* version 2 of the License, or (at your option) any later version.        */
+/*                                                                         */
+/* This library is distributed in the hope that it will be useful,         */
+/* but WITHOUT ANY WARRANTY; without even the implied warranty of          */
+/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU       */
+/* Library General Public License for more details.                        */
+/*                                                                         */
+/* You should have received a copy of the GNU Library General Public       */
+/* License along with this progam; if not, write to the                    */
+/* Free Software Foundation, Inc., 59 Temple Place - Suite 330,            */
+/* Boston, MA 02111-1307, USA.                                             */
+/*                                                                         */
 /***************************************************************************/
 
 #if !defined(__FTPLIB_H)
@@ -119,9 +119,9 @@ GLOBALREF int FtpRename(const char *src, const char *dst, netbuf *nControl);
 GLOBALREF int FtpDelete(const char *fnm, netbuf *nControl);
 GLOBALREF void FtpQuit(netbuf *nControl);
 
-GLOBALREF int HttpConnect(const char *host, netbuf **nControl);
-GLOBALREF int HttpGet(const char *output, const char *path, int *size,
-	netbuf *nControl);
+GLOBALREF int HttpConnect(const char *host, unsigned short port, netbuf **nControl);
+GLOBALREF int HttpGet(const char *host, const char *output, const char *path,
+	int *size, netbuf *nControl, unsigned int offset);
 GLOBALREF void HttpQuit(netbuf *nControl);
 
 #ifdef __cplusplus

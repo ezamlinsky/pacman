@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.7.2
+PACVER = 2.7.3
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -68,9 +68,9 @@ OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)md5driver.o \
 					$(OBJDIR)rpmvercmp.o
 
-all: ftplib pacman vercmp convertdb man
+all: libftp.a pacman vercmp convertdb man
 
-pacman: $(OBJECTS)
+pacman: $(OBJECTS) libftp.a
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
 
 vercmp: $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o
@@ -91,7 +91,7 @@ man: $(MANSRC)pacman.8 \
 dist: distclean
 	(cd ..; tar czvf pacman-$(PACVER).tar.gz pacman-$(PACVER))
 
-ftplib:
+libftp.a:
 	(cd libftp; make libftp.a)
 
 install: pacman vercmp convertdb man
@@ -112,5 +112,7 @@ clean:
 
 distclean: clean
 	rm -f pacman convertdb vercmp
+	rm -f Makefile
+	rm -f config.h config.status config.log
 
 # End of file

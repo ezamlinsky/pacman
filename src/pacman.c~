@@ -78,8 +78,6 @@ unsigned short pmo_group      = 0;
 /* configuration file options */
 char          *pmo_dbpath       = NULL;
 char          *pmo_logfile      = NULL;
-char          *pmo_proxyhost    = NULL;
-unsigned short pmo_proxyport    = 80;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 unsigned short pmo_usesyslog    = 0;
@@ -98,7 +96,6 @@ char *lckfile  = "/tmp/pacman.lck";
 char *workfile = NULL;
 enum {READ_ONLY, READ_WRITE} pm_access;
 int maxcols = 80;
-int neednl = 0; /* for cleaner message output */
 
 int main(int argc, char *argv[])
 {
@@ -136,7 +133,7 @@ int main(int argc, char *argv[])
 	/* check for permission */
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
-		if(pmo_op == PM_SYNC && !pmo_s_sync && (pmo_s_search || pmo_group || pmo_q_list)) {
+		if(pmo_op == PM_SYNC && !pmo_s_sync && (pmo_s_search || pmo_group)) {
 			/* special case:  PM_SYNC can be used w/ pmo_s_search by any user */
 		} else {
 			if(geteuid() != 0) {
@@ -336,7 +333,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		printf("done.\n");
 		return(0);
 	}
-
+	
 	if(pmo_s_sync) {
 		/* grab a fresh package list */
 		printf(":: Synchronizing package databases... \n");
@@ -459,37 +456,6 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			FREELIST(pkg);
 		}
 		FREELIST(groups);
-	} else if(pmo_q_list) {
-		PMList *reps = NULL;
-		int found;
-		if(targets) {
-			for(i = targets; i; i = i->next) {
-				reps = list_add(reps, strdup(i->data));
-			}
-		} else {
-			for(i = pmc_syncs; i; i = i->next) {
-				reps = list_add(reps, strdup(((sync_t *)i->data)->treename));
-			}
-		}
-		for(i = reps; i; i = i->next) {
-			found = 0;
-			for(j = databases; j; j = j->next) {
-				dbsync_t *dbs = (dbsync_t *)j->data;
-				if(!strcmp(dbs->sync->treename, i->data)) {
-					for(k = dbs->pkgcache; k; k = k->next) {
-						pkginfo_t *pkg = (pkginfo_t*)k->data;
-						printf("%s %s %s\n", dbs->sync->treename, pkg->name, pkg->version);
-					}
-					found = 1;
-				}
-			}
-			if(!found) {
-				printf("Repository \"%s\" was not found.\n", (char *)i->data);
-				allgood = 0;
-				break;
-			}
-		}
-		FREELIST(reps);
 	} else if(pmo_s_upgrade) {
 		int newer = 0;
 		int ignore = 0;
@@ -721,7 +687,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		}
 	}
 
-	if(allgood && !(pmo_s_search || pmo_q_list)) {
+	if(allgood && !pmo_s_search) {
 		/* check for inter-conflicts and whatnot */
 		if(!pmo_nodeps && !pmo_s_downloadonly) {
 			int errorout = 0;
@@ -1352,7 +1318,6 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				int retcode;
 
 				printf("upgrading %s... ", info->name);
-				neednl = 1;
 				/* we'll need the full record for backup checks later */
 				oldpkg = db_scan(db, info->name, INFRQ_ALL);
 
@@ -1378,7 +1343,6 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		}
 		if(!pmo_upgrade) {
 			printf("installing %s... ", info->name);
-			neednl = 1;
 		}
 		fflush(stdout);
 
@@ -1764,7 +1728,6 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 
 		if(!pmo_upgrade) {
 			printf("removing %s... ", info->name);
-			neednl = 1;
 			fflush(stdout);
 			/* run the pre-remove script if it exists  */
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
@@ -2899,30 +2862,8 @@ int parseconfig(char *configfile)
 						strncpy(pmo_dbpath, ptr, PATH_MAX);
 						vprint("config: dbpath: %s\n", pmo_dbpath);
 					} else if (!strcmp(key, "LOGFILE")) {
-						if(pmo_logfile) {
-							FREE(pmo_logfile);
-						}
 						pmo_logfile = strndup(ptr, PATH_MAX);
 						vprint("config: log file: %s\n", pmo_logfile);
-					} else if (!strcmp(key, "PROXYSERVER")) {
-						char *p;
-						if(pmo_proxyhost) {
-							FREE(pmo_proxyhost);
-						}
-						p = strstr(ptr, "://");
-						if(p) {
-							p += 3;
-							if(p == NULL || *p == '\0') {
-								fprintf(stderr, "config: line %d: bad server location\n", linenum);
-								return(1);
-							}
-							ptr = p;
-						}
-						pmo_proxyhost = strndup(ptr, PATH_MAX);
-						vprint("config: proxyserver: %s\n", pmo_proxyhost);
-					} else if (!strcmp(key, "PROXYPORT")) {
-						pmo_proxyport = (unsigned short)atoi(ptr);
-						vprint("config: proxyport: %u\n", pmo_proxyport);
 					} else {
 						fprintf(stderr, "config: line %d: syntax error\n", linenum);
 						return(1);
@@ -3049,7 +2990,6 @@ void usage(int op, char *myname)
 			printf("  -d, --nodeps        skip dependency checks\n");
 			printf("  -f, --force         force install, overwrite conflicting files\n");
 			printf("  -g, --groups        view all members of a package group\n");
-			printf("  -l, --list          list all packages belonging to the specified repository\n");
 			printf("  -s, --search        search sync database for matching strings\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
 			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");
@@ -3096,10 +3036,6 @@ void logaction(FILE *fp, char *fmt, ...)
 	vsnprintf(msg, 1024, fmt, args);
 	va_end(args);
 	if(fp) {
-		if(neednl) {
-			fprintf(fp, "\n");
-			neednl = 0;
-		}
 		fprintf(fp, "%s\n", msg);
 		fflush(fp);
 	}
@@ -3197,17 +3133,11 @@ void cleanup(int signum)
 	FREELIST(pmo_ignorepkg);
 	FREE(pmo_root);
 	FREE(pmo_dbpath);
-	FREE(pmo_logfile);
-	FREE(pmo_proxyhost);
 
 	FREELIST(pm_targets);
 
 	/* this is segfaulting... quick fix for now 
 	FREELISTPKGS(pm_packages);*/
-
-	if(signum) {
-		printf("\n");
-	}
 
 	exit(signum);
 }

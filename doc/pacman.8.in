@@ -1,4 +1,4 @@
-.TH pacman 8 "September 28, 2003" "pacman #VERSION#" ""
+.TH pacman 8 "February 6, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -100,6 +100,10 @@ diskspace, you can remove these packages by using the --clean option.
 Display all the members for each package group specified.  If no group
 names are provided, all groups will be listed.
 .TP
+.B "\-l, \-\-list"
+List all files in the specified repositories.  Multiple repositories can
+be specified on the command line.
+.TP
 .B "\-s, \-\-search <string>"
 This will search each package in the package list for names or descriptions
 that contains <string>.
@@ -185,6 +189,7 @@ NoUpgrade = etc/fstab
 [current]
 Server = ftp://ftp.archlinux.org/current
 Server = ftp://ftp.mirror.com/archlinux/current
+Server = http://www.othermirror.com/arch/current
 
 [custom]
 Server = file:///home/pkgs
@@ -200,6 +205,12 @@ Overrides the default location of the toplevel database directory.  The default 
 .B "IgnorePkg = <package> [package] ..."
 Instructs pacman to ignore any upgrades for this package when performing a
 \fB--sysupgrade\fP.
+.TP
+.B "ProxyServer = <host | ip>"
+If set, pacman will use this proxy server for all ftp/http transfers.
+.TP
+.B "ProxyPort = <port>"
+Use this to set a different port for your proxy server (default is 80).
 .TP
 .B "NoPassiveFtp"
 Disables passive ftp connections when downloading packages. (aka Active Mode)

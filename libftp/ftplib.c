@@ -1,24 +1,24 @@
 /***************************************************************************/
-/*									   */
-/* ftplib.c - callable ftp access routines				   */
-/* Copyright (C) 1996-2000 Thomas Pfau, pfau@cnj.digex.net		   */
-/*	73 Catherine Street, South Bound Brook, NJ, 08880		   */
-/*									   */
-/* This library is free software; you can redistribute it and/or	   */
-/* modify it under the terms of the GNU Library General Public		   */
-/* License as published by the Free Software Foundation; either		   */
-/* version 2 of the License, or (at your option) any later version.	   */
-/* 									   */
-/* This library is distributed in the hope that it will be useful,	   */
-/* but WITHOUT ANY WARRANTY; without even the implied warranty of	   */
-/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU	   */
-/* Library General Public License for more details.			   */
-/* 									   */
-/* You should have received a copy of the GNU Library General Public	   */
-/* License along with this progam; if not, write to the			   */
-/* Free Software Foundation, Inc., 59 Temple Place - Suite 330,		   */
-/* Boston, MA 02111-1307, USA.						   */
-/* 									   */
+/*                                                                         */
+/* ftplib.c - callable ftp access routines                                 */
+/* Copyright (C) 1996-2000 Thomas Pfau, pfau@cnj.digex.net                 */
+/* 73 Catherine Street, South Bound Brook, NJ, 08880                       */
+/*                                                                         */
+/* This library is free software; you can redistribute it and/or           */
+/* modify it under the terms of the GNU Library General Public             */
+/* License as published by the Free Software Foundation; either            */
+/* version 2 of the License, or (at your option) any later version.        */
+/*                                                                         */
+/* This library is distributed in the hope that it will be useful,         */
+/* but WITHOUT ANY WARRANTY; without even the implied warranty of          */
+/* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU       */
+/* Library General Public License for more details.                        */
+/*                                                                         */
+/* You should have received a copy of the GNU Library General Public       */
+/* License along with this progam; if not, write to the                    */
+/* Free Software Foundation, Inc., 59 Temple Place - Suite 330,            */
+/* Boston, MA 02111-1307, USA.                                             */
+/*                                                                         */
 /***************************************************************************/
 
 #if defined(__unix__) || defined(__VMS)
@@ -1319,13 +1319,12 @@ GLOBALDEF void FtpQuit(netbuf *nControl)
  *
  * return 1 if connected, 0 if not
  */
-GLOBALREF int HttpConnect(const char *host, netbuf **nControl)
+GLOBALREF int HttpConnect(const char *host, unsigned short port, netbuf **nControl)
 {
 	int sControl;
 	struct sockaddr_in sin;
 	struct hostent *phe;
 	struct servent *pse;
-	int on=1;
 	netbuf *ctrl;
 	char *lhost;
 	char *pnum;
@@ -1337,14 +1336,18 @@ GLOBALREF int HttpConnect(const char *host, netbuf **nControl)
 	if (pnum == NULL)
 	{
 #if defined(VMS)
-		sin.sin_port = htons(21);
+		sin.sin_port = htons(80);
 #else
+		/* we pass a port variable instead (for use with proxies)
+		 *
 		if ((pse = getservbyname("http","tcp")) == NULL)
 		{
 			perror("getservbyname");
 			return 0;
 		}
 		sin.sin_port = pse->s_port;
+		*/
+		sin.sin_port = htons(port);
 #endif
 	}
 	else
@@ -1372,13 +1375,6 @@ GLOBALREF int HttpConnect(const char *host, netbuf **nControl)
 	if (sControl == -1)
 	{
 		perror("socket");
-		return 0;
-	}
-	if (setsockopt(sControl,SOL_SOCKET,SO_REUSEADDR,
-				SETSOCKOPT_OPTVAL_TYPE &on, sizeof(on)) == -1)
-	{
-		perror("setsockopt");
-		net_close(sControl);
 		return 0;
 	}
 	if (connect(sControl, (struct sockaddr *)&sin, sizeof(sin)) == -1)
@@ -1448,13 +1444,14 @@ static int HttpSendCmd(const char *cmd, char expresp, netbuf *nControl)
  *
  * return 1 if successful, 0 otherwise
  */
-static int HttpXfer(const char *localfile, const char *path,
+static int HttpXfer(const char *localfile, const char *path, int *size,
 		netbuf *nControl, int typ, int mode)
 {
 	int l,c;
 	char *dbuf;
 	FILE *local = NULL;
 	int rv=1;
+	int bytes = 0;
 
 	if (localfile != NULL)
 	{
@@ -1487,13 +1484,18 @@ static int HttpXfer(const char *localfile, const char *path,
 	else
 	{
 		nControl->dir = FTPLIB_READ;
-		while ((l = FtpRead(dbuf, FTPLIB_BUFSIZ, nControl)) > 0)
+		while ((l = FtpRead(dbuf, FTPLIB_BUFSIZ, nControl)) > 0) {
 			if (fwrite(dbuf, 1, l, local) <= 0)
 			{
 				perror("localfile write");
 				rv = 0;
 				break;
 			}
+			bytes += l;
+			if(size && bytes >= *size) {
+				break;
+			}
+		}
 	}
 	free(dbuf);
 	fflush(local);
@@ -1508,12 +1510,15 @@ static int HttpXfer(const char *localfile, const char *path,
  *
  * return 1 if successful, 0 otherwise
  */
-GLOBALREF int HttpGet(const char *outputfile, const char *path, int *size,
-		netbuf *nControl)
+GLOBALREF int HttpGet(const char *host, const char *outputfile, const char *path,
+		int *size, netbuf *nControl, unsigned int offset)
 {
 	char buf[256];
 
-	sprintf(buf, "GET %s HTTP/1.0\r\n\r\n\r\n", path);
+	if(offset > 0)
+		sprintf(buf, "GET %s HTTP/1.1\r\nHost: %s\r\nRange: bytes=%d-\r\n\r\n", path, host, offset);
+	else
+		sprintf(buf, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", path, host);
 	if(!HttpSendCmd(buf,'2',nControl))
 	{
 		if (nControl->response[9] == '3')
@@ -1537,12 +1542,16 @@ GLOBALREF int HttpGet(const char *outputfile, const char *path, int *size,
 		}
 		*buf = 0;
 		if (strstr(nControl->response,"Content-Length"))
+		{
 			sscanf(nControl->response,"Content-Length: %d",size);
+			if(offset > 0)
+				*size += offset;
+		}
 		if (strlen(nControl->response) == 0)
 			break;
 	}
 
-	return HttpXfer(outputfile, path, nControl, FTPLIB_FILE_READ, FTPLIB_IMAGE);
+	return HttpXfer(outputfile, path, size, nControl, FTPLIB_FILE_READ, FTPLIB_IMAGE);
 }
 
 /*

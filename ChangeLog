@@ -1,5 +1,11 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.3         - makepkg not longer strips files with .exe or .dll extensions
+              - Added Aurelien's patch:
+                - proxy support (no authentication yet)
+                - HTTP/1.1 support
+                - an improved progress bar with transfer rates and ETA
+              - cleaned up warning output a bit
 2.7.2         - Supressed "No such file" messages during stripping
               - Removed extra newlines in /var/log/pacman.log
               - Added a --noextract option to makepkg to skip source extraction

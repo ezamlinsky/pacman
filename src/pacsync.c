@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <ftplib.h>
 /* pacman */
 #include "list.h"
@@ -34,13 +35,21 @@
 #include "pacsync.h"
 #include "pacman.h"
 
+/* progress bar */
 static int log_progress(netbuf *ctl, int xfered, void *arg);
 static char sync_fnm[25];
 static int offset;
+static struct timeval t0, t;
+	static float rate;
+	static int xfered1;
+	static unsigned char eta_h, eta_m, eta_s;
 
 /* pacman options */
 extern char *pmo_root;
 extern char *pmo_dbpath;
+extern char *pmo_proxyhost;
+
+extern unsigned short pmo_proxyport;
 extern unsigned short pmo_nopassiveftp;
 
 /* sync servers */
@@ -112,8 +121,9 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 	for(i = servers; i && !done; i = i->next) {
 		server_t *server = (server_t*)i->data;
 
-		if(!strcmp(server->protocol, "ftp")) {
+		if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
 			FtpInit();
+			vprint("Connecting to %s:21\n", server->server);
 			if(!FtpConnect(server->server, &control)) {
 				fprintf(stderr, "error: cannot connect to %s\n", server->server);
 				continue;
@@ -135,9 +145,15 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			} else {
 				vprint("FTP passive mode not set\n");
 			}
-		} else if(!strcmp(server->protocol, "http")) {
-			if(!HttpConnect(server->server, &control)) {
-				fprintf(stderr, "error: cannot connect to %s\n", server->server);
+		/*} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && !strcmp(server->protocol, "ftp"))) {*/
+		} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
+			char *host;
+			unsigned port;
+			host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
+			port = (pmo_proxyhost) ? pmo_proxyport : 80;
+			vprint("Connecting to %s:%u\n", host, port);
+			if(!HttpConnect(host, port, &control)) {
+				fprintf(stderr, "error: cannot connect to %s\n", host);
 				continue;
 			}
 		}
@@ -155,6 +171,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			char output[PATH_MAX];
 			int j, filedone = 0;
 			char *fn = (char*)lp->data;
+			char *ptr;
 			struct stat st;
 
 			if(is_in(fn, complete)) {
@@ -163,13 +180,31 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 
 			snprintf(output, PATH_MAX, "%s/%s.part", localpath, fn);
 			strncpy(sync_fnm, fn, 24);
+			/* drop filename extension */
+			ptr = strstr(fn, ".db.tar.gz");
+			if(ptr && (ptr-fn) < 24) {
+				sync_fnm[ptr-fn] = '\0';
+			}
+			ptr = strstr(fn, ".pkg.tar.gz");
+			if(ptr && (ptr-fn) < 24) {
+				sync_fnm[ptr-fn] = '\0';
+			}
 			for(j = strlen(sync_fnm); j < 24; j++) {
 				sync_fnm[j] = ' ';
 			}
 			sync_fnm[24] = '\0';
 			offset = 0;
 
-			if(!strcmp(server->protocol, "ftp")) {
+			/* ETA setup */
+			gettimeofday(&t0, NULL);
+			t = t0;
+			rate = 0;
+			xfered1 = 0;
+			eta_h = 0;
+			eta_m = 0;
+			eta_s = 0;
+
+			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
 				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
 				}
@@ -189,18 +224,21 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 				} else {
 					filedone = 1;
 				}
-			} else if(!strcmp(server->protocol, "http")) {
+			/*} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && !strcmp(server->protocol, "ftp"))) {*/
+			} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
 				char src[PATH_MAX];
 				if(!stat(output, &st)) {
-					/* no resume support yet */
-					unlink(output);
+					offset = (int)st.st_size;
 				}
-				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
-				if(!HttpGet(output, src, &fsz, control)) {
+				if(!pmo_proxyhost) {
+					snprintf(src, PATH_MAX, "%s%s", server->path, fn);
+				} else {
+					snprintf(src, PATH_MAX, "%s://%s%s%s", server->protocol, server->server, server->path, fn);
+				}
+				if(!HttpGet(server->server, output, src, &fsz, control, offset)) {
 					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
 						fn, server->server, FtpLastResponse(control));
-					/* no resume support yet */
-					 unlink(output); 
+					/* we leave the partially downloaded file in place so it can be resumed later */
 				} else {
 					filedone = 1;
 				}
@@ -217,23 +255,23 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			}
 
 			if(filedone) {
-					char completefile[PATH_MAX];
-					if(!strcmp(server->protocol, "file")) {
-						char out[56];
-						printf(" %s [", sync_fnm);
-						strncpy(out, server->path, 33);
-						printf("%s", out);
-						for(j = strlen(out); j < maxcols-44; j++) {
-							printf(" ");
-						}
-						fputs("] 100% |   LOCAL\n", stdout);
-					} else {
-						log_progress(control, fsz-offset, &fsz);
+				char completefile[PATH_MAX];
+				if(!strcmp(server->protocol, "file")) {
+					char out[56];
+					printf(" %s [", sync_fnm);
+					strncpy(out, server->path, 33);
+					printf("%s", out);
+					for(j = strlen(out); j < maxcols-64; j++) {
+						printf(" ");
 					}
-					complete = list_add(complete, fn);
-					/* rename "output.part" file to "output" file */
-					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
-					rename(output, completefile);
+					fputs("] 100% |   LOCAL |", stdout);
+				} else {
+					log_progress(control, fsz-offset, &fsz);
+				}
+				complete = list_add(complete, fn);
+				/* rename "output.part" file to "output" file */
+				snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
+				rename(output, completefile);
 			}
 			printf("\n");
 			fflush(stdout);
@@ -257,13 +295,47 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 	int fsz = *(int*)arg;
 	int pct = ((float)(xfered+offset) / fsz) * 100;
 	int i, cur;
+	struct timeval t1;
+	float timediff;
+
+	gettimeofday(&t1, NULL);
+	if(xfered+offset == fsz) {
+		t = t0;
+	}
+	timediff = t1.tv_sec-t.tv_sec + (float)(t1.tv_usec-t.tv_usec) / 1000000;
+
+	if(xfered+offset == fsz) {
+		/* average download rate */
+		rate = xfered / (timediff * 1024);
+		/* total download time */
+		eta_s = (int)timediff;
+		eta_h = eta_s / 3600;
+		eta_s -= eta_h * 3600;
+		eta_m = eta_s / 60;
+		eta_s -= eta_m * 60;
+	} else if(timediff > 1) {
+		/* we avoid computing the rate & ETA on too small periods of time, so that
+		   results are more significant */
+		rate = (xfered-xfered1) / (timediff * 1024);
+		xfered1 = xfered;
+		gettimeofday(&t, NULL);
+		eta_s = (fsz-(xfered+offset)) / (rate * 1024);
+		eta_h = eta_s / 3600;
+		eta_s -= eta_h * 3600;
+		eta_m = eta_s / 60;
+		eta_s -= eta_m * 60;
+	}
 
 	printf(" %s [", sync_fnm);
-	cur = (int)((maxcols-44)*pct/100);
-	for(i = 0; i < maxcols-44; i++) {
+	cur = (int)((maxcols-64)*pct/100);
+	for(i = 0; i < maxcols-64; i++) {
 		(i < cur) ? printf("#") : printf(" ");
 	}
-	printf("] %3d%% | %6dK\r", pct, ((xfered+offset)/1024));
+	if(rate > 1000) {
+		printf("] %3d%%| %6dK| %6.0fK/s| %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
+	} else {
+		printf("] %3d%%| %6dK| %6.1fK/s| %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
+	}
 	fflush(stdout);
 	return(1);
 }
