@@ -1226,16 +1226,18 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				/* we'll need the full record for backup checks later */
 				oldpkg = db_scan(db, info->name, INFRQ_ALL);
 
-				list_add(tmp, strdup(info->name));
-				vprint("removing old package first...\n");
-				retcode = pacman_remove(db, tmp);
-				list_free(tmp);
-				if(retcode == 1) {
-					fprintf(stderr, "\nupgrade aborted.\n");
-					return(1);
+				if(oldpkg) {
+					list_add(tmp, strdup(info->name));
+					vprint("removing old package first...\n");
+					retcode = pacman_remove(db, tmp);
+					list_free(tmp);
+					if(retcode == 1) {
+						fprintf(stderr, "\nupgrade aborted.\n");
+						return(1);
+					}
+					/* reload package cache */
+					pm_packages = db_loadpkgs(db, pm_packages);
 				}
-				/* reload package cache */
-				pm_packages = db_loadpkgs(db, pm_packages);
 			} else {
 				/* no previous package version is installed, so this is actually just an
 				 * install
@@ -1280,7 +1282,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				if(is_in(pathname, pmo_noupgrade)) {
 					notouch = 1;
 				} else {
-					if(!pmo_upgrade) {
+					if(!pmo_upgrade || oldpkg == NULL) {
 						nb = is_in(pathname, info->backup);
 					} else {
 						/* op == PM_UPGRADE */
@@ -1465,7 +1467,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			}
 			vprint("done.\n");
 			if(pmo_usesyslog) {
-				if(pmo_upgrade) {
+				if(pmo_upgrade && oldpkg) {
 					syslog(LOG_INFO, "upgraded %s (%s -> %s)\n", info->name,
 						oldpkg->version, info->version);
 				} else {
@@ -1509,7 +1511,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", pmo_dbpath, db->treename, info->name, info->version);
 				vprint("Executing post-install script...\n");
 				snprintf(cmdline, PATH_MAX, "chroot %s /bin/sh %s post_%s %s %s", pmo_root, pm_install,
-					(pmo_upgrade ? "upgrade" : "install"), info->version, (pmo_upgrade ? oldpkg->version : ""));
+					(pmo_upgrade ? "upgrade" : "install"), info->version, ((pmo_upgrade && oldpkg) ? oldpkg->version : ""));
 				system(cmdline);
 			}
 		}
