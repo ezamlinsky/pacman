@@ -1,17 +1,15 @@
+- think about consolidating the -A/-U/-S options into one smart
+  install operation
+- replaces code doesn't run with -U or -A
+- when performing replaces, pacman should not remove old packages until
+  the conflict checks are passed
+- --info should work with --sync to display dependencies
+- add an ETA to the download progress bar
+- add HTTP/1.1 support
 - fix the broken pipe bug
 - handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
 - add post_remove, pre_install, pre_upgrade functions to scriptlets
-- record md5sums of all files in a package
+? record md5sums of all files in a package
 ? use 'set -e' in makepkg?
-x if a package fails, ask before aborting the full operation
-  - can't -- further dependent packages may fail b/c of the first failure
 - check $PACCONF env var
-? use a 'trust pacman' config option for downgrading?
-? build-time (source) dependencies in makepkg
-? run ldd on every executable in a newly built package to find required so's
 - add a --pretend option
-- add a consistency/sanity check operation (md5 tracking for all files)
-- use package caches more for performance
-- clean up output a bit (message queue?)
-- use a files.cache db for --owns and db_find_conflicts
-

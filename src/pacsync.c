@@ -142,7 +142,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			}
 		}
 
-		/* set up our progress bar's callback */
+		/* set up our progress bar's callback (and idle timeout) */
 		if(strcmp(server->protocol, "file")) {
 			FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
 			FtpOptions(FTPLIB_IDLETIME, (long)1000, control);

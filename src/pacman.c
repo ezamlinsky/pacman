@@ -912,14 +912,14 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 					/* no cache directory.... try creating it */
 					snprintf(parent, PATH_MAX, "%svar/cache/pacman", pmo_root);
-					logaction(stderr, "warning: no %s cache exists.  creating...\n", ldir);
+					logaction(stderr, "warning: no %s cache exists.  creating...", ldir);
 					oldmask = umask(0000);
 					mkdir(parent, 0755);
 					if(mkdir(ldir, 0755)) {				
 						/* couldn't mkdir the cache directory, so fall back to /tmp and unlink
 						 * the package afterwards.
 						 */
-						logaction(stderr, "warning: couldn't create package cache, using /tmp instead\n");
+						logaction(stderr, "warning: couldn't create package cache, using /tmp instead");
 						snprintf(ldir, PATH_MAX, "/tmp");
 						varcache = 0;
 					}
@@ -1382,7 +1382,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				temp = strdup("/tmp/pacman_XXXXXX");
 				mkstemp(temp);
 				if(tar_extract_file(tar, temp)) {
-					logaction(stderr, "could not extract %s: %s\n", pathname, strerror(errno));
+					logaction(stderr, "could not extract %s: %s", pathname, strerror(errno));
 					errors++;
 					continue;
 				}
@@ -1419,13 +1419,13 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						char newpath[PATH_MAX];
 						snprintf(newpath, PATH_MAX, "%s.pacorig", expath);
 						if(rename(expath, newpath)) {
-							logaction(stderr, "error: could not rename %s: %s\n", expath, strerror(errno));
+							logaction(stderr, "error: could not rename %s: %s", expath, strerror(errno));
 						}
 						if(copyfile(temp, expath)) {
-							logaction(stderr, "error: could not copy %s to %s: %s\n", temp, expath, strerror(errno));
+							logaction(stderr, "error: could not copy %s to %s: %s", temp, expath, strerror(errno));
 							errors++;
 						} else {
-							logaction(stderr, "warning: %s saved as %s\n", expath, newpath);
+							logaction(stderr, "warning: %s saved as %s", expath, newpath);
 						}
 					}
 				} else if(md5_orig) {					
@@ -1452,9 +1452,9 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						installnew = 1;
 						snprintf(newpath, PATH_MAX, "%s.pacsave", expath);
 						if(rename(expath, newpath)) {
-							logaction(stderr, "error: could not rename %s: %s\n", expath, strerror(errno));
+							logaction(stderr, "error: could not rename %s: %s", expath, strerror(errno));
 						} else {
-							logaction(stderr, "warning: %s saved as %s\n", expath, newpath);
+							logaction(stderr, "warning: %s saved as %s", expath, newpath);
 						}
 					}
 
@@ -1478,11 +1478,11 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				} else {
 					vprint("%s is in NoUpgrade - skipping\n", pathname);
 					strncat(expath, ".pacnew", PATH_MAX);
-					logaction(stderr, "warning: extracting %s%s as %s\n", pmo_root, pathname, expath);
+					logaction(stderr, "warning: extracting %s%s as %s", pmo_root, pathname, expath);
 					/*tar_skip_regfile(tar);*/
 				}
 				if(tar_extract_file(tar, expath)) {
-					logaction(stderr, "could not extract %s: %s\n", pathname, strerror(errno));
+					logaction(stderr, "could not extract %s: %s", pathname, strerror(errno));
 					errors++;
 				}
 				/* calculate an md5 hash if this is in info->backup */
@@ -1506,7 +1506,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		tar_close(tar);
 		if(errors) {
 			ret = 1;
-			logaction(stderr, "errors occurred while %s %s\n",
+			logaction(stderr, "errors occurred while %s %s",
 				(pmo_upgrade ? "upgrading" : "installing"), info->name);
 
 /* XXX: this "else" is disabled so the db_write() ALWAYS occurs.  If it doesn't
@@ -1541,7 +1541,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			/* make an install date (in UTC) */
 			strncpy(info->installdate, asctime(gmtime(&t)), sizeof(info->installdate));
 			if(db_write(db, info)) {
-				logaction(stderr, "error updating database for %s!\n", info->name);
+				logaction(stderr, "error updating database for %s!", info->name);
 				return(1);
 			}
 			vprint("done.\n");
@@ -1755,7 +1755,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 							newpath = (char*)realloc(newpath, strlen(line)+strlen(".pacsave")+1);
 							sprintf(newpath, "%s.pacsave", line);
 							rename(line, newpath);
-							logaction(stderr, "warning: %s saved as %s\n", line, newpath);
+							logaction(stderr, "warning: %s saved as %s", line, newpath);
 						} else {
 							/*vprint("  unlinking %s\n", line);*/
 							if(unlink(line)) {
@@ -1838,7 +1838,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		}
 		if(!pmo_upgrade) {
 			printf("done.\n");
-			logaction(NULL, "removed %s (%s)\n", info->name, info->version);
+			logaction(NULL, "removed %s (%s)", info->name, info->version);
 		}
 	}
 
@@ -2427,7 +2427,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 			for(j = tp->depends; j; j = j->next) {
 				/* split into name/version pairs */				
 				if(splitdep((char*)j->data, &depend)) {
-					logaction(stderr, "warning: invalid dependency in %s\n", (char*)tp->name);
+					logaction(stderr, "warning: invalid dependency in %s", (char*)tp->name);
 					continue;
 				}
 				found = 0;
@@ -3019,7 +3019,8 @@ void logaction(FILE *fp, char *fmt, ...)
 	vsnprintf(msg, 1024, fmt, args);
 	va_end(args);
 	if(fp) {
-		fprintf(fp, "%s", msg);
+		fprintf(fp, "%s\n", msg);
+		fflush(fp);
 	}
 	if(pmo_usesyslog) {
 		syslog(LOG_WARNING, "%s", msg);
@@ -3031,7 +3032,7 @@ void logaction(FILE *fp, char *fmt, ...)
 		tm = localtime(&t);
 		
 		fprintf(logfd, "[%02d/%02d/%02d %02d:%02d] %s\n", tm->tm_mon+1, tm->tm_mday,
-				tm->tm_year-100, tm->tm_hour, tm->tm_min, msg);
+			tm->tm_year-100, tm->tm_hour, tm->tm_min, msg);
 	}
 }
 
@@ -3083,7 +3084,7 @@ void cleanup(int signum)
 	PMList *lp;
 
 	if(pm_access == READ_WRITE && lckrm(lckfile)) {
-		logaction(stderr, "warning: could not remove lock file %s\n", lckfile);
+		logaction(stderr, "warning: could not remove lock file %s", lckfile);
 	}
 	if(workfile) {
 		/* remove the current file being downloaded (as it's not complete) */

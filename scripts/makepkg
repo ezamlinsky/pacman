@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.1'
+myver='2.7.2'
 startdir=`pwd`
 USE_COLOR="n"
 
@@ -178,6 +178,7 @@ usage() {
 	echo "  -c, --clean      Clean up work files after build"
 	echo "  -C, --cleancache Clean up source files from the cache"
 	echo "  -d, --nodeps     Skip all dependency checks"
+	echo "  -e, --noextract  Do not extract source files (use existing src/ dir)"
 	echo "  -f, --force      Overwrite existing package"
 	echo "  -g, --genmd5     Generate MD5sums for source files"
 	echo "  -h, --help       This help"
@@ -204,6 +205,7 @@ DEP_BIN=0
 DEP_SRC=0
 NODEPS=0
 FORCE=0
+NOEXTRACT=0
 NOSTRIP=0
 RMDEPS=0
 PKGDEST=$startdir
@@ -218,6 +220,7 @@ while [ "$#" -ne "0" ]; do
 		--syncdeps)   DEP_BIN=1 ;;
 		--builddeps)  DEP_SRC=1 ;;
 		--nodeps)     NODEPS=1 ;;
+		--noextract)  NOEXTRACT=1 ;;
 		--install)    INSTALL=1 ;;
 		--force)      FORCE=1 ;;
 		--nostrip)    NOSTRIP=1 ;;
@@ -233,13 +236,14 @@ while [ "$#" -ne "0" ]; do
 			exit 1
 			;;
 		-*)
-			while getopts "cCsbdhifgmnrp:w:-" opt; do
+			while getopts "cCsbdehifgmnrp:w:-" opt; do
 				case $opt in
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
 					s) DEP_BIN=1 ;;
 					b) DEP_SRC=1 ;;
 					d) NODEPS=1 ;;
+					e) NOEXTRACT=1 ;;
 					i) INSTALL=1 ;;
 					g) GENMD5=1 ;;
 					f) FORCE=1 ;;
@@ -414,52 +418,55 @@ for netfile in ${source[@]}; do
 done
 
 if [ "$GENMD5" = "0" ]; then
-# MD5 validation
-	if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
-		warning "MD5sums are missing or incomplete.  Cannot verify source integrity."
-		#sleep 1
-	elif [ `type -p md5sum` ]; then
-		msg "Validating source files with MD5sums"
-		errors=0
-		idx=0
+	if [ "$NOEXTRACT" = "1" ]; then
+		warning "Skipping source extraction -- using existing src/ tree"
+	else
+		# MD5 validation
+		if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
+			warning "MD5sums are missing or incomplete.  Cannot verify source integrity."
+			#sleep 1
+		elif [ `type -p md5sum` ]; then
+			msg "Validating source files with MD5sums"
+			errors=0
+			idx=0
+			for netfile in ${source[@]}; do
+				file=`strip_url $netfile`
+				echo -n "    $file ... " >&2
+				echo "${md5sums[$idx]}  $file" | md5sum -c - >/dev/null 2>&1
+				if [ $? -ne 0 ]; then
+					echo "FAILED" >&2
+					errors=1
+				else
+					echo "Passed" >&2
+				fi	
+				idx=$(($idx+1))
+			done
+			if [ $errors -gt 0 ]; then
+				error "One or more files did not pass the validity check!"
+				exit 1
+			fi
+		else
+			warning "The md5sum program is missing.  Cannot verify source files!"
+			sleep 1
+		fi
+		# extract sources
+		msg "Extracting Sources..."
 		for netfile in ${source[@]}; do
 			file=`strip_url $netfile`
-			echo -n "    $file ... " >&2
-			echo "${md5sums[$idx]}  $file" | md5sum -c - >/dev/null 2>&1
-			if [ $? -ne 0 ]; then
-				echo "FAILED" >&2
-				errors=1
-			else
-				echo "Passed" >&2
-			fi	
-			idx=$(($idx+1))
-		done
-		if [ $errors -gt 0 ]; then
-			error "One or more files did not pass the validity check!"
-			exit 1
-		fi
-	else
-		warning "The md5sum program is missing.  Cannot verify source files!"
-		sleep 1
-	fi
-# extract sources
-	msg "Extracting Sources..."
-	for netfile in ${source[@]}; do
-		file=`strip_url $netfile`
 			unset cmd
 			case $file in
 				*.tar.gz|*.tar.Z|*.tgz)
-					cmd="tar --use-compress-program=gzip -xf $file" ;;
+				cmd="tar --use-compress-program=gzip -xf $file" ;;
 				*.tar.bz2)
-					cmd="tar --use-compress-program=bzip2 -xf $file" ;;
+				cmd="tar --use-compress-program=bzip2 -xf $file" ;;
 				*.tar)
-					cmd="tar -xf $file" ;;
+				cmd="tar -xf $file" ;;
 				*.zip)
-					cmd="unzip -qqo $file" ;;
+				cmd="unzip -qqo $file" ;;
 				*.gz)
-					cmd="gunzip $file" ;;
+				cmd="gunzip $file" ;;
 				*.bz2)
-					cmd="bunzip2 $file" ;;
+				cmd="bunzip2 $file" ;;
 			esac
 			if [ "$cmd" != "" ]; then
 				msg "    $cmd"
@@ -470,7 +477,8 @@ if [ "$GENMD5" = "0" ]; then
 					exit 1
 				fi
 			fi
-	done
+		done
+	fi
 else
 # generate md5 hashes
 	if [ ! `type -p md5sum` ]; then
@@ -518,7 +526,7 @@ fi
 
 # check for existing pkg directory
 if [ -d $startdir/pkg ]; then
-	msg "Removing existing pkg directory..."
+	msg "Removing existing pkg/ directory..."
 	rm -rf $startdir/pkg
 fi
 mkdir -p $startdir/pkg
@@ -573,9 +581,9 @@ cd $startdir
 # strip binaries
 if [ "$NOSTRIP" = "0" ]; then
 	msg "Stripping debugging symbols from libraries..."
-	find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' \; 2>&1
+	find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' \; 2>&1 | grep -v "No such file"
 	msg "Stripping symbols from binaries..."
-	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' \; 2>&1
+	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' \; 2>&1 | grep -v "No such file"
 fi
 
 # get some package meta info
