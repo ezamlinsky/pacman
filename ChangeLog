@@ -1,5 +1,13 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9.3         - fixed a couple manpage typos
+              - added --ignore to -S operations, works just like IgnorePkg
+              - respect IgnorePkg list when pulling in dependencies
+              - numerous memleak fixes
+              - some code changes to improve customizability/branding
+              - Makefile fix for nonstandard lib search paths (Kevin Piche)
+              - fixed the leftover directories in /tmp
+              - speed improvement patches from Tommi Rantala
 2.9.2         - bugfix for 2.9.1 
 2.9.1         - --refresh now only downloads fresh packages lists if they've
                 been updated (currently only works with FTP)

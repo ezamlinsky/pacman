@@ -463,6 +463,7 @@ if [ "$GENMD5" = "0" ]; then
 		# extract sources
 		msg "Extracting Sources..."
 		for netfile in ${source[@]}; do
+			unziphack=0
 			file=`strip_url $netfile`
 			unset cmd
 			case $file in
@@ -473,6 +474,7 @@ if [ "$GENMD5" = "0" ]; then
 				*.tar)
 				cmd="tar -xf $file" ;;
 				*.zip)
+				unziphack=1
 				cmd="unzip -qqo $file" ;;
 				*.gz)
 				cmd="gunzip $file" ;;
@@ -483,9 +485,12 @@ if [ "$GENMD5" = "0" ]; then
 				msg "    $cmd"
 				$cmd
 				if [ $? -ne 0 ]; then
-					error "Failed to extract $file"
-					msg "Aborting..."
-					exit 1
+					# unzip will return a 1 as a warning, it is not an error
+					if [ "$unziphack" != "1" -o $? -ne 1 ]; then
+						error "Failed to extract $file"
+						msg "Aborting..."
+						exit 1
+					fi
 				fi
 			fi
 		done

@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.9.2
+PACVER = 2.9.3
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -55,6 +55,7 @@ SRCS = $(SRCDIR)pacman.c \
 			 $(SRCDIR)pacsync.c \
 			 $(SRCDIR)md5.c \
 			 $(SRCDIR)md5driver.c \
+			 $(SRCDIR)strhash.c \
 			 $(SRCDIR)vercmp.c \
 			 $(SRCDIR)rpmvercmp.c
 
@@ -66,6 +67,7 @@ OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)pacsync.o \
 					$(OBJDIR)md5.o \
 					$(OBJDIR)md5driver.o \
+					$(OBJDIR)strhash.o \
 					$(OBJDIR)rpmvercmp.o
 
 all: libftp.a pacman vercmp convertdb man
@@ -78,7 +80,7 @@ vercmp: $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o
 	$(CXX) $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o $(CXXFLAGS) -o $@
 
 convertdb: $(OBJDIR)convertdb.o $(OBJDIR)list.o $(OBJDIR)util.o
-	$(CXX) $(OBJDIR)convertdb.o $(OBJDIR)list.o $(OBJDIR)util.o $(CXXFLAGS) -lz -ltar -o $@
+	$(CXX) $(OBJDIR)convertdb.o $(OBJDIR)list.o $(OBJDIR)util.o $(LDFLAGS) -o $@
 
 .c.o: $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ -c $<

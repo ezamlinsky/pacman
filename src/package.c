@@ -27,6 +27,7 @@
 #include <string.h>
 #include <libtar.h>
 #include <zlib.h>
+#include "pacconf.h"
 #include "util.h"
 #include "package.h"
 
@@ -410,7 +411,7 @@ int split_pkgname(char *pkgfile, char *name, char *version)
 	}
 	strncpy(tmp, p, 512);
 	/* trim file extension (if any) */
-	if((p = strstr(tmp, ".pkg.tar.gz"))) {
+	if((p = strstr(tmp, PKGEXT))) {
 		*p = 0;
 	}
 

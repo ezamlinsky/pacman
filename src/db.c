@@ -29,6 +29,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include "package.h"
+#include "strhash.h"
 #include "util.h"
 #include "db.h"
 
@@ -131,26 +132,63 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 	struct dirent *ent = NULL;
 	struct stat sbuf;
 	char path[PATH_MAX];
-	char name[256];
+	int path_len = 0;
+	char *name = NULL;
 	char *ptr = NULL;
 	int found = 0;
 
+	/* hash table for caching directory names */
+	static strhash_t* htable = NULL;
+	
+	if (!htable)
+		htable = new_strhash(951);
+
+	snprintf(path, PATH_MAX, "%s/", db->path);
+	path_len = strlen(path);
+
 	if(target != NULL) {
 		/* search for a specific package (by name only) */
+
+		/* See if we have the path cached. */
+		strcat(path, target);
+		if (strhash_isin(htable, path)) {
+			struct dirent* pkgdir;
+			pkginfo_t* pkg;
+
+			/* db_read() wants 'struct dirent' so lets give it one.
+			 * Actually it only uses the d_name field. */
+
+			MALLOC(pkgdir, sizeof(struct dirent));
+			strcpy(pkgdir->d_name, strhash_get(htable, path));
+
+			pkg = db_read(db, pkgdir, inforeq);
+			FREE(pkgdir);
+			return pkg;
+		}
+		path[path_len] = '\0';
+
+		/* OK the entry was not in cache, so lets look for it manually. */
+			
 		rewinddir(db->dir);
 		ent = readdir(db->dir);
+
 		while(!found && ent != NULL) {
 			if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
 				ent = readdir(db->dir);
 				continue;
 			}
-			strncpy(name, ent->d_name, 255);
+
 			/* stat the entry, make sure it's a directory */
-			snprintf(path, PATH_MAX, "%s/%s", db->path, name);
+			path[path_len] = '\0';
+			strncat(path, ent->d_name, PATH_MAX - path_len);
+
 			if(stat(path, &sbuf) || !S_ISDIR(sbuf.st_mode)) {
 				ent = readdir(db->dir);
 				continue;
 			}
+
+			name = path + path_len;
+
 			/* truncate the string at the second-to-last hyphen, */
 			/* which will give us the package name */
 			if((ptr = rindex(name, '-'))) {
@@ -176,14 +214,36 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 			if(ent == NULL) {
 				return(NULL);
 			}
+
 			/* stat the entry, make sure it's a directory */
-			snprintf(path, PATH_MAX, "%s/%s", db->path, ent->d_name);
+			path[path_len] = '\0';
+			strncat(path, ent->d_name, PATH_MAX - path_len);
+
 			if(!stat(path, &sbuf) && S_ISDIR(sbuf.st_mode)) {
 				isdir = 1;
 			}
 			if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
 				isdir = 0;
 				continue;
+			}
+
+			name = path + path_len;
+
+			if((ptr = rindex(name, '-'))) {
+				*ptr = '\0';
+			}
+			if((ptr = rindex(name, '-'))) {
+				*ptr = '\0';
+			}
+
+			/* Add entries like:
+			 *
+			 *         key:  /var/lib/pacman/extra/xrally
+			 *         data: xrally-1.1.1-1
+			 */
+
+			if (!strhash_isin(htable, path)) {
+				strhash_add(htable, strdup(path), strdup(ent->d_name));
 			}
 		}
 	}
@@ -603,6 +663,28 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	char *str = NULL;
 	struct stat buf, buf2;
 	PMList *conflicts = NULL;
+	strhash_t** htables;
+	int target_num = 0;
+	int d = 0;
+	int e = 0;
+
+	/* Create and initialise an array of hash tables.
+	 *
+	 * htables [ 0 ... target_num ] : targets' files
+	 * htables [ target_num       ] : used later
+	 */
+
+	target_num = list_count(targets);
+
+	MALLOC(htables, (target_num+1) * sizeof(strhash_t*));
+
+	for(d = 0, i = targets; i; i = i->next, d++) {
+		htables[d] = new_strhash(151);
+
+		strhash_add_list(htables[d], ((pkginfo_t*)i->data)->files);
+	}
+
+	htables[target_num] = new_strhash(151);
 
 	/* CHECK 1: check every db package against every target package */
 	/* XXX: I've disabled the database-against-targets check for now, as the
@@ -613,34 +695,30 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	pkginfo_t *info = NULL;
 	char *dbstr   = NULL;
 	rewinddir(db->dir);
+
 	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_FILES)) != NULL) {
 		for(i = info->files; i; i = i->next) {
-			if(i->data == NULL) continue;
 			dbstr = (char*)i->data;
-			for(j = targets; j; j = j->next) {
+			
+			if(dbstr == NULL || rindex(dbstr, '/') == dbstr+strlen(dbstr)-1)
+				continue;
+
+			for(d = 0, j = targets; j; j = j->next, d++) {
 				pkginfo_t *targ = (pkginfo_t*)j->data;
-				if(strcmp(info->name, targ->name)) {
-					for(k = targ->files; k; k = k->next) {
-						filestr = (char*)k->data;
-						if(!strcmp(dbstr, filestr)) {
-							if(rindex(k->data, '/') == filestr+strlen(filestr)-1) {
-								continue;
-							}
-							MALLOC(str, 512);
-							snprintf(str, 512, "%s: exists in \"%s\" (target) and \"%s\" (installed)", dbstr,
-								targ->name, info->name);
-							conflicts = list_add(conflicts, str);
-						}
-					}
+				if(strcmp(info->name, targ->name) && strhash_isin(htables[d], dbstr)) {
+					MALLOC(str, 512);
+					snprintf(str, 512, "%s: exists in \"%s\" (target) and \"%s\" (installed)", dbstr,
+							targ->name, info->name);
+					conflicts = list_add(conflicts, str);
 				}
 			}
 		}
 	}*/
 
 	/* CHECK 2: check every target against every target */
-	for(i = targets; i; i = i->next) {
+	for(d = 0, i = targets; i; i = i->next, d++) {
 		pkginfo_t *p1 = (pkginfo_t*)i->data;
-		for(j = i; j; j = j->next) {
+		for(e = d, j = i; j; j = j->next, e++) {
 			pkginfo_t *p2 = (pkginfo_t*)j->data;
 			if(strcmp(p1->name, p2->name)) {
 				for(k = p1->files; k; k = k->next) {
@@ -652,7 +730,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 						/* this filename has a trailing '/', so it's a directory -- skip it. */
 						continue;
 					}
-					if(is_in(filestr, p2->files)) {
+					if(strhash_isin(htables[e], filestr)) {
 						MALLOC(str, 512);
 						snprintf(str, 512, "%s: exists in \"%s\" (target) and \"%s\" (target)",
 							filestr, p1->name, p2->name);
@@ -674,8 +752,11 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 				int ok = 0;
 				if(dbpkg == NULL) {
 					dbpkg = db_scan(db, p->name, INFRQ_DESC | INFRQ_FILES);
+
+					if(dbpkg)
+						strhash_add_list(htables[target_num], dbpkg->files);
 				}
-				if(dbpkg && is_in(j->data, dbpkg->files)) {
+				if(dbpkg && strhash_isin(htables[target_num], filestr)) {
 					ok = 1;
 				}
 				/* Make sure that the supposedly-conflicting file is not actually just

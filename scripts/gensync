@@ -134,6 +134,8 @@ db_write_entry()
 		done
 		echo "" >>depends
 	fi
+	# preserve the modification time
+	touch -r $1 desc depends
 }
 
 if [ $# -lt 2 ]; then

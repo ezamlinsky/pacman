@@ -28,6 +28,7 @@ typedef struct __pmlist_t {
 	void*   data;
 	struct __pmlist_t* prev;
 	struct __pmlist_t* next;
+	struct __pmlist_t* last; /* Quick access to last item in list */
 } PMList;
 
 
@@ -38,6 +39,7 @@ typedef int (*cmp_fn) (const void *, const void *);
 PMList* list_new();
 void list_free(PMList* list);
 PMList* list_add(PMList* list, void* data);
+PMList* list_remove(PMList* list, PMList* item);
 int list_count(PMList* list);
 int list_isin(PMList *haystack, void *needle);
 PMList* is_in(char *needle, PMList *haystack);

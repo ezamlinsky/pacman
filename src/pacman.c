@@ -37,6 +37,7 @@
 #include <libtar.h>
 #include <dirent.h>
 /* pacman */
+#include "pacconf.h"
 #include "rpmvercmp.h"
 #include "md5.h"
 #include "list.h"
@@ -52,35 +53,36 @@
  */
 
 /* command line options */
-char          *pmo_root       = NULL;
-unsigned short pmo_op         = PM_MAIN;
-unsigned short pmo_verbose    = 0;
-unsigned short pmo_version    = 0;
-unsigned short pmo_help       = 0;
-unsigned short pmo_force      = 0;
-unsigned short pmo_nodeps     = 0;
-unsigned short pmo_upgrade    = 0;
-unsigned short pmo_freshen    = 0;
-unsigned short pmo_nosave     = 0;
-unsigned short pmo_noconfirm  = 0;
-unsigned short pmo_d_vertest  = 0;
-unsigned short pmo_d_resolve  = 0;
-unsigned short pmo_q_isfile   = 0;
-unsigned short pmo_q_info     = 0;
-unsigned short pmo_q_list     = 0;
-unsigned short pmo_q_orphans  = 0;
-unsigned short pmo_q_owns     = 0;
-unsigned short pmo_q_search   = 0;
-unsigned short pmo_r_cascade  = 0;
-unsigned short pmo_r_dbonly   = 0;
-unsigned short pmo_r_recurse  = 0;
-unsigned short pmo_s_upgrade  = 0;
+char          *pmo_root         = NULL;
+unsigned short pmo_op           = PM_MAIN;
+unsigned short pmo_verbose      = 0;
+unsigned short pmo_version      = 0;
+unsigned short pmo_help         = 0;
+unsigned short pmo_force        = 0;
+unsigned short pmo_nodeps       = 0;
+unsigned short pmo_upgrade      = 0;
+unsigned short pmo_freshen      = 0;
+unsigned short pmo_nosave       = 0;
+unsigned short pmo_noconfirm    = 0;
+unsigned short pmo_d_vertest    = 0;
+unsigned short pmo_d_resolve    = 0;
+unsigned short pmo_q_isfile     = 0;
+unsigned short pmo_q_info       = 0;
+unsigned short pmo_q_list       = 0;
+unsigned short pmo_q_orphans    = 0;
+unsigned short pmo_q_owns       = 0;
+unsigned short pmo_q_search     = 0;
+unsigned short pmo_r_cascade    = 0;
+unsigned short pmo_r_dbonly     = 0;
+unsigned short pmo_r_recurse    = 0;
+unsigned short pmo_s_upgrade    = 0;
 unsigned short pmo_s_downloadonly = 0;
 unsigned short pmo_s_printuris    = 0;
-unsigned short pmo_s_sync     = 0;
-unsigned short pmo_s_search   = 0;
-unsigned short pmo_s_clean    = 0;
-unsigned short pmo_group      = 0;
+unsigned short pmo_s_sync       = 0;
+unsigned short pmo_s_search     = 0;
+unsigned short pmo_s_clean      = 0;
+PMList        *pmo_s_ignore     = NULL;
+unsigned short pmo_group        = 0;
 /* configuration file options */
 char          *pmo_dbpath       = NULL;
 char          *pmo_configfile   = NULL;
@@ -91,6 +93,7 @@ char          *pmo_xfercommand  = NULL;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 PMList        *pmo_holdpkg      = NULL;
+unsigned short pmo_chomp        = 0;
 unsigned short pmo_usesyslog    = 0;
 unsigned short pmo_nopassiveftp = 0;
 
@@ -132,7 +135,7 @@ int main(int argc, char *argv[])
 	strcpy(pmo_root, "/");
 	/* default dbpath */
 	MALLOC(pmo_dbpath, PATH_MAX);
-	strcpy(pmo_dbpath, PKGDIR);
+	strcpy(pmo_dbpath, PACDBDIR);
 	/* default configuration file */
 	MALLOC(pmo_configfile, PATH_MAX);
 	strcpy(pmo_configfile, PACCONF);
@@ -151,6 +154,9 @@ int main(int argc, char *argv[])
 		/* fakeroot doesn't count, we're non-root */
 		myuid = 99;
 	}
+
+	/* change to / so we can avoid having our CWD removed from under us */
+	chdir("/");
 
 	/* check for permission */
 	pm_access = READ_ONLY;
@@ -343,9 +349,12 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			PMList *cache = NULL;
 			PMList *clean = NULL;
 			PMList *i, *j;
+			char dirpath[PATH_MAX];
+
+			snprintf(dirpath, PATH_MAX, "%s%s", pmo_root, CACHEDIR);
 
 			printf("removing old packages from cache... ");
-			dir = opendir("/var/cache/pacman/pkg");
+			dir = opendir(dirpath);
 			if(dir == NULL) {
 				fprintf(stderr, "error: could not access cache directory\n");
 				return(1);
@@ -361,14 +370,15 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 			for(i = cache; i; i = i->next) {
 				char *str = (char *)i->data;
-				char name[256], version[64];
+				char pkgpart[256], name[256], version[64];
 
-				if(strstr(str, ".pkg.tar.gz") == NULL) {
+				if(strstr(str, PKGEXT) == NULL) {
 					clean = list_add(clean, strdup(str));
 					continue;
 				}
+				snprintf(pkgpart, sizeof(pkgpart), "%s.part", PKGEXT);
 				/* we keep partially downloaded files */
-				if(strstr(str, ".pkg.tar.gz.part")) {
+				if(strstr(str, pkgpart)) {
 					continue;
 				}
 				if(split_pkgname(str, name, version) != 0) {
@@ -379,10 +389,10 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					char *s = (char *)j->data;
 					char n[256], v[64];
 
-					if(strstr(s, ".pkg.tar.gz") == NULL) {
+					if(strstr(s, PKGEXT) == NULL) {
 						continue;
 					}
-					if(strstr(s, ".pkg.tar.gz.part")) {
+					if(strstr(s, pkgpart)) {
 						continue;
 					}
 					if(split_pkgname(s, n, v) != 0) {
@@ -617,7 +627,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					for(m = pm_packages; m; m = m->next) {
 						pkginfo_t *p = (pkginfo_t*)m->data;
 						if(!strcmp(k->data, p->name)) {
-							if(is_in(p->name, pmo_ignorepkg)) {
+							if(is_in(p->name, pmo_ignorepkg) || is_in(p->name, pmo_s_ignore)) {
 								fprintf(stderr, ":: %s-%s: ignoring package upgrade (to be replaced by %s-%s)\n",
 									p->name, p->version, pkg->name, pkg->version);
 								ignore = 1;
@@ -684,8 +694,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			cmp = rpmvercmp(local->version, sync->pkg->version);
 			if(cmp > 0 && !sync->pkg->force) {
 				/* local version is newer */
-				fprintf(stderr, ":: %s-%s: local version is newer\n",
-					local->name, local->version);
+				fprintf(stderr, ":: %s: local version (%s) is newer than repo version (%s)\n",
+					local->name, local->version, sync->pkg->version);
 				newer = 1;
 				FREE(sync);
 				continue;
@@ -693,7 +703,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				/* versions are identical */
 				FREE(sync);
 				continue;
-			} else if(is_in((char*)i->data, pmo_ignorepkg)) {
+			} else if(is_in((char*)i->data, pmo_ignorepkg) || is_in((char*)i->data, pmo_s_ignore)) {
 			  /* package should be ignored (IgnorePkg) */
 				fprintf(stderr, ":: %s-%s: ignoring package upgrade (%s)\n",
 					local->name, local->version, sync->pkg->version);
@@ -780,8 +790,13 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 								if(sync->pkg == NULL) {
 									found = 0;
 								}
-								/* this package was explicitly requested */
-								sync->pkg->reason = REASON_EXPLICIT;
+								if(pmo_d_resolve) {
+									/* looks like we're being called from 'makepkg -s' so these are all deps */
+									sync->pkg->reason = REASON_DEPEND;
+								} else {
+									/* this package was explicitly requested */
+									sync->pkg->reason = REASON_EXPLICIT;
+								}
 							}
 						}
 					}
@@ -1132,7 +1147,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		PMList *processed = NULL;
 		PMList *files = NULL;
 
-		snprintf(ldir, PATH_MAX, "%svar/cache/pacman/pkg", pmo_root);
+		snprintf(ldir, PATH_MAX, "%s%s", pmo_root, CACHEDIR);
 
 		/* group sync records by repository and download */
 		while(!done) {
@@ -1153,17 +1168,17 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					char path[PATH_MAX];
 
 					if(pmo_s_printuris) {
-						snprintf(path, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);					
+						snprintf(path, PATH_MAX, "%s-%s%s", sync->pkg->name, sync->pkg->version, PKGEXT);
 						files = list_add(files, strdup(path));
 					} else {
-						snprintf(path, PATH_MAX, "%s/%s-%s.pkg.tar.gz",
-							ldir, sync->pkg->name, sync->pkg->version);
+						snprintf(path, PATH_MAX, "%s/%s-%s%s",
+							ldir, sync->pkg->name, sync->pkg->version, PKGEXT);
 						if(stat(path, &buf)) {
 							/* file is not in the cache dir, so add it to the list */
-							snprintf(path, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);					
+							snprintf(path, PATH_MAX, "%s-%s%s", sync->pkg->name, sync->pkg->version, PKGEXT);
 							files = list_add(files, strdup(path));
 						} else {
-							vprint(" %s-%s.pkg.tar.gz is already in the cache\n", sync->pkg->name, sync->pkg->version);
+							vprint(" %s-%s%s is already in the cache\n", sync->pkg->name, sync->pkg->version, PKGEXT);
 							count++;
 						}
 					}
@@ -1235,7 +1250,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				char *md5sum1, *md5sum2;
 
 				sync = (syncpkg_t*)i->data;
-				snprintf(pkgname, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);
+				snprintf(pkgname, PATH_MAX, "%s-%s%s", sync->pkg->name, sync->pkg->version, PKGEXT);
 
 				md5sum1 = sync->pkg->md5sum;
 				if(md5sum1 == NULL || md5sum1[0] == '\0') {
@@ -1327,7 +1342,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				syncpkg_t *sync = (syncpkg_t*)i->data;
 				if(sync->pkg) {
 					MALLOC(str, PATH_MAX);
-					snprintf(str, PATH_MAX, "%s/%s-%s.pkg.tar.gz", ldir, sync->pkg->name, sync->pkg->version);
+					snprintf(str, PATH_MAX, "%s/%s-%s%s", ldir, sync->pkg->name, sync->pkg->version, PKGEXT);
 					files = list_add(files, str);
 					if(sync->pkg->reason == REASON_DEPEND) {
 						dependonly = list_add(dependonly, strdup(str));
@@ -1978,7 +1993,7 @@ int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly)
 			 * or installed as a dependency for another package
 			 */
 			info->reason = REASON_EXPLICIT;
-			if(is_in(file->data, dependonly)) {
+			if(is_in(file->data, dependonly) || pmo_d_resolve) {
 				info->reason = REASON_DEPEND;
 			}
 			/* make an install date (in UTC) */
@@ -2254,7 +2269,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 
 		/* update dependency packages' REQUIREDBY fields */
 		for(lp = info->depends; lp; lp = lp->next) {
-			PMList *last, *j;
+			PMList *j;
 
 			if(splitdep((char*)lp->data, &depend)) {
 				continue;
@@ -2280,17 +2295,9 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 				}
 			}
 			/* splice out this entry from requiredby */
-			last = list_last(depinfo->requiredby);			
 			for(j = depinfo->requiredby; j; j = j->next) {
 				if(!strcmp((char*)j->data, info->name)) {
-					if(j == depinfo->requiredby) {
-						depinfo->requiredby = j->next;
-					}
-					if(j->prev)	j->prev->next = j->next;
-					if(j->next)	j->next->prev = j->prev;
-					/* free the spliced node */
-					j->prev = j->next = NULL;
-					list_free(j);
+					depinfo->requiredby = list_remove(depinfo->requiredby, j);
 					break;
 				}
 			}
@@ -2693,7 +2700,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 	targ = list_add(targ, syncpkg->pkg);
 	deps = checkdeps(local, PM_ADD, targ);
 	targ->data = NULL;
-	list_free(targ);
+	FREELIST(targ);
 	for(i = deps; i; i = i->next) {
 		int found = 0;
 		depmissing_t *miss = (depmissing_t*)i->data;
@@ -2737,7 +2744,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 					sync->pkg->reason = REASON_DEPEND;
 					sync->dbs = dbs;
 				}
-				list_free(provides);
+				FREELIST(provides);
 			}
 			if(!found) {
 				fprintf(stderr, "error: cannot resolve dependencies for \"%s\":\n", miss->target);
@@ -2753,6 +2760,8 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 			}
 			if(found) {
 				/* this dep is already in the target list */
+				FREEPKG(sync->pkg);
+				FREE(sync);
 				continue;
 			}
 			vprint("resolving %s\n", sync->pkg->name);
@@ -2764,15 +2773,41 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 				}
 			}
 			if(!found) {
-				list_add(trail, sync);
-				if(resolvedeps(local, databases, sync, list, trail)) {
+				/* check pmo_ignorepkg and pmo_s_ignore to make sure we haven't pulled in
+				 * something we're not supposed to.
+				 */
+				int usedep = 1;	
+				found = 0;
+				for(j = pmo_ignorepkg; j && !found; j = j->next) {
+					if(!strcmp(j->data, sync->pkg->name)) {
+						found = 1;
+					}
+				}
+				for(j = pmo_s_ignore; j && !found; j = j->next) {
+					if(!strcmp(j->data, sync->pkg->name)) {
+						found = 1;
+					}
+				}
+				if(found) {
+					usedep = yesno("%s requires %s, but it is in IgnorePkg.  Install anyway? [Y/n] ",
+						miss->target, sync->pkg->name);
+				}
+				if(usedep) {
+					trail = list_add(trail, sync);
+					if(resolvedeps(local, databases, sync, list, trail)) {
+						return(1);
+					}
+					vprint("adding %s-%s\n", sync->pkg->name, sync->pkg->version);				
+					list = list_add(list, sync);
+				} else {
+					fprintf(stderr, "error: cannot resolve dependencies for \"%s\"\n", miss->target);
 					return(1);
 				}
-				vprint("adding %s-%s\n", sync->pkg->name, sync->pkg->version);				
-				list_add(list, sync);
 			} else {
 				/* cycle detected -- skip it */
 				vprint("dependency cycle detected: %s\n", sync->pkg->name);
+				FREEPKG(sync->pkg);
+				FREE(sync);
 			}
 		}
 	}
@@ -2820,6 +2855,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 				}
 				if(is_pkgin(p, targets)) {
 					/* this package is also in the upgrade list, so don't worry about it */
+					FREEPKG(p);
 					continue;
 				}
 				for(k = p->depends; k && !found; k = k->next) {
@@ -2836,9 +2872,11 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 					PMList *provides = whatprovides(db, depend.name);
 					if(provides == NULL) {
 						/* not found */
+						FREEPKG(p);
 						continue;
 					}
 					/* we found an installed package that provides depend.name */
+					FREELIST(provides);
 				}
 				found = 0;
 				if(depend.mod == DEP_ANY) {
@@ -2870,8 +2908,9 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 						baddeps = list_add(baddeps, miss);
 					}
 				}
+				FREEPKG(p);
 			}
-			freepkg(oldpkg);
+			FREEPKG(oldpkg);
 		}
 	}
 	if(op == PM_ADD || op == PM_UPGRADE) {
@@ -2984,6 +3023,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 						}
 					}
 				}
+				FREEPKG(info);
 			}
 
 			/* PROVIDES -- check to see if another package already provides what
@@ -3084,7 +3124,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 							/* wtf */
 							fprintf(stderr, "data error: %s supposedly provides %s, but it was not found in db\n",
 								(char*)k->data, depend.name);
-							list_free(k);
+							FREELIST(k);
 							continue;
 						}
 						if(depend.mod == DEP_ANY) {
@@ -3108,8 +3148,9 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 							}
 							FREE(ver);
 						}
+						FREEPKG(p);
+						FREELIST(k);
 					}
-					list_free(k);
 				}
 				/* else if still not found... */
 				if(!found) {
@@ -3255,6 +3296,9 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 
 	if(!grep(scriptfn, script)) {
 		/* script not found in scriptlet file */
+		if(strlen(tmpdir) && rmrf(tmpdir)) {
+			fprintf(stderr, "warning: could not remove tmpdir %s\n", tmpdir);
+		}
 		return(0);
 	}
 
@@ -3289,39 +3333,40 @@ int parseargs(int op, int argc, char **argv)
 	static struct option opts[] =
 	{
 		{"add",        no_argument,       0, 'A'},
-		{"remove",     no_argument,       0, 'R'},
-		{"upgrade",    no_argument,       0, 'U'},
+		{"resolve",    no_argument,       0, 'D'}, /* used by 'makepkg -s' */
 		{"freshen",    no_argument,       0, 'F'},
 		{"query",      no_argument,       0, 'Q'},
+		{"remove",     no_argument,       0, 'R'},
 		{"sync",       no_argument,       0, 'S'},
-		{"deptest",    no_argument,       0, 'T'},
-		{"vertest",    no_argument,       0, 'Y'},
-		{"resolve",    no_argument,       0, 'D'},
-		{"root",       required_argument, 0, 'r'},
-		{"dbpath",     required_argument, 0, 'b'},
-		{"verbose",    no_argument,       0, 'v'},
+		{"deptest",    no_argument,       0, 'T'}, /* used by makepkg */
+		{"upgrade",    no_argument,       0, 'U'},
 		{"version",    no_argument,       0, 'V'},
-		{"help",       no_argument,       0, 'h'},
-		{"search",     no_argument,       0, 's'},
+		{"vertest",    no_argument,       0, 'Y'}, /* does the same as the 'vercmp' binary */
+		{"dbpath",     required_argument, 0, 'b'},
 		{"clean",      no_argument,       0, 'c'},
-		{"force",      no_argument,       0, 'f'},
+		{"cascade",    no_argument,       0, 'c'},
 		{"nodeps",     no_argument,       0, 'd'},
 		{"orphans",    no_argument,       0, 'e'},
+		{"force",      no_argument,       0, 'f'},
+		{"groups",     no_argument,       0, 'g'},
+		{"help",       no_argument,       0, 'h'},
+		{"info",       no_argument,       0, 'i'},
+		{"dbonly",     no_argument,       0, 'k'},
+		{"list",       no_argument,       0, 'l'},
 		{"nosave",     no_argument,       0, 'n'},
 		{"owns",       no_argument,       0, 'o'},
-		{"list",       no_argument,       0, 'l'},
 		{"file",       no_argument,       0, 'p'},
-		{"info",       no_argument,       0, 'i'},
-		{"sysupgrade", no_argument,       0, 'u'},
-		{"downloadonly", no_argument,     0, 'w'},
 		{"print-uris", no_argument,       0, 'p'},
-		{"refresh",    no_argument,       0, 'y'},
-		{"dbonly",     no_argument,       0, 'k'},
-		{"cascade",    no_argument,       0, 'c'},
+		{"root",       required_argument, 0, 'r'},
+		{"search",     no_argument,       0, 's'},
 		{"recursive",  no_argument,       0, 's'},
-		{"groups",     no_argument,       0, 'g'},
+		{"sysupgrade", no_argument,       0, 'u'},
+		{"verbose",    no_argument,       0, 'v'},
+		{"downloadonly", no_argument,     0, 'w'},
+		{"refresh",    no_argument,       0, 'y'},
 		{"noconfirm",  no_argument,       0, 1000},
 		{"config",     required_argument, 0, 1001},
+		{"ignore",     required_argument, 0, 1002},
 		{0, 0, 0, 0}
 	};
 
@@ -3333,6 +3378,7 @@ int parseargs(int op, int argc, char **argv)
 			case 0:   break;
 			case 1000: pmo_noconfirm = 1; break;
 			case 1001: strcpy(pmo_configfile, optarg); break;
+			case 1002: pmo_s_ignore = list_add(pmo_s_ignore, strdup(optarg)); break;
 			case 'A': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_ADD);     break;
 			case 'R': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_REMOVE);  break;
 			case 'U': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); break;
@@ -3469,6 +3515,8 @@ int parseconfig(char *configfile)
 				} else if(!strcmp(key, "USESYSLOG")) {
 					pmo_usesyslog = 1;
 					vprint("config: usesyslog\n");
+				} else if(!strcmp(key, "ILOVECANDY")) {
+					pmo_chomp = 1;
 				} else {
 					fprintf(stderr, "config: line %d: syntax error\n", linenum);
 					return(1);			
@@ -3691,6 +3739,7 @@ void usage(int op, char *myname)
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
 			printf("  -w, --downloadonly  download packages but do not install/upgrade anything\n");
 			printf("  -y, --refresh       download fresh package databases from the server\n");
+			printf("      --ignore <pkg>  ignore a package upgrade (can be used more than once)\n");
 		}
 		printf("      --config <path> set an alternate configuration file\n");
 		printf("      --noconfirm     do not ask for any confirmation\n");
@@ -3710,20 +3759,6 @@ void version(void)
 	printf("\\  '-. '-'  '-'  '-'  \n");
 	printf(" '--'                  This program may be freely redistributed under\n");
 	printf("                       the terms of the GNU General Public License\n\n");
-}
-
-/* Check verbosity option and, if set, print the
- * string to stdout
- */
-void vprint(char *fmt, ...)
-{
-	va_list args;
-	if(pmo_verbose) {
-		va_start(args, fmt);
-		vprintf(fmt, args);
-		va_end(args);
-		fflush(stdout);
-	}
 }
 
 /* Output a message to stderr, and (optionally) syslog and/or a logfile */

@@ -28,15 +28,17 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "pacconf.h"
 #include "list.h"
 #include "util.h"
+
+unsigned short pmo_verbose = 0;
 
 int main(int argc, char* argv[])
 {
 	FILE* db = NULL;
 	FILE* fp = NULL;
 	char* ptr = NULL;
-	char* dbdir = "/var/lib/pacman/pacman.db";
 	char  name[256];
 	char  ver[256];
 	char  line[PATH_MAX+1];
@@ -44,6 +46,9 @@ int main(int argc, char* argv[])
 	char  path[PATH_MAX+1];
 	mode_t oldumask;
 	struct stat buf;
+	char dbdir[PATH_MAX];
+ 
+	sprintf(dbdir, "/%s", PACDBDIR);
 
 	if(argc < 2) {
 		printf("converts a pacman 1.x database to a pacman 2.0 format\n");

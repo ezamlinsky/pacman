@@ -21,22 +21,6 @@
 #ifndef _PAC_PACMAN_H
 #define _PAC_PACMAN_H
 
-#ifndef PACVER
-#define PACVER    "2.9.2"
-#endif
-
-#ifndef PKGDIR
-#define PKGDIR		"var/lib/pacman"
-#endif
-
-#ifndef PACCONF
-#define PACCONF   "/etc/pacman.conf"
-#endif
-
-#ifndef CACHEDIR
-#define CACHEDIR "var/cache/pacman/pkg"
-#endif
-
 /* Operations */
 #define PM_MAIN			1
 #define PM_ADD			2
@@ -69,7 +53,6 @@ int parseconfig(char *configfile);
 void usage(int op, char *myname);
 void version(void);
 
-void vprint(char *fmt, ...);
 void logaction(FILE *fp, char *fmt, ...);
 char* buildstring(PMList *strlist);
 int yesno(char* fmt, ...);

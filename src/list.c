@@ -23,7 +23,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 #include "list.h"
+
+/* 1: List seems to be OK.
+ * 0: We're in deep ...
+ */
+
+int CheckList(PMList* list)
+{
+	PMList* it = NULL;
+	
+	if (list == NULL)
+		return 1;
+
+	if (list->last == NULL)
+		return 0;
+
+	for (it = list; it && it->next; it = it->next)
+		;
+
+	if (it != list->last)
+		return 0;
+
+	return 1;
+}
 
 PMList* list_new()
 {
@@ -36,6 +60,7 @@ PMList* list_new()
 	list->data = NULL;
 	list->prev = NULL;
 	list->next = NULL;
+	list->last = list;
 	return(list);
 }
 
@@ -62,6 +87,8 @@ PMList* list_add(PMList *list, void *data)
 	ptr = list;
 	if(ptr == NULL) {
 		ptr = list_new();
+		if (!ptr)
+			return(NULL);
 	}
 
 	lp = list_last(ptr);
@@ -73,10 +100,65 @@ PMList* list_add(PMList *list, void *data)
 			return(NULL);
 		}
 		lp->next->prev = lp;
+		lp->last = NULL;
 		lp = lp->next;
 	}
+
 	lp->data = data;
+	ptr->last = lp;
+
 	return(ptr);
+}
+
+/* list: the beginning of the list
+ * item: the item in the list to be removed
+ *
+ * returns:
+ *     list with item removed
+ */
+
+PMList* list_remove(PMList* list, PMList* item)
+{
+	assert(CheckList(list));
+
+	if (list == NULL || item == NULL)
+		return NULL;
+
+	/* Remove first item in list. */
+	if (item == list) {
+		if (list->next == NULL) {            /* Only item in list. */
+			list_free(item);
+			return NULL;
+		} else {
+			list->next->prev = NULL;
+			list->next->last = list->last;
+			list = list->next;
+			item->prev = item->next = NULL;
+			list_free(item);
+			return list;
+		}
+	}
+
+	/* Remove last item in list. */
+	if (list->last == item) {
+		list->last = item->prev;
+		item->prev->next = NULL;
+		item->prev = item->next = NULL;
+		list_free(item);
+		return list;
+	}
+
+	/* Remove middle item in list. */
+	assert(item->prev != NULL &&
+	       item->next != NULL);
+
+	item->prev->next = item->next;
+	item->next->prev = item->prev;
+	item->prev = item->next = NULL;
+	list_free(item);
+
+	assert(CheckList(list));
+	return list;
 }
 
 int list_count(PMList *list)
@@ -141,10 +223,11 @@ PMList* list_merge(PMList *one, PMList *two)
 
 PMList* list_last(PMList *list)
 {
-	PMList *ptr;
+	if (list == NULL)
+		return NULL;
 
-	for(ptr = list; ptr && ptr->next; ptr = ptr->next);
-	return(ptr);
+	assert(list->last != NULL);
+	return list->last;
 }
 
 /* Helper function for sorting a list of strings
@@ -257,10 +340,23 @@ PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc)
 	/*  Insert node before insertion point.  */
 	add->prev = prev;
 	add->next = iter;
-	if(iter != NULL) iter->prev = add;		/*  Not at end.  */
+
+	if(iter != NULL) {
+		iter->prev = add;		/*  Not at end.  */
+	} else {
+		if (list != NULL)
+			list->last = add;   /* Added new to end, so update the link to last. */
+	}
+
 	if(prev != NULL) {
 		prev->next = add;										/*  In middle.  */
 	} else {
+		if (list == NULL) {
+			add->last = add;
+		} else {
+			add->last = list->last;
+			list->last = NULL;
+		}
 		list = add;													/*  Start or empty, new list head.  */
 	}
 

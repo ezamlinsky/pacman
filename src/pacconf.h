@@ -1,5 +1,5 @@
 /*
- *  util.h
+ *  pacconf.h
  * 
  *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -18,26 +18,29 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, 
  *  USA.
  */
-#ifndef _PAC_UTIL_H
-#define _PAC_UTIL_H
+#ifndef _PAC_PACCONF_H
+#define _PAC_PACCONF_H
 
-#define MALLOC(p, b) { if((b) > 0) { \
-                       p = malloc(b); if (!(p)) { \
-                       fprintf(stderr, "malloc failure: could not allocate %d bytes\n", b); \
-                       exit(1); }} else p = NULL; }
-
-#define FREE(p)      { if (p) { free(p); (p)= NULL; }}
-
-void vprint(char *fmt, ...);
-long gzopen_frontend(char *pathname, int oflags, int mode);
-int unpack(char *archive, const char *prefix, const char *fn);
-int copyfile(char *src, char *dest);
-int makepath(char *path);
-int rmrf(char *path);
-void indentprint(char *str, int indent);
-char* trim(char *str);
-char* strtoupper(char *str);
-int grep(const char *fn, const char *needle);
-
+#ifndef PACVER
+#define PACVER    "2.9.3"
 #endif
+
+#ifndef PACDBDIR
+#define PACDBDIR  "var/lib/pacman"
+#endif
+
+#ifndef PKGEXT
+#define PKGEXT    ".pkg.tar.gz"
+#endif
+
+#ifndef PACCONF
+#define PACCONF   "/etc/pacman.conf"
+#endif
+
+#ifndef CACHEDIR
+#define CACHEDIR  "var/cache/pacman/pkg"
+#endif
+
+#endif /* PACCONF_H */
+
 /* vim: set ts=2 sw=2 noet: */

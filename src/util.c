@@ -32,6 +32,22 @@
 #include <libtar.h>
 #include "util.h"
 
+extern unsigned short pmo_verbose;
+
+/* Check verbosity option and, if set, print the
+ * string to stdout
+ */
+void vprint(char *fmt, ...)
+{
+	va_list args;
+	if(pmo_verbose) {
+		va_start(args, fmt);
+		vprintf(fmt, args);
+		va_end(args);
+		fflush(stdout);
+	}
+}
+
 /* borrowed and modified from Per Liden's pkgutils (http://crux.nu) */
 long gzopen_frontend(char *pathname, int oflags, int mode)
 {
