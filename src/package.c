@@ -1,7 +1,7 @@
 /*
  *  package.c
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -144,6 +144,8 @@ pkginfo_t* load_pkg(char *pkgfile)
 		return(NULL);
 	}
 
+	info->filename = strdup(pkgfile);
+
 	return(info);
 }
 
@@ -260,6 +262,7 @@ pkginfo_t* newpkg()
 	pkg->groups         = NULL;
 	pkg->provides       = NULL;
 	pkg->replaces       = NULL;
+	pkg->filename       = NULL;
 
 	return(pkg);
 }
@@ -278,6 +281,7 @@ void freepkg(pkginfo_t *pkg)
 	FREELIST(pkg->groups);
 	FREELIST(pkg->provides);
 	FREELIST(pkg->replaces);
+	FREE(pkg->filename);
 	FREE(pkg);
 	return;
 }
@@ -367,7 +371,7 @@ void dump_pkg_full(pkginfo_t *info)
 
 /* Display the content of a sync package
  */
-void dump_pkg_sync(pkginfo_t *info)
+void dump_pkg_sync(pkginfo_t *info, char *treename)
 {
 	PMList *pm;
 
@@ -375,6 +379,7 @@ void dump_pkg_sync(pkginfo_t *info)
 		return;
 	}
 
+	printf("Repository        : %s\n", treename);
 	printf("Name              : %s\n", info->name);
 	printf("Version           : %s\n", info->version);
 	pm = list_sort(info->groups);

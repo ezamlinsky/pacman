@@ -1,7 +1,7 @@
 /*
  *  list.h
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -47,6 +47,7 @@ PMList* list_merge(PMList *one, PMList *two);
 PMList* list_last(PMList* list);
 int list_strcmp(const void *s1, const void *s2);
 PMList *list_sort(PMList *list);
+PMList *list_reverse(PMList *list);
 void list_display(const char *title, PMList *list);
 
 int strlist_cmp(const void *s1, const void *s2);

@@ -1,7 +1,7 @@
 /*
  *  db.c
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -768,7 +768,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 					for(k = dbpkg->files; k; k = k->next) {
 						snprintf(str, PATH_MAX, "%s%s", root, (char*)k->data);
 						stat(str, &buf2);
-						if(buf.st_ino == buf2.st_ino) {
+						if(buf.st_ino == buf2.st_ino && buf.st_dev == buf2.st_dev) {
 							ok = 1;
 						}
 					}

@@ -1,7 +1,7 @@
 /*
  *  util.c
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -281,11 +281,21 @@ char* strtoupper(char *str)
 char* trim(char *str)
 {
 	char *pch = str;
+
+	if(*str == '\0')
+		/* string is empty, so we're done. */
+		return(str);
+
 	while(isspace(*pch)) {
 		pch++;
 	}
 	if(pch != str) {
 		memmove(str, pch, (strlen(pch) + 1));
+	}
+
+	/* check if there wasn't anything but whitespace in the string. */
+	if(*str == '\0') {
+		return(str);
 	}
 	
 	pch = (char*)(str + (strlen(str) - 1));
@@ -294,7 +304,7 @@ char* trim(char *str)
 	}
 	*++pch = '\0';
 
-	return str;
+	return(str);
 }
 
 /* A cheap grep for text files, returns 1 if a substring

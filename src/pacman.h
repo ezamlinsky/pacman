@@ -1,7 +1,7 @@
 /*
  *  pacman.h
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@ int pacman_query(pacdb_t *db, PMList *targets);
 int pacman_sync(pacdb_t *db, PMList *targets);
 int pacman_deptest(pacdb_t *db, PMList *targets);
 
-PMList* sortbydeps(PMList *targets);
+PMList* sortbydeps(PMList *targets, int mode);
 PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets);
 PMList* removedeps(pacdb_t *db, PMList *targs);
 int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *sync, PMList *list, PMList *trail);

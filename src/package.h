@@ -1,7 +1,7 @@
 /*
  *  package.h
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -68,6 +68,10 @@ typedef struct __pkginfo_t {
 	PMList *requiredby;
 	PMList *conflicts;
 	PMList *provides;
+	/* if the package has an associated filename on the local system
+	 * (eg, filename.pkg.tar.gz) then it will be stored here, otherwise NULL
+	 */
+	char *filename;
 } pkginfo_t;
 
 typedef struct __depend_t {
@@ -89,7 +93,7 @@ void freepkg(pkginfo_t *pkg);
 int pkgcmp(const void *p1, const void *p2);
 int is_pkgin(pkginfo_t *needle, PMList *haystack);
 void dump_pkg_full(pkginfo_t *info);
-void dump_pkg_sync(pkginfo_t *info);
+void dump_pkg_sync(pkginfo_t *info, char *treename);
 int split_pkgname(char *pkgfile, char *name, char *version);
 
 #endif

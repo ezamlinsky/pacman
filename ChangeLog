@@ -1,5 +1,11 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9.5         - bugfix: missing files after re-ordering packages wrt
+                deps with --upgrade
+              - added "Repository" line to -Si output
+              - patch from Tommi Rantala to fix trim() behaviour with
+                empty or whitespace-only strings
+              - fixed removal order when using -Rc or -Rs
 2.9.4         - fixed a bug that was introduced from another bugfix :-/
 2.9.3         - fixed a couple manpage typos
               - added --ignore to -S operations, works just like IgnorePkg

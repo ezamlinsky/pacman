@@ -1,7 +1,7 @@
 /*
  *  list.c
  * 
- *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -26,27 +26,28 @@
 #include <assert.h>
 #include "list.h"
 
-/* 1: List seems to be OK.
+/* Check PMList sanity
+ *
+ * 1: List seems to be OK.
  * 0: We're in deep ...
  */
-
-int CheckList(PMList* list)
+int check_list(PMList* list)
 {
 	PMList* it = NULL;
 	
-	if (list == NULL)
-		return 1;
+	if(list == NULL) {
+		return(1);
+	}
+	if(list->last == NULL) {
+		return(0);
+	}
 
-	if (list->last == NULL)
-		return 0;
+	for(it = list; it && it->next; it = it->next);
+	if(it != list->last) {
+		return(0);
+	}
 
-	for (it = list; it && it->next; it = it->next)
-		;
-
-	if (it != list->last)
-		return 0;
-
-	return 1;
+	return(1);
 }
 
 PMList* list_new()
@@ -119,7 +120,7 @@ PMList* list_add(PMList *list, void *data)
 
 PMList* list_remove(PMList* list, PMList* item)
 {
-	assert(CheckList(list));
+	assert(check_list(list));
 
 	if (list == NULL || item == NULL)
 		return NULL;
@@ -157,7 +158,7 @@ PMList* list_remove(PMList* list, PMList* item)
 	item->prev = item->next = NULL;
 	list_free(item);
 
-	assert(CheckList(list));
+	assert(check_list(list));
 	return list;
 }
 
@@ -272,6 +273,24 @@ PMList *list_sort(PMList *list)
 	return(lp);
 }
 
+/* Reverse the order of a list
+ *
+ * The caller is responsible for freeing the old list
+ */
+PMList* list_reverse(PMList *list)
+{
+	/* simple but functional -- we just build a new list, starting
+	 * with the old list's tail
+	 */
+	PMList *newlist = NULL;
+	PMList *lp;
+
+	for(lp = list->last; lp; lp = lp->prev) {
+		newlist = list_add(newlist, lp->data);
+	}
+	return(newlist);
+}
+
 void list_display(const char *title, PMList *list)
 {
 	PMList *lp;
@@ -349,7 +368,7 @@ PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc)
 	}
 
 	if(prev != NULL) {
-		prev->next = add;										/*  In middle.  */
+		prev->next = add;				/*  In middle.  */
 	} else {
 		if (list == NULL) {
 			add->last = add;
@@ -357,7 +376,7 @@ PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc)
 			add->last = list->last;
 			list->last = NULL;
 		}
-		list = add;													/*  Start or empty, new list head.  */
+		list = add;						/*  Start or empty, new list head.  */
 	}
 
 	return(list);
