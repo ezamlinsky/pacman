@@ -1,5 +1,24 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.8           - Bugfixes:
+                - #861:  file:/// urls not handled properly with XferCommand
+                - #1003: set umask before scriptlet calls
+                - #1027: download problems with http urls using -U/-A
+                - #1044: segfaults when using -Rs
+                - #863:  "missing post_remove" errors with some packages
+                - #875:  detect low disk space properly
+                - #986:  makepkg -e doesn't validate files
+                - #1010: add -j option to makepkg
+                - #1028: make pacman -Sp runnable as non-root
+              - added pre_install and pre_upgrade scriptlet support
+              - added an "Architecture" field in the package meta-data
+              - added patch from Aurelien Foret which improves performance
+                adding or removing packages
+              - added implementation of GNU's strverscmp function for better
+                portability
+              - added explicit unlink() calls when --force is used, which
+                prevents those nasty "Text file busy" errors when you
+                force-upgrade something like pacman or glibc.
 2.7.9         - added the "force" option to packages, so --sysupgrade can
                 downgrade packages when it needs to
 2.7.8         - added post_remove scriptlet support

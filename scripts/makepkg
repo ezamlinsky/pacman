@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.9'
+myver='2.8'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -184,6 +184,7 @@ usage() {
 	echo "  -g, --genmd5     Generate MD5sums for source files"
 	echo "  -h, --help       This help"
 	echo "  -i, --install    Install package after successful build"
+	echo "  -j <jobs>        Set MAKEFLAGS to \"-j<jobs>\" before building"
 	echo "  -m, --nocolor    Disable colorized output messages"
 	echo "  -n, --nostrip    Do not strip binaries/libraries"
 	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
@@ -236,7 +237,7 @@ while [ "$#" -ne "0" ]; do
 			exit 1
 			;;
 		-*)
-			while getopts "cCsbdehifgmnrp:w:-" opt; do
+			while getopts "cCsbdehifgj:mnrp:w:-" opt; do
 				case $opt in
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
@@ -251,6 +252,7 @@ while [ "$#" -ne "0" ]; do
 					n) NOSTRIP=1 ;;
 					w) PKGDEST=$OPTARG ;;
 					p) BUILDSCRIPT=$OPTARG ;;
+					j) export MAKEFLAGS="-j$OPTARG" ;;
 					r) RMDEPS=1 ;;
 					h)
 						usage
@@ -401,7 +403,7 @@ for netfile in ${source[@]}; do
 			exit 1
 		fi
 		proto=`echo $netfile | sed 's|://.*||'`
-		if [ "$proto" != "ftp" -a "$proto" != "http" ]; then
+		if [ "$proto" != "ftp" -a "$proto" != "http" -a "$proto" != "https" ]; then
 			error "$netfile was not found in the build directory and is not a proper URL."
 			msg "Aborting..."
 			exit 1
@@ -423,7 +425,8 @@ done
 
 if [ "$GENMD5" = "0" ]; then
 	if [ "$NOEXTRACT" = "1" ]; then
-		warning "Skipping source extraction -- using existing src/ tree"
+		warning "Skipping source extraction       -- using existing src/ tree"
+		warning "Skipping source integrity checks -- using existing src/ tree"
 	else
 		# MD5 validation
 		if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
@@ -615,6 +618,9 @@ echo "license = $license" >>.PKGINFO
 echo "builddate = $builddate" >>.PKGINFO
 echo "packager = $packager" >>.PKGINFO
 echo "size = $size" >>.PKGINFO
+if [ "$CARCH" != "" ]; then
+	echo "arch = $CARCH" >>.PKGINFO
+fi
 
 for it in "${replaces[@]}"; do
 	echo "replaces = $it" >>.PKGINFO

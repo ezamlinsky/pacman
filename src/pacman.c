@@ -1,7 +1,7 @@
 /*
  *  pacman.c
  * 
- *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
 		if(pmo_op == PM_SYNC && !pmo_s_sync &&
-				(pmo_s_search || pmo_group || pmo_q_list || pmo_q_info)) {
+				(pmo_s_search || pmo_s_printuris || pmo_group || pmo_q_list || pmo_q_info)) {
 			/* special case:  PM_SYNC can be used w/ pmo_s_search by any user */
 		} else {
 			if(geteuid() != 0) {
@@ -349,23 +349,31 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 			for(i = cache; i; i = i->next) {
 				char *str = (char *)i->data;
-				char *name, *version;
+				char name[256], version[64];
 
-				if(split_pkgname(str, &name, &version) != 0) {
+				if(strstr(str, ".pkg.tar.gz") == NULL) {
 					clean = list_add(clean, strdup(str));
 					continue;
 				}
 				/* we keep partially downloaded files */
 				if(strstr(str, ".pkg.tar.gz.part")) {
-					FREE(name);
-					FREE(version);
+					continue;
+				}
+				if(split_pkgname(str, name, version) != 0) {
+					clean = list_add(clean, strdup(str));
 					continue;
 				}
 				for(j = i->next; j; j = j->next) {
 					char *s = (char *)j->data;
-					char *n, *v;
+					char n[256], v[64];
 
-					if(split_pkgname(s, &n, &v) != 0) {
+					if(strstr(s, ".pkg.tar.gz") == NULL) {
+						continue;
+					}
+					if(strstr(s, ".pkg.tar.gz.part")) {
+						continue;
+					}
+					if(split_pkgname(s, n, v) != 0) {
 						continue;
 					}
 					if(!strcmp(name, n)) {
@@ -379,11 +387,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							clean = list_add(clean, strdup(ptr));
 						}
 					}
-					FREE(n);
-					FREE(v);
 				}
-				FREE(name);
-				FREE(version);
 			}
 			FREELIST(cache);
 
@@ -805,7 +809,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					continue;
 				}
 				local = db_scan(db, targ, INFRQ_DESC);
-				if(local && !pmo_s_downloadonly) {
+				if(local && !pmo_s_downloadonly && !pmo_s_printuris) {
 					/* this is an upgrade, compare versions and determine if it is necessary */
 					cmp = rpmvercmp(local->version, sync->pkg->version);
 					if(cmp > 0) {
@@ -1282,7 +1286,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				for(i = final; i; i = i->next) {
 					syncpkg_t *sync = (syncpkg_t*)i->data;
 					if(sync->replaces) {
-						pkginfo_t *new = db_scan(db, sync->pkg->name, INFRQ_ALL);						
+						pkginfo_t *new = db_scan(db, sync->pkg->name, INFRQ_DEPENDS);						
 						for(j = sync->replaces; j; j = j->next) {
 							pkginfo_t *old = (pkginfo_t*)j->data;
 							/* merge lists */
@@ -1290,21 +1294,21 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 								if(!is_in(k->data, new->requiredby)) {
 									/* replace old's name with new's name in the requiredby's dependency list */
 									PMList *m;
-									pkginfo_t *depender = db_scan(db, k->data, INFRQ_ALL);
+									pkginfo_t *depender = db_scan(db, k->data, INFRQ_DEPENDS);
 									for(m = depender->depends; m; m = m->next) {
 										if(!strcmp(m->data, old->name)) {
 											FREE(m->data);
 											m->data = strdup(new->name);
 										}
 									}
-									db_write(db, depender);
+									db_write(db, depender, INFRQ_DEPENDS);
 									
 									/* add the new requiredby */
 									new->requiredby = list_add(new->requiredby, strdup(k->data));
 								}
 							}
 						}
-						db_write(db, new);
+						db_write(db, new, INFRQ_DEPENDS);
 						FREEPKG(new);
 					}
 				}
@@ -1376,8 +1380,9 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			/* this target looks like an URL.  download it and then
 			 * strip the URL portion from the target.
 			 */
+			char spath[PATH_MAX];
 			char url[PATH_MAX];
-			server_t server;
+			server_t *server;
 			PMList *servers = NULL;
 			PMList *files = NULL;
 			char *host, *path, *fn;
@@ -1389,12 +1394,23 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			*path = '\0';
 			path++;
 			fn = strrchr(path, '/');
-			*fn = '\0';
-			fn++;
-			server.protocol = url;
-			server.server = host;
-			server.path = path;
-			servers = list_add(servers, &server);
+			if(fn) {
+				*fn = '\0';
+				if(path[0] == '/') {
+					snprintf(spath, PATH_MAX, "%s/", path);
+				} else {
+					snprintf(spath, PATH_MAX, "/%s/", path);
+				}
+				fn++;
+			} else {
+				fn = path;
+				strcpy(spath, "/");
+			}
+			MALLOC(server, sizeof(server_t));
+			server->protocol = url;
+			server->server = host;
+			server->path = spath;
+			servers = list_add(servers, server);
 			files = list_add(files, fn);
 			if(downloadfiles(servers, ".", files)) {
 				fprintf(stderr, "error: failed to download %s\n", (char*)targ->data);
@@ -1600,8 +1616,36 @@ int pacman_add(pacdb_t *db, PMList *targets)
 
 				printf("upgrading %s... ", info->name);
 				neednl = 1;
+
 				/* we'll need the full record for backup checks later */
 				oldpkg = db_scan(db, info->name, INFRQ_ALL);
+
+				/* pre_upgrade scriptlet */
+				if(info->scriptlet) {
+					char tmpdir[PATH_MAX];
+					char *rtmpdir;
+					snprintf(tmpdir, PATH_MAX, "%stmp/pacman-XXXXXX", pmo_root);
+					if(mkdtemp(tmpdir) == NULL) {
+						perror("error creating temp directory");
+						return(1);
+					}
+					/* chop off the pmo_root so we can find the tmpdir in the chroot */
+					rtmpdir = tmpdir + strlen(pmo_root) - 1;
+					unpack(file->data, tmpdir, ".INSTALL");
+					/* run the post-install script if it exists  */
+					snprintf(pm_install, PATH_MAX, "%s/.INSTALL", tmpdir);
+					if(grep(pm_install, "pre_upgrade")) {
+						char cmdline[PATH_MAX+1];
+						snprintf(pm_install, PATH_MAX, "%s/.INSTALL", rtmpdir);
+						vprint("Executing pre-upgrade script...\n");
+						snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s pre_upgrade %s %s\" | chroot %s /bin/sh",
+							pm_install, info->version, (oldpkg ? oldpkg->version : ""), pmo_root);
+						system(cmdline);
+					}
+					if(rmrf(tmpdir)) {
+						fprintf(stderr, "warning: could not remove tmpdir %s\n", tmpdir);
+					}
+				}
 
 				if(oldpkg) {
 					list_add(tmp, strdup(info->name));
@@ -1626,6 +1670,32 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		if(!pmo_upgrade) {
 			printf("installing %s... ", info->name);
 			neednl = 1;
+			/* pre_install scriptlet */
+			if(info->scriptlet) {
+				char tmpdir[PATH_MAX];
+				char *rtmpdir;
+				snprintf(tmpdir, PATH_MAX, "%stmp/pacman-XXXXXX", pmo_root);
+				if(mkdtemp(tmpdir) == NULL) {
+					perror("error creating temp directory");
+					return(1);
+				}
+				/* chop off the pmo_root so we can find the tmpdir in the chroot */
+				rtmpdir = tmpdir + strlen(pmo_root) - 1;
+				unpack(file->data, tmpdir, ".INSTALL");
+				/* run the post-install script if it exists  */
+				snprintf(pm_install, PATH_MAX, "%s/.INSTALL", tmpdir);
+				if(grep(pm_install, "pre_install")) {
+					char cmdline[PATH_MAX+1];
+					snprintf(pm_install, PATH_MAX, "%s/.INSTALL", rtmpdir);
+					vprint("Executing pre-install script...\n");
+					snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s pre_install %s\" | chroot %s /bin/sh",
+							pm_install, info->version, pmo_root);
+					system(cmdline);
+				}
+				if(rmrf(tmpdir)) {
+					fprintf(stderr, "warning: could not remove tmpdir %s\n", tmpdir);
+				}
+			}
 		}
 		fflush(stdout);
 
@@ -1781,6 +1851,14 @@ int pacman_add(pacdb_t *db, PMList *targets)
 					logaction(stderr, "warning: extracting %s%s as %s", pmo_root, pathname, expath);
 					/*tar_skip_regfile(tar);*/
 				}
+				if(pmo_force) {
+					/* if pmo_force was used, then unlink() each file (whether it's there
+					 * or not) before extracting.  this prevents the old "Text file busy"
+					 * error that crops up if one tries to --force a glibc or pacman
+					 * upgrade.
+					 */
+					unlink(expath);
+				}
 				if(tar_extract_file(tar, expath)) {
 					logaction(stderr, "could not extract %s: %s", pathname, strerror(errno));
 					errors++;
@@ -1821,7 +1899,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				pkginfo_t *tmpp = NULL;
 				PMList *tmppm = NULL;
 
-				tmpp = db_scan(db, ((pkginfo_t*)lp->data)->name, INFRQ_DEPENDS);
+				tmpp = db_scan(db, ((pkginfo_t*)lp->data)->name, INFRQ_DESC | INFRQ_DEPENDS);
 				if(tmpp == NULL) {
 					continue;
 				}
@@ -1840,7 +1918,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			vprint("Updating database...");
 			/* make an install date (in UTC) */
 			strncpy(info->installdate, asctime(gmtime(&t)), sizeof(info->installdate));
-			if(db_write(db, info)) {
+			if(db_write(db, info, INFRQ_ALL)) {
 				logaction(stderr, "error updating database for %s!", info->name);
 				return(1);
 			}
@@ -1860,13 +1938,13 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				if(splitdep(lp->data, &depend)) {
 					continue;
 				}
-				depinfo = db_scan(db, depend.name, INFRQ_ALL);
+				depinfo = db_scan(db, depend.name, INFRQ_DEPENDS);
 				if(depinfo == NULL) {
 					/* look for a provides package */
 					PMList *provides = whatprovides(db, depend.name);
 					if(provides) {
 						/* use the first one */
-						depinfo = db_scan(db, provides->data, INFRQ_ALL);
+						depinfo = db_scan(db, provides->data, INFRQ_DEPENDS);
 						if(depinfo == NULL) {
 							/* wtf */
 							continue;
@@ -1876,19 +1954,20 @@ int pacman_add(pacdb_t *db, PMList *targets)
 					}
 				}
 				depinfo->requiredby = list_add(depinfo->requiredby, strdup(info->name));
-				db_write(db, depinfo);
+				db_write(db, depinfo, INFRQ_DEPENDS);
 				freepkg(depinfo);
 			}
 			printf("done.\n"); fflush(stdout);
 
 			/* run the post-install script if it exists  */
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
-			if(!stat(pm_install, &buf)) {
+			if(!stat(pm_install, &buf) && (grep(pm_install, "post_install") || grep(pm_install, "post_upgrade"))) {
 				char cmdline[PATH_MAX+1];
 				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", pmo_dbpath, db->treename, info->name, info->version);
 				vprint("Executing post-install script...\n");
-				snprintf(cmdline, PATH_MAX, "chroot %s /bin/sh %s post_%s %s %s", pmo_root, pm_install,
-					(pmo_upgrade ? "upgrade" : "install"), info->version, ((pmo_upgrade && oldpkg) ? oldpkg->version : ""));
+				snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s post_%s %s %s\" | chroot %s /bin/sh",
+					pm_install, (pmo_upgrade ? "upgrade" : "install"), info->version,
+					((pmo_upgrade && oldpkg) ? oldpkg->version : ""), pmo_root);
 				system(cmdline);
 			}
 		}
@@ -2021,10 +2100,11 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			fflush(stdout);
 			/* run the pre-remove script if it exists  */
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
-			if(!stat(pm_install, &buf)) {
+			if(!stat(pm_install, &buf) && grep(pm_install, "pre_remove")) {
 				vprint("Executing pre-remove script...\n");
 				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", pmo_dbpath, db->treename, info->name, info->version);
-				snprintf(line, PATH_MAX, "chroot %s /bin/sh %s pre_remove %s", pmo_root, pm_install, info->version);
+				snprintf(line, PATH_MAX, "echo \"umask 0022; source %s pre_remove %s\" | chroot %s /bin/sh",
+					pm_install, info->version, pmo_root);
 
 				system(line);
 			}
@@ -2084,10 +2164,11 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		if(!pmo_upgrade) {
 			/* run the post-remove script if it exists  */
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
-			if(!stat(pm_install, &buf)) {
+			if(!stat(pm_install, &buf) && grep(pm_install, "post_remove")) {
 				vprint("Executing post-remove script...\n");
 				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", pmo_dbpath, db->treename, info->name, info->version);
-				snprintf(line, PATH_MAX, "chroot %s /bin/sh %s post_remove %s", pmo_root, pm_install, info->version);
+				snprintf(line, PATH_MAX, "echo \"umask 0022; source %s post_remove %s\" | chroot %s /bin/sh",
+					pm_install, info->version, pmo_root);
 
 				system(line);
 			}
@@ -2119,7 +2200,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			if(splitdep((char*)lp->data, &depend)) {
 				continue;
 			}
-			depinfo = db_scan(db, depend.name, INFRQ_ALL);
+			depinfo = db_scan(db, depend.name, INFRQ_DEPENDS);
 			if(depinfo == NULL) {
 				/* look for a provides package */
 				PMList *provides = whatprovides(db, depend.name);
@@ -2128,7 +2209,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 					 *       the first one.
 					 */
 					/* use the first one */
-					depinfo = db_scan(db, provides->data, INFRQ_ALL);
+					depinfo = db_scan(db, provides->data, INFRQ_DEPENDS);
 					list_free(provides);
 					if(depinfo == NULL) {
 						/* wtf */
@@ -2154,7 +2235,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 					break;
 				}
 			}
-			db_write(db, depinfo);
+			db_write(db, depinfo, INFRQ_DEPENDS);
 			freepkg(depinfo);
 		}
 		if(!pmo_upgrade) {
@@ -2493,12 +2574,27 @@ PMList* removedeps(pacdb_t *db, PMList *targs)
 				continue;
 			}
 			dep = db_scan(db, depend.name, INFRQ_DESC | INFRQ_DEPENDS);
+			if(dep == NULL) {
+				/* package not found... look for a provisio instead */
+				k = whatprovides(db, depend.name);
+				if(k == NULL) {
+					fprintf(stderr, "warning: cannot find package \"%s\" or anything that provides it!\n", depend.name);
+					continue;
+				}
+				dep = db_scan(db, k->data, INFRQ_DESC | INFRQ_DEPENDS);
+				if(dep == NULL) {
+					fprintf(stderr, "dep is NULL!\n");
+					fflush(stderr);
+				}
+				FREELIST(k);
+			}
 			if(is_pkgin(dep, targs)) {
 				continue;
 			}
 			/* see if other packages need it */
 			for(k = dep->requiredby; k && !needed; k = k->next) {
-				pkginfo_t *dummy = db_scan(db, k->data, INFRQ_DESC);
+				pkginfo_t *dummy;
+				dummy = db_scan(db, k->data, INFRQ_DESC);
 				if(!is_pkgin(dummy, targs)) {
 					needed = 1;
 				}

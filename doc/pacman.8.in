@@ -1,4 +1,4 @@
-.TH pacman 8 "April 29, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "July 2, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS

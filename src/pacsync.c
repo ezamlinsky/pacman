@@ -95,7 +95,7 @@ int sync_synctree()
 
 			/* uncompress the sync database */
 			vprint("Unpacking %s...\n", path);
-			if(unpack(path, ldir)) {
+			if(unpack(path, ldir, NULL)) {
 				return(1);
 			}
 		}
@@ -122,7 +122,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 	for(i = servers; i && !done; i = i->next) {
 		server_t *server = (server_t*)i->data;
 
-		if(!pmo_xfercommand) {
+		if(!pmo_xfercommand && strcmp(server->protocol, "file")) {
 			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
 				FtpInit();
 				vprint("Connecting to %s:21\n", server->server);
@@ -180,7 +180,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 				continue;
 			}
 
-			if(pmo_xfercommand) {
+			if(pmo_xfercommand && strcmp(server->protocol, "file")) {
 				int ret;
 				int usepart = 0;
 				char *ptr1, *ptr2;
@@ -291,7 +291,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 					} else {
 						filedone = 1;
 					}
-				} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
+				} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && strcmp(server->protocol, "file"))) {
 					char src[PATH_MAX];
 					char *host;
 					unsigned port;
@@ -329,7 +329,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 					}
 					if(!HttpGet(server->server, output, src, &fsz, control, offset)) {
 						fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
-								fn, server->server, FtpLastResponse(control));
+								src, server->server, FtpLastResponse(control));
 						/* we leave the partially downloaded file in place so it can be resumed later */
 					} else {
 						filedone = 1;
@@ -372,7 +372,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 		if(!pmo_xfercommand) {
 			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
 				FtpQuit(control);
-			} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
+			} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && strcmp(server->protocol, "file"))) {
 				HttpQuit(control);
 			}
 		}

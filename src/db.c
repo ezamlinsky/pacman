@@ -222,6 +222,12 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					return(NULL);
 				}
 				trim(info->license);
+			} else if(!strcmp(line, "%ARCH%")) {
+				if(fgets(info->arch, sizeof(info->arch), fp) == NULL) {
+					FREEPKG(info);
+					return(NULL);
+				}
+				trim(info->arch);
 			} else if(!strcmp(line, "%BUILDDATE%")) {
 				if(fgets(info->builddate, sizeof(info->builddate), fp) == NULL) {
 					FREEPKG(info);
@@ -339,15 +345,17 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 	}
 
 	/* INSTALL */
-	snprintf(path, PATH_MAX, "%s/%s/install", db->path, ent->d_name);
-	if(!stat(path, &buf)) {
-		info->scriptlet = 1;
+	if(inforeq & INFRQ_ALL) {
+		snprintf(path, PATH_MAX, "%s/%s/install", db->path, ent->d_name);
+		if(!stat(path, &buf)) {
+			info->scriptlet = 1;
+		}
 	}
 
 	return(info);
 }
 
-int db_write(pacdb_t *db, pkginfo_t *info)
+int db_write(pacdb_t *db, pkginfo_t *info, unsigned int inforeq)
 {
 	char topdir[PATH_MAX];
 	FILE *fp = NULL;
@@ -367,87 +375,95 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	umask(0022);
 
 	/* DESC */
-	snprintf(path, PATH_MAX, "%s/desc", topdir);
-	fp = fopen(path, "w");
-	if(fp == NULL) {
-		perror("db_write");
-		umask(oldmask);
-		return(1);
+	if(inforeq & INFRQ_DESC) {
+		snprintf(path, PATH_MAX, "%s/desc", topdir);
+		fp = fopen(path, "w");
+		if(fp == NULL) {
+			perror("db_write");
+			umask(oldmask);
+			return(1);
+		}
+		fputs("%NAME%\n", fp);
+		fprintf(fp, "%s\n\n", info->name);
+		fputs("%VERSION%\n", fp);
+		fprintf(fp, "%s\n\n", info->version);
+		fputs("%DESC%\n", fp);
+		fprintf(fp, "%s\n\n", info->desc);
+		fputs("%GROUPS%\n", fp);
+		for(lp = info->groups; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fputs("%URL%\n", fp);
+		fprintf(fp, "%s\n\n", info->url);
+		fputs("%LICENSE%\n", fp);
+		fprintf(fp, "%s\n\n", info->license);
+		fputs("%ARCH%\n", fp);
+		fprintf(fp, "%s\n\n", info->arch);
+		fputs("%BUILDDATE%\n", fp);
+		fprintf(fp, "%s\n\n", info->builddate);
+		fputs("%INSTALLDATE%\n", fp);
+		fprintf(fp, "%s\n\n", info->installdate);
+		fputs("%PACKAGER%\n", fp);
+		fprintf(fp, "%s\n\n", info->packager);
+		fputs("%SIZE%\n", fp);
+		fprintf(fp, "%ld\n\n", info->size);
+		fclose(fp);
 	}
-	fputs("%NAME%\n", fp);
-	fprintf(fp, "%s\n\n", info->name);
-	fputs("%VERSION%\n", fp);
-	fprintf(fp, "%s\n\n", info->version);
-	fputs("%DESC%\n", fp);
-	fprintf(fp, "%s\n\n", info->desc);
-	fputs("%GROUPS%\n", fp);
-	for(lp = info->groups; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fputs("%URL%\n", fp);
-	fprintf(fp, "%s\n\n", info->url);
-	fputs("%LICENSE%\n", fp);
-	fprintf(fp, "%s\n\n", info->license);
-	fputs("%BUILDDATE%\n", fp);
-	fprintf(fp, "%s\n\n", info->builddate);
-	fputs("%INSTALLDATE%\n", fp);
-	fprintf(fp, "%s\n\n", info->installdate);
-	fputs("%PACKAGER%\n", fp);
-	fprintf(fp, "%s\n\n", info->packager);
-	fputs("%SIZE%\n", fp);
-	fprintf(fp, "%ld\n\n", info->size);
-	fclose(fp);
 
 	/* FILES */
-	snprintf(path, PATH_MAX, "%s/files", topdir);
-	fp = fopen(path, "w");
-	if(fp == NULL) {
-		perror("db_write");
-		umask(oldmask);
-		return(1);
+	if(inforeq & INFRQ_FILES) {
+		snprintf(path, PATH_MAX, "%s/files", topdir);
+		fp = fopen(path, "w");
+		if(fp == NULL) {
+			perror("db_write");
+			umask(oldmask);
+			return(1);
+		}
+		fputs("%FILES%\n", fp);
+		for(lp = info->files; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fputs("%BACKUP%\n", fp);
+		for(lp = info->backup; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fclose(fp);
 	}
-	fputs("%FILES%\n", fp);
-	for(lp = info->files; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fputs("%BACKUP%\n", fp);
-	for(lp = info->backup; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fclose(fp);
 
 	/* DEPENDS */
-	snprintf(path, PATH_MAX, "%s/depends", topdir);
-	fp = fopen(path, "w");
-	if(fp == NULL) {
-		perror("db_write");
-		umask(oldmask);
-		return(1);
-	}
-	fputs("%DEPENDS%\n", fp);
-	for(lp = info->depends; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fputs("%REQUIREDBY%\n", fp);
-	for(lp = info->requiredby; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fputs("%CONFLICTS%\n", fp);
-	for(lp = info->conflicts; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fputs("%PROVIDES%\n", fp);
-	for(lp = info->provides; lp; lp = lp->next) {
-		fprintf(fp, "%s\n", (char*)lp->data);
-	}
-	fprintf(fp, "\n");
-	fclose(fp);
+	if(inforeq & INFRQ_DEPENDS) {
+		snprintf(path, PATH_MAX, "%s/depends", topdir);
+		fp = fopen(path, "w");
+		if(fp == NULL) {
+			perror("db_write");
+			umask(oldmask);
+			return(1);
+		}
+		fputs("%DEPENDS%\n", fp);
+		for(lp = info->depends; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fputs("%REQUIREDBY%\n", fp);
+		for(lp = info->requiredby; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fputs("%CONFLICTS%\n", fp);
+		for(lp = info->conflicts; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fputs("%PROVIDES%\n", fp);
+		for(lp = info->provides; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
+		fclose(fp);
+ 	}
 
 	/* INSTALL */
 	/* nothing needed here (script is automatically extracted) */

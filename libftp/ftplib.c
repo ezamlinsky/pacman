@@ -1139,9 +1139,9 @@ static int FtpXfer(const char *localfile, const char *path,
 	else
 	{
 		while ((l = FtpRead(dbuf, FTPLIB_BUFSIZ, nData)) > 0)
-			if (fwrite(dbuf, 1, l, local) <= 0)
+			if (fwrite(dbuf, 1, l, local) < l)
 			{
-				perror("localfile write");
+				perror("\nlocalfile write");
 				rv = 0;
 				break;
 			}
@@ -1486,9 +1486,9 @@ static int HttpXfer(const char *localfile, const char *path, int *size,
 	{
 		nControl->dir = FTPLIB_READ;
 		while ((l = FtpRead(dbuf, FTPLIB_BUFSIZ, nControl)) > 0) {
-			if (fwrite(dbuf, 1, l, local) <= 0)
+			if (fwrite(dbuf, 1, l, local) < l)
 			{
-				perror("localfile write");
+				perror("\nlocalfile write");
 				rv = 0;
 				break;
 			}

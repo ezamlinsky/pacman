@@ -29,7 +29,7 @@
 #define FREE(p)      { if (p) { free(p); (p)= NULL; }}
 
 int gzopen_frontend(char *pathname, int oflags, int mode);
-int unpack(char *archive, char *prefix);
+int unpack(char *archive, const char *prefix, const char *fn);
 int copyfile(char *src, char *dest);
 int makepath(char *path);
 int rmrf(char *path);
@@ -37,7 +37,7 @@ void indentprint(char *str, int indent);
 int yesno(char* fmt, ...);
 char* trim(char *str);
 char* strtoupper(char *str);
-
+int grep(const char *fn, const char *needle);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

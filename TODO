@@ -4,6 +4,5 @@
 - when performing replaces, pacman should not remove old packages until
   the conflict checks are passed
 - handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
-- add post_remove, pre_install, pre_upgrade functions to scriptlets
 - check $PACCONF env var
 - add a --pretend option

@@ -36,6 +36,7 @@ pkginfo_t* load_pkg(char *pkgfile)
 	int i;
 	int config = 0;
 	int filelist = 0;
+	int scriptcheck = 0;
 	TAR *tar;
 	pkginfo_t *info = NULL;
 	PMList *backup = NULL;
@@ -47,14 +48,15 @@ pkginfo_t* load_pkg(char *pkgfile)
 		(writefunc_t)gzwrite
 	};
 
-	info = newpkg();
-
 	if(tar_open(&tar, pkgfile, &gztype, O_RDONLY, 0, TAR_GNU) == -1) {
 	  perror("could not open package");
 		return(NULL);
 	}
+
+	info = newpkg();
+
 	for(i = 0; !th_read(tar); i++) {
-		if(config && filelist) {
+		if(config && filelist && scriptcheck) {
 			/* we have everything we need */
 			break;
 		}
@@ -87,6 +89,7 @@ pkginfo_t* load_pkg(char *pkgfile)
 			continue;
 		} else if(!strcmp(th_get_pathname(tar), "._install") || !strcmp(th_get_pathname(tar), ".INSTALL")) {
 			info->scriptlet = 1;
+			scriptcheck = 1;
 		} else if(!strcmp(th_get_pathname(tar), ".FILELIST")) {
 			/* Build info->files from the filelist */
 			FILE *fp;
@@ -112,7 +115,9 @@ pkginfo_t* load_pkg(char *pkgfile)
 			}
 			FREE(fn);
 			filelist = 1;
+			continue;
 		} else {
+			scriptcheck = 1;
 			if(!filelist) {
 				/* no .FILELIST present in this package..  build the filelist the */
 				/* old-fashioned way, one at a time */
@@ -197,6 +202,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				strncpy(info->installdate, ptr, sizeof(info->installdate));
 			} else if(!strcmp(key, "PACKAGER")) {
 				strncpy(info->packager, ptr, sizeof(info->packager));
+			} else if(!strcmp(key, "ARCH")) {
+				strncpy(info->arch, ptr, sizeof(info->arch));
 			} else if(!strcmp(key, "SIZE")) {
 				char tmp[32];
 				strncpy(tmp, ptr, sizeof(tmp));
@@ -239,6 +246,7 @@ pkginfo_t* newpkg()
 	pkg->installdate[0] = '\0';
 	pkg->packager[0]    = '\0';
 	pkg->md5sum[0]      = '\0';
+	pkg->arch[0]        = '\0';
 	pkg->size           = 0;
 	pkg->scriptlet      = 0;
 	pkg->force          = 0;
@@ -327,6 +335,7 @@ void dump_pkg_full(pkginfo_t *info)
 	printf("Packager       : %s\n", info->packager);
 	printf("URL            : %s\n", info->url);
 	printf("License        : %s\n", info->license);
+	printf("Architecture   : %s\n", info->arch);
 	printf("Size           : %ld\n", info->size);
 	printf("Build Date     : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");
 	printf("Install Date   : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
@@ -380,18 +389,24 @@ void dump_pkg_sync(pkginfo_t *info)
 	printf("\nMD5 Sum        : %s\n", info->md5sum);
 }
 
-int split_pkgname(char *pkg, char **name, char **version)
+int split_pkgname(char *pkgfile, char *name, char *version)
 {
-	char tmp[256];
+	char tmp[512];
 	char *p, *q;
 
-	strncpy(tmp, pkg, 256);
-
-	p = strstr(tmp, ".pkg.tar.gz");
-	if(p == NULL) {
-		return(-1);
+	/* trim path name (if any) */
+	if((p = strrchr(pkgfile, '/')) == NULL) {
+		p = pkgfile;
+	} else {
+		p++;
 	}
-	*p = 0;
+	strncpy(tmp, p, 512);
+	/* trim file extension (if any) */
+	if((p = strstr(tmp, ".pkg.tar.gz"))) {
+		*p = 0;
+	}
+
+	p = tmp + strlen(tmp);
 
 	for(q = --p; *q && *q != '-'; q--);
 	if(*q != '-' || q == tmp) {
@@ -401,10 +416,10 @@ int split_pkgname(char *pkg, char **name, char **version)
 	if(*p != '-' || p == tmp) {
 		return(-1);
 	}
-	*version = strdup(p+1);
+	strncpy(version, p+1, 64);
 	*p = 0;
 
-	*name = strdup(tmp);
+	strncpy(name, tmp, 256);
 
 	return(0);
 }

@@ -23,6 +23,10 @@
 
 int rpmvercmp(const char *a, const char *b);
 
+#ifndef HAVE_STRVERSCMP
+int strverscmp(const char *s1, const char *s2);
+#endif
+
 #endif
 
 /* vim: set ts=2 sw=2 noet: */

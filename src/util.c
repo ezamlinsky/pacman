@@ -66,7 +66,7 @@ int gzopen_frontend(char *pathname, int oflags, int mode)
 	return (int)gzf;
 }
 
-int unpack(char *archive, char *prefix)
+int unpack(char *archive, const char *prefix, const char *fn)
 {
 	TAR *tar = NULL;
 	char expath[PATH_MAX];
@@ -83,10 +83,20 @@ int unpack(char *archive, char *prefix)
 		return(1);
 	}
 	while(!th_read(tar)) {
+		if(fn && strcmp(fn, th_get_pathname(tar))) {
+			if(TH_ISREG(tar) && tar_skip_regfile(tar)) {
+				char errorstr[255];
+				snprintf(errorstr, 255, "bad tar archive: %s", archive);
+				perror(errorstr);
+				return(1);
+			}
+			continue;
+		}
 		snprintf(expath, PATH_MAX, "%s/%s", prefix, th_get_pathname(tar));
 	  if(tar_extract_file(tar, expath)) {
 			fprintf(stderr, "could not extract %s: %s\n", th_get_pathname(tar), strerror(errno));
 		}
+		if(fn) break;
 	}
 	tar_close(tar);
 
@@ -288,5 +298,29 @@ char* trim(char *str)
 
 	return str;
 }
+
+/* A cheap grep for text files, returns 1 if a substring
+ * was found in the text file fn, 0 if it wasn't
+ */
+int grep(const char *fn, const char *needle)
+{
+	FILE *fp;
+
+	if((fp = fopen(fn, "r")) == NULL) {
+		return(0);
+	}
+	while(!feof(fp)) {
+		char line[1024];
+		fgets(line, 1024, fp);
+		if(feof(fp)) continue;
+		if(strstr(line, needle)) {
+			fclose(fp);
+			return(1);
+		}
+	}	
+	fclose(fp);
+	return(0);
+}
+
 
 /* vim: set ts=2 sw=2 noet: */

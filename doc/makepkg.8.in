@@ -1,4 +1,4 @@
-.TH makepkg 8 "April 29, 2004" "makepkg #VERSION#" ""
+.TH makepkg 8 "July 2, 2004" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -120,12 +120,20 @@ itself" after installation and do the opposite right before it is removed.
 
 The exact time the script is run varies with each operation:
 .TP
+.B pre_install
+script is run right before files are extracted.
+
+.TP
 .B post_install
-script is run right after files are installed.
+script is run right after files are extracted.
+
+.TP
+.B pre_upgrade
+script is run right before files are extracted.
 
 .TP
 .B post_upgrade
-script is run after all files have been upgraded.
+script is run after files are extracted.
 
 .TP
 .B pre_remove
@@ -152,9 +160,26 @@ The install script does not need to be specified in the \fIsource\fP array.
 .RS
 .nf
 # arg 1:  the new package version
+pre_install() {
+  #
+  #  do pre-install stuff here
+  #
+  /bin/true
+}
+
+# arg 1:  the new package version
 post_install() {
   #
   #  do post-install stuff here
+  #
+  /bin/true
+}
+
+# arg 1:  the new package version
+# arg 2:  the old package version
+pre_upgrade() {
+  #
+  #  do pre-upgrade stuff here
   #
   /bin/true
 }
@@ -219,6 +244,11 @@ if its an older version.
 .B url
 This field contains an optional URL that is associated with the piece of software
 being packaged.  This is typically the project's website.
+
+.TP
+.B license
+Sets the license type (eg, "GPL", "BSD", "NON-FREE").  (\fBNote\fP: This
+option is still in development and may change in the future)
 
 .TP
 .B install
@@ -327,6 +357,10 @@ Output syntax and commandline options.
 .TP
 .B "\-i, \-\-install"
 Install/Upgrade the package after a successful build.
+.TP
+.B "\-j <jobs>"
+Sets MAKEFLAGS="-j<jobs>" before building the package.  This is useful for overriding
+the MAKEFLAGS setting in /etc/makepkg.conf.
 .TP
 .B "\-m, \-\-nocolor"
 Disable color in output messages

@@ -51,6 +51,7 @@ typedef struct __pkginfo_t {
 	char installdate[32];
 	char packager[64];
 	char md5sum[33];
+	char arch[32];
 	unsigned long size;
 	unsigned short scriptlet;
 	unsigned short force;
@@ -84,7 +85,7 @@ int pkgcmp(const void *p1, const void *p2);
 int is_pkgin(pkginfo_t *needle, PMList *haystack);
 void dump_pkg_full(pkginfo_t *info);
 void dump_pkg_sync(pkginfo_t *info);
-int split_pkgname(char *pkg, char **name, char **version);
+int split_pkgname(char *pkgfile, char *name, char *version);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */
