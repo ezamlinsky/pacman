@@ -250,6 +250,7 @@ pkginfo_t* newpkg()
 	pkg->size           = 0;
 	pkg->scriptlet      = 0;
 	pkg->force          = 0;
+	pkg->reason         = REASON_EXPLICIT;
 	pkg->requiredby     = NULL;
 	pkg->conflicts      = NULL;
 	pkg->files          = NULL;
@@ -340,6 +341,12 @@ void dump_pkg_full(pkginfo_t *info)
 	printf("Build Date     : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");
 	printf("Install Date   : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
 	printf("Install Script : %s\n", (info->scriptlet ? "Yes" : "No"));
+	printf("Reason:        : ");
+	switch(info->reason) {
+		case REASON_EXPLICIT: printf("explicitly installed\n"); break;
+		case REASON_DEPEND:   printf("installed as a dependency for another package\n"); break;
+		default:              printf("unknown\n"); break;
+	}
 	pm = list_sort(info->provides);
 	list_display("Provides       :", pm); 
 	FREELIST(pm);
@@ -367,26 +374,27 @@ void dump_pkg_sync(pkginfo_t *info)
 		return;
 	}
 
-	printf("Name           : %s\n", info->name);
-	printf("Version        : %s\n", info->version);
+	printf("Name              : %s\n", info->name);
+	printf("Version           : %s\n", info->version);
 	pm = list_sort(info->groups);
-	list_display("Groups         :", pm);
+	list_display("Groups            :", pm);
 	FREELIST(pm);
 	pm = list_sort(info->provides);
-	list_display("Provides       :", pm); 
+	list_display("Provides          :", pm); 
 	FREELIST(pm);
 	pm = list_sort(info->depends);
-	list_display("Depends On     :", pm); 
+	list_display("Depends On        :", pm); 
 	FREELIST(pm);
 	pm = list_sort(info->conflicts);
-	list_display("Conflicts With :", pm);
+	list_display("Conflicts With    :", pm);
 	FREELIST(pm);
 	pm = list_sort(info->replaces);
-	list_display("Replaces       :", pm);
+	list_display("Replaces          :", pm);
 	FREELIST(pm);
-	printf("Description    : ");
-	indentprint(info->desc, 17);
-	printf("\nMD5 Sum        : %s\n", info->md5sum);
+	printf("Size (compressed) : %ld\n", info->size);
+	printf("Description       : ");
+	indentprint(info->desc, 20);
+	printf("\nMD5 Sum           : %s\n", info->md5sum);
 }
 
 int split_pkgname(char *pkgfile, char *name, char *version)

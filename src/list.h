@@ -40,13 +40,14 @@ void list_free(PMList* list);
 PMList* list_add(PMList* list, void* data);
 int list_count(PMList* list);
 int list_isin(PMList *haystack, void *needle);
-int is_in(char *needle, PMList *haystack);
+PMList* is_in(char *needle, PMList *haystack);
 PMList* list_merge(PMList *one, PMList *two);
 PMList* list_last(PMList* list);
 int list_strcmp(const void *s1, const void *s2);
 PMList *list_sort(PMList *list);
 void list_display(const char *title, PMList *list);
 
+int strlist_cmp(const void *s1, const void *s2);
 PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc);
 
 #endif

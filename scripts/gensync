@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.8.4'
+myver='2.9'
 
 usage() {
   echo "gensync $myver"
@@ -45,9 +45,14 @@ usage() {
   exit 0
 }
 
+die() {
+	echo "gensync: $*" >&2
+	rm -rf $gstmpdir
+	exit 1
+}
+
 get_md5checksum()
 {
-	source $1 || return 1
 	if [ "$pkgdir" != "" ]; then
 		pkgfile="$pkgdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
 	else
@@ -79,6 +84,9 @@ db_write_entry()
 	echo "" >>desc
 	echo "%DESC%" >>desc
 	echo "$pkgdesc" >>desc
+	echo "" >>desc
+	echo "%CSIZE%" >>desc
+	echo "$csize" >>desc
 	echo "" >>desc
 	if [ ! -z $pkgmd5sum ]; then
 		echo "%MD5SUM%" >>desc
@@ -147,40 +155,30 @@ pkgdir=
 if [ "$3" != "" ]; then
 	pkgdir=$3
 fi
-gstmpdir=$(mktemp -dt gensync.XXXXXXXXXX) || exit 1
+gstmpdir=$(mktemp -d /tmp/gensync.XXXXXXXXXX) || exit 1
 
-if [ ! -d $rootdir ]; then
-	echo "gensync: invalid root dir: $rootdir" >&2
-	rm -rf $gstmpdir
-	exit 1
-fi
-
+[ ! -d $rootdir ] && die "invalid root dir: $rootdir"
 echo "gensync: building database entries, generating md5sums..." >&2
 cd `dirname $2`
 for file in `find $rootdir/* -name PKGBUILD`; do
-	pkgmd5sum=`get_md5checksum $file $pkgdir`
-	if [ -z $pkgmd5sum ]; then
-		echo "gensync: error generating checksum for $file" >&2
-		rm -rf $gstmpdir
-		exit 1
+	source $file || die "errors parsing $file"
+	if [ "$pkgdir" != "" ]; then
+		pkgfile="$pkgdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
+	else
+		pkgfile="$destdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
 	fi
+	[ -f $pkgfile ] || die "missing package file: $pkgfile"
+	csize=`du -b $pkgfile | cut -f1`
+	pkgmd5sum=`get_md5checksum $pkgfile`
+	[ -z $pkgmd5sum ] && die "error generating checksum for $pkgfile"
 	db_write_entry $file
-	if [ $? -gt 0 ]; then
-		echo "gensync: error writing entry for $file" >&2
-		rm -rf $gstmpdir
-		exit 1
-	fi
+	[ $? -gt 0 ] && die "error writing entry for $file"
 done
 
 echo "gensync: compressing to $destfile..." >&2
 cd $gstmpdir
 tar c * | gzip -9 >$destfile
-if [ $? -gt 0 ]; then
-	echo "gensync: error writing to $destfile" >&2
-	rm -rf $gstmpdir
-	exit 1
-fi
+[ $? -gt 0 ] && die "error writing to $destfile"
 
 rm -rf $gstmpdir
-
 exit 0

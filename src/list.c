@@ -102,16 +102,16 @@ int list_isin(PMList *haystack, void *needle)
 
 /* Test for existence of a string in a PMList
  */
-int is_in(char *needle, PMList *haystack)
+PMList* is_in(char *needle, PMList *haystack)
 {
 	PMList *lp;
 
 	for(lp = haystack; lp; lp = lp->next) {
 		if(lp->data && !strcmp(lp->data, needle)) {
-			return(1);
+			return(lp);
 		}
 	}
-	return(0);
+	return(NULL);
 }
 
 /* List one is extended and returned
@@ -221,6 +221,17 @@ void list_display(const char *title, PMList *list)
 	} else {
 		printf("None\n");
 	}
+}
+
+
+/* Helper function for comparing string nodes.
+ */
+int strlist_cmp(const void *s1, const void *s2)
+{
+	char *str1 = (char *)s1;
+	char *str2 = (char *)s2;
+
+	return(strcmp(str1, str2));
 }
 
 

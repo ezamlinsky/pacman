@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.8.4'
+myver='2.9'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -576,17 +576,17 @@ fi
 
 # compress man pages
 msg "Compressing man pages..."
-for i in `find pkg/{usr{,/local},opt/*}/man -type f 2>/dev/null`; do
-	ext=${i##*.}
-	fn=${i##*/}
-	if [ "$ext" != "gz" ]; then
+find $startdir/pkg/{usr{,/local,/share},opt/*}/man -type f 2>/dev/null | while read i ; do
+	ext="${i##*.}"
+	fn="${i##*/}"
+	if [ "$ext" != "gz" -a "$ext" != "bz2" ]; then
 		# update symlinks to this manpage
-		for ln in `find pkg/{usr{,/local},opt/*}/man -lname "$fn" 2>/dev/null`; do
-			rm -f $ln
-			ln -sf ${fn}.gz ${ln}.gz
+		find $startdir/pkg/{usr{,/local,/share},opt/*}/man -lname "$fn" 2> /dev/null | while read ln ; do
+			rm -f "$ln"
+			ln -sf "${fn}.gz" "${ln}.gz"
 		done
 		# compress the original
-		gzip -9 $i
+		gzip -9 "$i"
 	fi
 done
 

@@ -33,6 +33,10 @@
 	FREELIST(p);\
 }
 
+/* reasons -- ie, why the package was installed */
+#define REASON_EXPLICIT  0  /* explicitly requested by the user              */
+#define REASON_DEPEND    1  /* installed as a dependency for another package */
+
 /* mods for depend_t.mod */
 #define DEP_ANY 0
 #define DEP_EQ	1
@@ -55,6 +59,7 @@ typedef struct __pkginfo_t {
 	unsigned long size;
 	unsigned short scriptlet;
 	unsigned short force;
+	unsigned short reason;
 	PMList *replaces;
 	PMList *groups;
 	PMList *files;

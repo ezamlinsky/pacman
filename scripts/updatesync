@@ -21,7 +21,7 @@
 #   USA.
 #
 
-myver='2.8.4'
+myver='2.9'
 
 usage() {
 	echo "updatesync $myver"
@@ -56,7 +56,6 @@ die()
 
 get_md5checksum()
 {
-	source $1 || return 1
 	if [ "$pkgdir" != "" ]; then
 		pkgfile="$pkgdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
 	else
@@ -88,6 +87,9 @@ db_write_entry()
 	echo "" >>desc
 	echo "%DESC%" >>desc
 	echo "$pkgdesc" >>desc
+	echo "" >>desc
+	echo "%CSIZE%" >>desc
+	echo "$csize" >>desc
 	echo "" >>desc
 	if [ ! -z $pkgmd5sum ]; then
 		echo "%MD5SUM%" >>desc
@@ -177,7 +179,7 @@ if [ "$action" != "upd" -a "$action" != "del" ]; then
 	exit 1
 fi
 
-ustmpdir=$(mktemp -dt updatesync.XXXXXXXXXX) || exit 1
+ustmpdir=$(mktemp -d /tmp/updatesync.XXXXXXXXXX) || exit 1
 
 cd $ustmpdir
 if [ ! -f $pkgdb ]; then
@@ -202,8 +204,16 @@ if [ "$action" = "upd" ]; then
 	# INSERT / UPDATE
 	delete_entry $option
 
-	pkgmd5sum=`get_md5checksum $option`
-	[ -z $pkgmd5sum ] && die "error generating checksum for $option"
+	source $option || die "errors parsing $option"
+	if [ "$pkgdir" != "" ]; then
+		pkgfile="$pkgdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
+	else
+		pkgfile="$destdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
+	fi
+	[ -f $pkgfile ] || die "missing package file: $pkgfile"
+	csize=`du -b $pkgfile | cut -f1`
+	pkgmd5sum=`get_md5checksum $pkgfile`
+	[ -z $pkgmd5sum ] && die "error generating checksum for $pkgfile"
 	echo "updatesync: creating entry for $option" >&2
 	db_write_entry $option || die "error writing entry for $option"
 else

@@ -1,4 +1,4 @@
-.TH pacman 8 "August 3, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "September 17, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -53,11 +53,6 @@ Display syntax for the given operation.  If no operation was
 supplied then the general syntax is shown.
 .SH OPTIONS
 .TP
-.B "\-c, \-\-cascade"
-(only used with \fB--remove\fP)
-Remove all target packages, as well as all packages that depend on one
-or more target packages.  This operation is recursive.
-.TP
 .B "\-d, \-\-nodeps"
 Skips all dependency checks.  Normally, pacman will always check
 a package's dependency fields to ensure that all dependencies are
@@ -70,17 +65,6 @@ package that is about to be installed contains files that are already
 installed, this option will cause all those files to be overwritten.
 This option should be used with care, ideally not at all.
 .TP
-.B "\-k, \-\-keep"
-Removes the database entry only.  Leaves all files in place.
-.TP
-.B "\-n, \-\-nosave"
-(only used with \fB--remove\fP)
-Instructs pacman to ignore file backup designations.  Normally, when
-a file is about to be \fIremoved\fP from the system the database is first
-checked to see if the file should be renamed to a .pacsave extension.  If
-\fB--nosave\fP is used, these designations are ignored and the files are
-removed.
-.TP
 .B "\-r, \-\-root <path>"
 Specify alternative installation root (default is "/"). This
 should \fInot\fP be used as a way to install software into
@@ -89,12 +73,6 @@ if you want to install a package on a temporary mounted partition,
 which is "owned" by another system. By using this option you not only
 specify where the software should be installed, but you also
 specify which package database to use.
-.TP
-.B "\-s, \-\-recursive"
-(only used with \fB--remove\fP)
-For each target specified, remove it and all its dependencies, provided
-they are not required by other packages.  This option is analagous to
-a backwards --sync operation.
 .TP
 .B "\-v, \-\-verbose"
 Output more status and error messages.
@@ -151,7 +129,33 @@ Retrieve all packages from the server, but do not install/upgrade anything.
 Download a fresh copy of the master package list from the ftp server
 defined in \fI/etc/pacman.conf\fP.  This should typically be used each
 time you use \fB--sysupgrade\fP.
+.SH REMOVE OPTIONS
+.TP
+.B "\-c, \-\-cascade"
+Remove all target packages, as well as all packages that depend on one
+or more target packages.  This operation is recursive.
+.TP
+.B "\-k, \-\-keep"
+Removes the database entry only.  Leaves all files in place.
+.TP
+.B "\-n, \-\-nosave"
+Instructs pacman to ignore file backup designations.  Normally, when
+a file is about to be \fIremoved\fP from the system the database is first
+checked to see if the file should be renamed to a .pacsave extension.  If
+\fB--nosave\fP is used, these designations are ignored and the files are
+removed.
+.TP
+.B "\-s, \-\-recursive"
+For each target specified, remove it and all its dependencies, provided
+that (A) they are not required by other packages; and (B) they were
+explicitly installed by the user and not pulled in as a dependency for
+other packages.  This option is analagous to a backwards --sync operation.
 .SH QUERY OPTIONS
+.TP
+.B "\-e, \-\-orphans"
+List all packages that were explicitly installed (ie, not pulled in
+as a dependency by other packages) and are not required by any other
+packages.
 .TP
 .B "\-g, \-\-groups"
 Display all groups that a specified package is part of.  If no package

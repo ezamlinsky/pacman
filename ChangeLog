@@ -1,5 +1,19 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9           - Improved -Rs functionality -- pacman now tracks why a package
+                is installed: explicitly, or as a dependency for another
+                package.  -Rs will only remove dependencies that were not
+                explicitly installed.
+              - Added compressed package size to sync DBs -- shows the total
+                size of packages before downloading
+              - Patch from Tommi Rantala:
+                - Allow --info and --list together in queries
+              - Patch from Kevin Piche:
+                - Use list_add_sorted() with -Sg
+              - Patch from Hegedus Marton Csaba:
+                - Better manpage compression
+              - Added checks for additional hyphens in package versions
+              - mktemp was failing if %pmo_root%/tmp was missing -- fixed
 2.8.4         - Added updatesync script from Jason Chu
               - Changed the pacman binary to be dynamically linked
                 - Included a pacman.static binary as well

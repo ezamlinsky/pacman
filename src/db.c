@@ -225,7 +225,28 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					return(NULL);
 				}
 				trim(info->packager);
+			} else if(!strcmp(line, "%REASON%")) {
+				char tmp[32];
+				if(fgets(tmp, sizeof(tmp), fp) == NULL) {
+					FREEPKG(info);
+					return(NULL);
+				}
+				trim(tmp);
+				info->reason = (unsigned short)atoi(tmp);
 			} else if(!strcmp(line, "%SIZE%")) {
+				char tmp[32];
+				if(fgets(tmp, sizeof(tmp), fp) == NULL) {
+					FREEPKG(info);
+					return(NULL);
+				}
+				trim(tmp);
+				info->size = (unsigned long)atol(tmp);
+			} else if(!strcmp(line, "%CSIZE%")) {
+				/* NOTE: the CSIZE and SIZE fields both share the "size" field
+				 *       in the pkginfo_t struct.  This can be done b/c CSIZE
+				 *       is currently only used in sync databases, and SIZE is
+				 *       only used in local databases.
+				 */
 				char tmp[32];
 				if(fgets(tmp, sizeof(tmp), fp) == NULL) {
 					FREEPKG(info);
@@ -387,6 +408,8 @@ int db_write(pacdb_t *db, pkginfo_t *info, unsigned int inforeq)
 		fprintf(fp, "%s\n\n", info->packager);
 		fputs("%SIZE%\n", fp);
 		fprintf(fp, "%ld\n\n", info->size);
+		fputs("%REASON%\n", fp);
+		fprintf(fp, "%d\n\n", info->reason);
 		fclose(fp);
 	}
 

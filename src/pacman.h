@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.8.4"
+#define PACVER    "2.9"
 #endif
 
 #ifndef PKGDIR
@@ -48,9 +48,9 @@
 
 #define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 
-int pacman_add(pacdb_t *db, PMList *targets);
+int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly);
 int pacman_remove(pacdb_t *db, PMList *targets);
-int pacman_upgrade(pacdb_t *db, PMList *targets);
+int pacman_upgrade(pacdb_t *db, PMList *targets, PMList *dependonly);
 int pacman_query(pacdb_t *db, PMList *targets);
 int pacman_sync(pacdb_t *db, PMList *targets);
 int pacman_deptest(pacdb_t *db, PMList *targets);
@@ -62,6 +62,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *sync, PMList *list
 int splitdep(char *depstr, depend_t *depend);
 
 char* needbackup(char *file, PMList *backup);
+int runscriptlet(char *installfn, char *script, char *ver, char *oldver);
 
 int parseargs(int op, int argc, char **argv);
 int parseconfig(char *configfile);
