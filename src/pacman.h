@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.8.3"
+#define PACVER    "2.8.4"
 #endif
 
 #ifndef PKGDIR

@@ -223,4 +223,37 @@ void list_display(const char *title, PMList *list)
 	}
 }
 
+
+/*  Add items to a list in sorted order.  Use the given
+ *  comparision func to determine order.
+ */
+PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc)
+{
+	PMList *add;
+	PMList *prev = NULL;
+	PMList *iter = list;
+
+	add = list_new();
+	add->data = data;
+
+	/*  Find insertion point.  */
+	while(iter) {
+		if(sortfunc(add->data, iter->data) <= 0) break;
+		prev = iter;
+		iter = iter->next;
+	}
+
+	/*  Insert node before insertion point.  */
+	add->prev = prev;
+	add->next = iter;
+	if(iter != NULL) iter->prev = add;		/*  Not at end.  */
+	if(prev != NULL) {
+		prev->next = add;										/*  In middle.  */
+	} else {
+		list = add;													/*  Start or empty, new list head.  */
+	}
+
+	return(list);
+}
+
 /* vim: set ts=2 sw=2 noet: */

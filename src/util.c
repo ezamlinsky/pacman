@@ -33,7 +33,7 @@
 #include "util.h"
 
 /* borrowed and modified from Per Liden's pkgutils (http://crux.nu) */
-int gzopen_frontend(char *pathname, int oflags, int mode)
+long gzopen_frontend(char *pathname, int oflags, int mode)
 {
 	char* gzoflags;
 	int fd;
@@ -63,7 +63,7 @@ int gzopen_frontend(char *pathname, int oflags, int mode)
 		return -1;
 	}
 
-	return (int)gzf;
+	return (long)gzf;
 }
 
 int unpack(char *archive, const char *prefix, const char *fn)

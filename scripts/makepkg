@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.8.3'
+myver='2.8.4'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -611,7 +611,7 @@ if [ "$PACKAGER" != "" ]; then
 else
 	packager="Arch Linux (http://www.archlinux.org)"
 fi
-size=`du -cb $startdir/pkg | tail -1 | awk '{print $1}'`
+size=`du -cb $startdir/pkg | tail -n 1 | awk '{print $1}'`
 
 # write the .PKGINFO file
 msg "Generating .PKGINFO file..."

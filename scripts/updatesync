@@ -1,8 +1,9 @@
 #!/bin/bash
 # 
-#   gensync
+#   updatesync
 #  
-#   Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+#   Copyright (c) 2004 by Jason Chu <jason@archlinux.org>
+#   Derived from gensync (c) 2002-2004 Judd Vinet <jvinet@zeroflux.org>
 #  
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -23,26 +24,34 @@
 myver='2.8.4'
 
 usage() {
-  echo "gensync $myver"
-  echo "usage: $0 <root> <destfile> [package_directory]"
+	echo "updatesync $myver"
+	echo "usage: $0 <action> <destfile> <option> [package_directory]"
 	echo
-	echo "gensync will generate a sync database by reading all PKGBUILD files"
-	echo "from <root>.  gensync builds the database in a temporary directory"
-	echo "and then compresses it to <destfile>."
+	echo "updatesync will update a sync database by reading a PKGBUILD and"
+	echo "modifying the destfile. updatesync updates the database in a temporary"
+	echo "directory and then compresses it to <destfile>."
 	echo
-	echo "gensync will calculate md5sums of packages in the same directory as"
+	echo "There are two types of actions:"
+	echo
+	echo "upd - Will update a package's entry or create it if it doesn't exist."
+	echo "      It takes the package's PKGBUILD as an option."
+	echo "del - Will remove a package's entry from the db."
+	echo "      It takes the package's name as an option."
+	echo
+	echo "updatesync will calculate md5sums of packages in the same directory as"
 	echo "<destfile>, unless an alternate [package_directory] is specified."
 	echo
-	echo "note: The <destfile> name is important.  It must be of the form"
-	echo "      {treename}.db.tar.gz where {treename} is the name of the custom"
-	echo "      package repository you configured in /etc/pacman.conf.  The"
-	echo "      generated database must reside in the same directory as your"
-	echo "      custom packages (also configured in /etc/pacman.conf)"
+	echo "example:  updatesync upd /home/mypkgs/custom.db.tar.gz PKGBUILD"
 	echo
-	echo "example:  gensync /var/abs/local /home/mypkgs/custom.db.tar.gz"
 	echo
-  echo
-  exit 0
+	exit 0
+}
+
+die()
+{
+	echo "updatesync: $*" >&2
+	rm -rf $ustmpdir
+	exit 1
 }
 
 get_md5checksum()
@@ -66,7 +75,7 @@ db_write_entry()
 	unset pkgname pkgver pkgrel pkgdesc force
 	unset groups replaces provides depends conflicts
 	source $1 || return 1
-	cd $gstmpdir
+	cd $ustmpdir
 	mkdir $pkgname-$pkgver-$pkgrel || return 1
 	cd $pkgname-$pkgver-$pkgrel
 	# desc
@@ -128,7 +137,23 @@ db_write_entry()
 	fi
 }
 
-if [ $# -lt 2 ]; then
+delete_entry()
+{
+	echo $1 | grep PKGBUILD 2>&1 >/dev/null
+	if [ $? -eq 0 ]; then
+		source $1
+	else
+		pkgname=$1
+	fi
+	for i in *; do
+		if [ "${i%-*-*}" = "$pkgname" ]; then
+			echo "updatesync: deleting $i" >&2
+			rm -rf $i
+		fi
+	done
+}
+
+if [ $# -lt 3 ]; then
 	usage
 	exit 0
 fi
@@ -138,49 +163,59 @@ if [ "$1" = "-h" -o "$1" = "--help" ]; then
 	exit 0
 fi
 
-d=`dirname $1`
-rootdir=`cd $d && pwd`/`basename $1`
-d=`dirname $2`
-destdir=`cd $d && pwd`
-destfile="$destdir/`basename $2`"
-pkgdir=
-if [ "$3" != "" ]; then
-	pkgdir=$3
+action=$1
+pkgdb=$2
+option=$3
+curdir="`pwd`"
+pkgdir=$curdir
+if [ "$4" != "" ]; then
+	pkgdir=$4
 fi
-gstmpdir=$(mktemp -dt gensync.XXXXXXXXXX) || exit 1
 
-if [ ! -d $rootdir ]; then
-	echo "gensync: invalid root dir: $rootdir" >&2
-	rm -rf $gstmpdir
+if [ "$action" != "upd" -a "$action" != "del" ]; then
+	usage
 	exit 1
 fi
 
-echo "gensync: building database entries, generating md5sums..." >&2
-cd `dirname $2`
-for file in `find $rootdir/* -name PKGBUILD`; do
-	pkgmd5sum=`get_md5checksum $file $pkgdir`
-	if [ -z $pkgmd5sum ]; then
-		echo "gensync: error generating checksum for $file" >&2
-		rm -rf $gstmpdir
-		exit 1
-	fi
-	db_write_entry $file
-	if [ $? -gt 0 ]; then
-		echo "gensync: error writing entry for $file" >&2
-		rm -rf $gstmpdir
-		exit 1
-	fi
-done
+ustmpdir=$(mktemp -dt updatesync.XXXXXXXXXX) || exit 1
 
-echo "gensync: compressing to $destfile..." >&2
-cd $gstmpdir
-tar c * | gzip -9 >$destfile
-if [ $? -gt 0 ]; then
-	echo "gensync: error writing to $destfile" >&2
-	rm -rf $gstmpdir
-	exit 1
+cd $ustmpdir
+if [ ! -f $pkgdb ]; then
+	if [ ! -f $curdir/$pkgdb ]; then
+		echo "updatesync: $pkgdb not found"
+		exit 1
+	fi
+	pkgdb=$curdir/$pkgdb
 fi
 
-rm -rf $gstmpdir
+if [ "$action" = "upd" -a ! -f $option ]; then
+	if [ ! -f $curdir/$option ]; then
+		echo "updatesync: $option not found"
+		exit 1
+	fi
+	option=$curdir/$option
+fi
+
+echo "updatesync: uncompressing to $ustmpdir..." >&2
+tar -xzf $pkgdb || die "error uncompressing $pkgdb"
+if [ "$action" = "upd" ]; then
+	# INSERT / UPDATE
+	delete_entry $option
+
+	pkgmd5sum=`get_md5checksum $option`
+	[ -z $pkgmd5sum ] && die "error generating checksum for $option"
+	echo "updatesync: creating entry for $option" >&2
+	db_write_entry $option || die "error writing entry for $option"
+else
+	# DELETE
+	delete_entry $option
+fi
+
+echo "updatesync: compressing to $pkgdb..." >&2
+cd $ustmpdir
+tar c * | gzip -9 >$pkgdb || die "error writing to $pkgdb"
+
+cd $curdir
+rm -rf $ustmpdir
 
 exit 0

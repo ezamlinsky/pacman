@@ -1,8 +1,0 @@
-- think about consolidating the -A/-U/-S options into one smart
-  install operation
-- replaces code doesn't run with -U or -A
-- when performing replaces, pacman should not remove old packages until
-  the conflict checks are passed
-- handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
-- check $PACCONF env var
-- add a --pretend option

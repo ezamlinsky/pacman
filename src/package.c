@@ -284,10 +284,10 @@ void freepkg(pkginfo_t *pkg)
  */
 int pkgcmp(const void *p1, const void *p2)
 {
-	pkginfo_t **pkg1 = (pkginfo_t**)p1;
-	pkginfo_t **pkg2 = (pkginfo_t**)p2;
+	pkginfo_t *pkg1 = (pkginfo_t*)p1;
+	pkginfo_t *pkg2 = (pkginfo_t*)p2;
 
-	return(strcmp(pkg1[0]->name, pkg2[0]->name));
+	return(strcmp(pkg1->name, pkg2->name));
 }
 
 /* Test for existence of a package in a PMList*

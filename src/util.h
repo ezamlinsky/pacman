@@ -28,7 +28,7 @@
 
 #define FREE(p)      { if (p) { free(p); (p)= NULL; }}
 
-int gzopen_frontend(char *pathname, int oflags, int mode);
+long gzopen_frontend(char *pathname, int oflags, int mode);
 int unpack(char *archive, const char *prefix, const char *fn);
 int copyfile(char *src, char *dest);
 int makepath(char *path);

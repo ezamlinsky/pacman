@@ -61,43 +61,20 @@ void db_close(pacdb_t* db)
 	return;
 }
 
+
 /* frees pkgcache if necessary and returns a new package
  * cache from db 
  */
 PMList* db_loadpkgs(pacdb_t *db)
 {
 	pkginfo_t *info;
-	pkginfo_t **arr = NULL;
-	unsigned int arrct = 0;
-	int i;
 	PMList *cache = NULL;
 
 	rewinddir(db->dir);
 	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_DEPENDS)) != NULL) {
 		/* add to the collective */
-		/* we load all package names into a linear array first, so qsort can handle it */
-		if(arr == NULL) {
-			arr = (pkginfo_t**)malloc(sizeof(pkginfo_t*));
-			arrct++;
-		} else {
-			arr = (pkginfo_t**)realloc(arr, (++arrct)*sizeof(pkginfo_t*));
-		}
-		if(arr == NULL) {
-			fprintf(stderr, "error: out of memory\n");
-			exit(1);
-		}
-		arr[arrct-1] = info;
+		cache = list_add_sorted(cache, info, pkgcmp);
 	}
-
-	/* sort the package list */
-	qsort(arr, (size_t)arrct, sizeof(pkginfo_t*), pkgcmp);
-
-	/* now load them into the proper PMList */
-	for(i = 0; i < arrct; i++) {
-		cache = list_add(cache, arr[i]);
-	}
-
-	FREE(arr);
 
 	return(cache);
 }
@@ -645,7 +622,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 							if(dbpkg2 && !is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
 								ok = 1;
 							}
-							FREE(dbpkg2);
+							FREEPKG(dbpkg2);
 						}
 					}
 				}

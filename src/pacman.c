@@ -115,6 +115,7 @@ int main(int argc, char *argv[])
 	char *ptr    = NULL;
 	pacdb_t *db_local = NULL;
 	char *cenv = NULL;
+	uid_t myuid;
 
 	cenv = getenv("COLUMNS");
 	if(cenv) {
@@ -144,6 +145,13 @@ int main(int argc, char *argv[])
 		return(ret);
 	}
 
+	/* see if we're root or not */
+	myuid = geteuid();
+	if(!myuid && getenv("FAKEROOTKEY")) {
+		/* fakeroot doesn't count, we're non-root */
+		myuid = 99;
+	}
+
 	/* check for permission */
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
@@ -151,7 +159,7 @@ int main(int argc, char *argv[])
 				(pmo_s_search || pmo_s_printuris || pmo_group || pmo_q_list || pmo_q_info)) {
 			/* special case:  PM_SYNC can be used w/ pmo_s_search by any user */
 		} else {
-			if(geteuid() != 0) {
+			if(myuid) {
 				fprintf(stderr, "error: you cannot perform this operation unless you are root.\n");
 				return(1);
 			}
@@ -178,7 +186,7 @@ int main(int argc, char *argv[])
 	if(pmo_usesyslog) {
 		openlog("pacman", 0, LOG_USER);
 	}
-	if(pmo_logfile && geteuid() == 0) {
+	if(pmo_logfile && myuid == 0) {
 		/* open the log file */
 		logfd = fopen(pmo_logfile, "a");
 		if(logfd == NULL) {
@@ -1664,7 +1672,6 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		/* see if this is an upgrade.  if so, remove the old package first */
 		if(pmo_upgrade) {
 			if(is_pkgin(info, pm_packages)) {
-				PMList* tmp = list_new();
 				int retcode;
 
 				printf("upgrading %s... ", info->name);
@@ -1701,10 +1708,10 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				}
 
 				if(oldpkg) {
-					list_add(tmp, strdup(info->name));
+					PMList* tmp = list_add(NULL, strdup(info->name));
 					vprint("removing old package first...\n");
 					retcode = pacman_remove(db, tmp);
-					list_free(tmp);
+					FREELIST(tmp);
 					if(retcode == 1) {
 						fprintf(stderr, "\nupgrade aborted.\n");
 						return(1);

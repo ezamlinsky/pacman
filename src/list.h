@@ -30,6 +30,11 @@ typedef struct __pmlist_t {
 	struct __pmlist_t* next;
 } PMList;
 
+
+/*  Sort comparison callback function declaration.  */
+typedef int (*cmp_fn) (const void *, const void *);
+
+
 PMList* list_new();
 void list_free(PMList* list);
 PMList* list_add(PMList* list, void* data);
@@ -41,6 +46,8 @@ PMList* list_last(PMList* list);
 int list_strcmp(const void *s1, const void *s2);
 PMList *list_sort(PMList *list);
 void list_display(const char *title, PMList *list);
+
+PMList* list_add_sorted(PMList *list, void *data, cmp_fn sortfunc);
 
 #endif
 

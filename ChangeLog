@@ -1,5 +1,13 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.8.4         - Added updatesync script from Jason Chu
+              - Changed the pacman binary to be dynamically linked
+                - Included a pacman.static binary as well
+                - Added fakeroot checks when seeing if we're root
+              - Fixed makepkg to use 'tail -n 1' instead of 'tail -1'
+              - Added patch from Kevin Piche:
+                - Cleanup db_loadpkgs(), add list_add_sorted()
+              - Fixed a memory leak in db_find_conflicts()
 2.8.3         - Fixed a little makepkg bug with bash 3.0
               - Fixed resolvedeps to always prefer literals over provisios
               - Added --config option to specify an alternate config file

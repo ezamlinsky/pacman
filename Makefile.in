@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.8.3
+PACVER = 2.8.4
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -45,7 +45,7 @@ SCRDIR = $(TOPDIR)/scripts/
 CXX = @CC@
 CXXFLAGS += @CFLAGS@ -g -Wall -pedantic -fno-exceptions \
             -D_GNU_SOURCE -DPACVER=\"$(PACVER)\" -I. -Ilibftp
-LDFLAGS += @LDFLAGS@ -static -Llibftp -lftp -ltar -lz
+LDFLAGS += @LDFLAGS@ -Llibftp -lftp -ltar -lz
 
 SRCS = $(SRCDIR)pacman.c \
 			 $(SRCDIR)db.c \
@@ -72,6 +72,7 @@ all: libftp.a pacman vercmp convertdb man
 
 pacman: $(OBJECTS) libftp.a
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
+	$(CXX) $(OBJECTS) -o $@.static -static $(LDFLAGS)
 
 vercmp: $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o
 	$(CXX) $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o $(CXXFLAGS) -o $@
@@ -96,11 +97,13 @@ libftp.a:
 
 install: pacman vercmp convertdb man
 	$(INSTALL) -D -m0755 pacman $(DESTDIR)$(BINDIR)/pacman
+	$(INSTALL) -D -m0755 pacman.static $(DESTDIR)$(BINDIR)/pacman.static
 	$(INSTALL) -D -m0755 vercmp $(DESTDIR)$(BINDIR)/vercmp
 	$(INSTALL) -D -m0755 convertdb $(DESTDIR)$(BINDIR)/convertdb
 	$(INSTALL) -D -m0755 $(SCRDIR)makepkg $(DESTDIR)$(BINDIR)/makepkg
 	$(INSTALL) -D -m0755 $(SCRDIR)makeworld $(DESTDIR)$(BINDIR)/makeworld
 	$(INSTALL) -D -m0755 $(SCRDIR)gensync $(DESTDIR)$(BINDIR)/gensync
+	$(INSTALL) -D -m0755 $(SCRDIR)updatesync $(DESTDIR)$(BINDIR)/updatesync
 	$(INSTALL) -D -m0644 $(MANSRC)pacman.8 $(DESTDIR)$(MANDIR)/man8/pacman.8
 	$(INSTALL) -D -m0644 $(MANSRC)makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	$(INSTALL) -D -m0644 etc/pacman.conf $(DESTDIR)/etc/pacman.conf
@@ -115,7 +118,7 @@ clean:
 	(cd libftp; make clobber)
 
 distclean: clean
-	rm -f pacman convertdb vercmp
+	rm -f pacman pacman.static convertdb vercmp
 	rm -f Makefile
 	rm -f config.h config.status config.log
 
