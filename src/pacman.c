@@ -405,12 +405,6 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				/*fprintf(stderr, "%s: not found in sync db.  skipping.", local->name);*/
 				continue;
 			}
-			/* check if package should be ignored */
-			if(is_in((char*)i->data, pmo_ignorepkg)) {
-				fprintf(stderr, ":: %s: ignoring package upgrade\n", (char*)i->data);
-				ignore = 1;
-				continue;
-			}
 			/* compare versions and see if we need to upgrade */
 			cmp = rpmvercmp(local->version, sync->pkg->version);
 			if(cmp > 0) {
@@ -421,6 +415,12 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				continue;
 			} else if(cmp == 0) {
 				/* versions are identical */
+				continue;
+			} else if(is_in((char*)i->data, pmo_ignorepkg)) {
+			  /* package should be ignored (IgnorePkg) */
+				fprintf(stderr, ":: %s-%s: ignoring package upgrade (%s)\n",
+					local->name, local->version, sync->pkg->version);
+				ignore = 1;
 				continue;
 			} else {
 				PMList *lp = NULL;

@@ -1,8 +1,8 @@
-.TH makepkg 8 "April 10, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "April 19, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
-\fBmakepkg [options] [build_script]\fP
+\fBmakepkg [options]\fP
 .SH DESCRIPTION
 \fBmakepkg\fP will build packages for you.  All it needs is
 a build-capable linux platform, wget, and some build scripts.  The advantage
@@ -261,6 +261,9 @@ the \fB--force\fP switch.
 .B "\-w <destdir>"
 Write the resulting package file to the directory \fI<destdir>\fP instead of the
 current working directory.
+.TP
+.B "\-p <buildscript>"
+Read the package script \fI<buildscript>\fP instead of the default (\fIPKGBUILD\fP).
 
 .SH CONFIGURATION
 Configuration options are stored in \fI/etc/makepkg.conf\fP.  This file is parsed

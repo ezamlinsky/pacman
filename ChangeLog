@@ -1,5 +1,6 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+2.4.1         - Fixed a bug in makepkg's option parsing
 2.4           - Added getopt-style options to makeworld
               - Added -w <destdir> to makepkg
               - makeworld now properly handles packages with --builddeps

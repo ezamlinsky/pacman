@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.4'
+myver='2.4.1'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -48,7 +48,7 @@ checkdeps() {
 
 usage() {
   echo "makepkg version $myver"
-  echo "usage: $0 [options] [build_script]"
+  echo "usage: $0 [options]"
   echo "options:"
   echo "  -c, --clean      Clean up work files after build"
   echo "  -C, --cleancache Clean up source files from the cache"
@@ -58,6 +58,7 @@ usage() {
   echo "  -i, --install    Install package after successful build"
   echo "  -f, --force      Overwrite existing package"
   echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
+  echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
   echo "  -h, --help       This help"
   echo
   echo "  if build_script is not specified, makepkg will look for a PKGBUILD"
@@ -88,10 +89,10 @@ while [ "$#" -ne "0" ]; do
     --force)      FORCE=1      ;;
     --*)
       usage
-			exit 1
+      exit 1
       ;;
     -*)
-      while getopts "cCsbdifw:-" opt; do
+      while getopts "cCsbdifp:w:-" opt; do
         case $opt in
         c) CLEANUP=1 ;;
         C) CLEANCACHE=1 ;;
@@ -102,7 +103,9 @@ while [ "$#" -ne "0" ]; do
         f) FORCE=1 ;;
         w)
           PKGDEST=$OPTARG
-          shift
+          ;;
+        p)
+          BUILDSCRIPT=$OPTARG
           ;;
         -)
           OPTIND=0
@@ -110,15 +113,13 @@ while [ "$#" -ne "0" ]; do
           ;;
         *)
           usage
+          exit 1
           ;;
         esac
       done
       ;;
     *)
-      if [ "$#" -ne "1" ]; then
-        usage
-      fi
-      BUILDSCRIPT=$1
+      true
       ;;
   esac
   shift
@@ -189,6 +190,7 @@ if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
         for pkgdir in $candidates; do
           if [ -f $pkgdir/PKGBUILD ]; then
             cd $pkgdir
+            echo makepkg -i -c -b -w $PKGDEST
             makepkg -i -c -b -w $PKGDEST
             if [ $? -eq 0 ]; then
               success=1
