@@ -1,6 +1,0 @@
-#!/bin/sh
-
-echo
-echo "Pacman 2.0+ no longer comes with pacsync.  Use 'pacman -S' instead."
-echo "  (see 'pacman -S --help' or the manpage for syntax)"
-echo

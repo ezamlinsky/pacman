@@ -38,6 +38,7 @@ int copyfile(char *src, char *dest);
 int makepath(char *path);
 int rmrf(char *path);
 int vprint(char *fmt, ...);
+void indentprint(char *str, int indent);
 int yesno(char* fmt, ...);
 void usage(int op, char *myname);
 void version(void);

@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.2"
+#define PACVER    "2.3"
 #endif
 
 #ifndef PKGDIR
@@ -37,8 +37,8 @@
 #define PM_MAIN			1
 #define PM_ADD			2
 #define PM_REMOVE		3
-#define PM_QUERY		4
-#define	PM_UPGRADE	5
+#define	PM_UPGRADE	4
+#define PM_QUERY		5
 #define PM_SYNC     6
 #define PM_DEPTEST  7
 

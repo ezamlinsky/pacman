@@ -45,8 +45,10 @@ extern unsigned short pmo_help;
 extern unsigned short pmo_force;
 extern unsigned short pmo_nodeps;
 extern unsigned short pmo_upgrade;
+extern unsigned short pmo_freshen;
 extern unsigned short pmo_nosave;
-extern unsigned short pmo_vertest;
+extern unsigned short pmo_d_vertest;
+extern unsigned short pmo_d_resolve;
 extern unsigned short pmo_q_isfile;
 extern unsigned short pmo_q_info;
 extern unsigned short pmo_q_list;
@@ -139,10 +141,12 @@ int parseargs(int op, int argc, char **argv)
 		{"add",        no_argument,       0, 'A'},
 		{"remove",     no_argument,       0, 'R'},
 		{"upgrade",    no_argument,       0, 'U'},
+		{"freshen",    no_argument,       0, 'F'},
 		{"query",      no_argument,       0, 'Q'},
 		{"sync",       no_argument,       0, 'S'},
 		{"deptest",    no_argument,       0, 'T'},
 		{"vertest",    no_argument,       0, 'Y'},
+		{"resolve",    no_argument,       0, 'D'},
 		{"root",       required_argument, 0, 'r'},
 		{"verbose",    no_argument,       0, 'v'},
 		{"version",    no_argument,       0, 'V'},
@@ -162,7 +166,7 @@ int parseargs(int op, int argc, char **argv)
 		{0, 0, 0, 0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ARUQSTYr:vhscVfnoldpiuwy", opts, &option_index))) {
+	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:vhscVfnoldpiuwy", opts, &option_index))) {
 		if(opt < 0) {
 			break;
 		}
@@ -171,10 +175,12 @@ int parseargs(int op, int argc, char **argv)
 			case 'A': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_ADD);     break;
 			case 'R': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_REMOVE);  break;
 			case 'U': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); break;
+			case 'F': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); pmo_freshen = 1; break;
 			case 'Q': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_QUERY);   break;
 			case 'S': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_SYNC);    break;
-			case 'T': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST);  break;
-			case 'Y': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST); pmo_vertest = 1;  break;
+			case 'T': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST); break;
+			case 'Y': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST); pmo_d_vertest = 1; break;
+			case 'D': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_DEPTEST); pmo_d_resolve = 1; break;
 			case 'h': pmo_help = 1; break;
 			case 'V': pmo_version = 1; break;
 			case 'v': pmo_verbose = 1; break;
@@ -483,6 +489,7 @@ void usage(int op, char *myname)
 	  printf("        %s {-A --add}     [options] <file>\n", myname);
 	  printf("        %s {-R --remove}  [options] <package>\n", myname);
 	  printf("        %s {-U --upgrade} [options] <file>\n", myname);
+	  printf("        %s {-F --freshen} [options] <file>\n", myname);
 	  printf("        %s {-Q --query}   [options] [package]\n", myname);
 	  printf("        %s {-S --sync}    [options] [package]\n", myname);
 		printf("\nuse '%s --help' with other options for more syntax\n\n", myname);
@@ -490,26 +497,30 @@ void usage(int op, char *myname)
 		if(op == PM_ADD) {
 		  printf("usage:  %s {-A --add} [options] <file>\n", myname);
 			printf("options:\n");
-			printf("  -f, --force        force install, overwrite conflicting files\n");
-			printf("  -d, --nodeps       skip dependency checks\n");
+			printf("  -f, --force         force install, overwrite conflicting files\n");
+			printf("  -d, --nodeps        skip dependency checks\n");
 		} else if(op == PM_REMOVE) {
 			printf("usage:  %s {-R --remove} [options] <package>\n", myname);
 			printf("options:\n");
-			printf("  -d, --nodeps       skip dependency checks\n");
-			printf("  -n, --nosave       remove configuration files as well\n");
+			printf("  -d, --nodeps        skip dependency checks\n");
+			printf("  -n, --nosave        remove configuration files as well\n");
 		} else if(op == PM_UPGRADE) {
-			printf("usage:  %s {-U --upgrade} [options] <file>\n", myname);
+			if(pmo_freshen) {
+				printf("usage:  %s {-F --freshen} [options] <file>\n", myname);
+			} else {
+				printf("usage:  %s {-U --upgrade} [options] <file>\n", myname);
+			}
 			printf("options:\n");
-			printf("  -f, --force        force install, overwrite conflicting files\n");
-			printf("  -d, --nodeps       skip dependency checks\n");
+			printf("  -f, --force         force install, overwrite conflicting files\n");
+			printf("  -d, --nodeps        skip dependency checks\n");
 		} else if(op == PM_QUERY) {
 			printf("usage:  %s {-Q --query} [options] [package]\n", myname);
 			printf("options:\n");
-			printf("  -o, --owns <file>  query the package that owns <file>\n");
-			printf("  -l, --list         list the contents of the queried package\n");
-			printf("  -i, --info         view package information\n");
-			printf("  -p, --file         pacman will query the package file [package] instead of\n");
-			printf("                     looking in the database\n");
+			printf("  -o, --owns <file>   query the package that owns <file>\n");
+			printf("  -l, --list          list the contents of the queried package\n");
+			printf("  -i, --info          view package information\n");
+			printf("  -p, --file          pacman will query the package file [package] instead of\n");
+			printf("                      looking in the database\n");
 		} else if(op == PM_SYNC) {
 			printf("usage:  %s {-S --sync} [options] [package]\n", myname);
 			printf("options:\n");
@@ -521,8 +532,8 @@ void usage(int op, char *myname)
 			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");
 			printf("  -c, --clean         remove packages from cache directory to free up diskspace\n");
 		}
-		printf("  -v, --verbose      be verbose\n");
-		printf("  -r, --root <path>  set an alternate installation root\n");
+		printf("  -v, --verbose       be verbose\n");
+		printf("  -r, --root <path>   set an alternate installation root\n");
 	}
 }
 
@@ -569,6 +580,50 @@ int yesno(char *fmt, ...)
 		}
 	}
 	return(0);
+}
+ 
+/* output a string, but wrap words properly with a specified indentation
+ */
+void indentprint(char *str, int indent)
+{
+	char *p = str;
+	char *cenv = NULL;
+	int cols = 80;
+	int cidx = indent;
+
+	cenv = getenv("COLUMNS");
+	if(cenv) {
+		cols = atoi(cenv);
+	}
+
+	while(*p) {
+		if(*p == ' ') {
+			char *next = NULL;
+			int len;
+			p++;
+			if(p == NULL || *p == ' ') continue;
+			next = strchr(p, ' ');
+			if(next == NULL) {
+				next = p + strlen(p);
+			}
+			len = next - p;
+			if(len > (cols-cidx-1)) {
+				/* newline */
+				int i;
+				printf("\n");
+				for(i = 0; i < indent; i++) {
+					printf(" ");
+				}
+				cidx = indent;
+			} else {
+				printf(" ");
+				cidx++;
+			}
+		}
+		printf("%c", *p);
+		p++;
+		cidx++;
+	}
 }
 
 /* Test for existence of a string in a PMList

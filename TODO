@@ -1,30 +1,31 @@
+- add some logging mechanism (/var/log/pacman.log)
+- handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
+- record md5sums of all files in a package
 - add a way to clean /var/cache/pacman/src
-- add other options to config file: db location, overwrite behaviour, etc.
-- don't skip the db update when a package fails to upgrade - we lose the entry
+- duplicate dep checks occur with sync (one in sync, one in add)
+- if a package is removed with --nodeps and re-installed, the requiredby
+  fields of it's required packages are not updated
 - have "group" designations
+- IgnorePkg option in pacman.conf to ignore updates from the sync repo
+- add an option equivalent to 'pacman -Ql pkg | grep filename'
+- ftp transfer progress bar breaks after ~42000 K
+- add other options to config file: db location, overwrite behaviour, etc.
+- use the COLUMNS env var for the progress bar
 ? use 'set -e' in makepkg?
 x if a package fails, ask before aborting the full operation
   - can't -- further dependent packages may fail b/c of the first failure
 ? ask, then remove conflicting packages with --sync
 ? use a provides tag (instead of an OR operator in depends)
-- add a freshen operation
 - add a 'cascade' option to --remove that will remove a package and
   all requiredby packages under it
 - check $PACCONF env var
-- ftp transfer progress bar breaks after ~42000 K
 ? use a 'trust pacman' config option for downgrading?
-- instead of 'conflicts' use a ! operator in depends
-- add a --pretend option
-- add a consistency/sanity check operation
-- add a --dbpath option
 ? build-time (source) dependencies in makepkg
-- auto-resolve dependencies in makepkg
-- use package caches more for performance
-- IgnorePkg option in pacman.conf to ignore updates from the sync repo
-- if a package is removed with --nodeps and re-installed, the requiredby
-  fields of it's required packages are not updated
-- duplicate dep checks occur with sync (one in sync, one in add)
-- clean up output a bit (message queue?)
 ? run ldd on every executable in a newly built package to find required so's
-- use a files.cache gdbm (or whatever) for --owns and db_find_conflicts
+- add a --pretend option
+- add a consistency/sanity check operation (md5 tracking for all files)
+- add a --dbpath option
+- use package caches more for performance
+- clean up output a bit (message queue?)
+- use a files.cache db for --owns and db_find_conflicts
 

@@ -1,4 +1,4 @@
-.TH pacman 8 "November 7, 2002" "pacman #VERSION#" ""
+.TH pacman 8 "January 20, 2003" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -25,6 +25,10 @@ used.
 Upgrade a package.  This is essentially a "remove-then-add"
 process.  See \fBHANDLING CONFIG FILES\fP for an explanation
 on how pacman takes care of config files.
+.TP
+.B "\-F, \-\-freshen"
+This is like --upgrade except that, unlike --upgrade, this will only
+upgrade packages that are already installed on your system.
 .TP
 .B "\-Q, \-\-query"
 Query the package database.  This operation allows you to

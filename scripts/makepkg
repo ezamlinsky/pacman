@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.2'
+myver='2.3'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -13,14 +13,51 @@ msg() {
 	echo $* >&2
 }
 
+checkdeps() {
+  local missdep=`pacman -T $*`
+	local deplist=""
+
+	missdep=`pacman -T $*`
+  ret=$?
+  if [ "$ret" != "0" ]; then
+    if [ "$ret" = "127" ]; then
+      msg "==> Missing Dependencies:"
+      msg ""
+      nl=0
+      for dep in $missdep; do
+        echo -ne "$dep " >&2
+        if [ "$nl" = "1" ]; then
+          nl=0
+          echo -ne "\n" >&2
+          # add this dep to the list
+          depname=`echo $dep | sed 's|=.*$||' | sed 's|>.*$||' | sed 's|<.*$||'`
+          deplist="$deplist $depname"
+          continue
+        fi
+        nl=1
+      done
+      msg ""
+    else
+      msg "==> ERROR: pacman returned a fatal error."
+      exit 1
+    fi
+  fi
+	echo $deplist
+}
+
+
 if [ "$1" = "--help" -o "$1" = "-h" ]; then
   shift
   echo "makepkg version $myver"
   echo "usage: $0 [options] [build_script]"
-	echo "options:"
-	echo "  -c, --clean   Clean up work files after build"
-	echo "  -i, --install Install package after successful build"
-	echo "  -h, --help    This help"
+  echo "options:"
+  echo "  -c, --clean      Clean up work files after build"
+  echo "  -d, --syncdeps   Install missing dependencies with pacman"
+  echo "  -b, --builddeps  Build missing dependencies from source"
+  echo "  -n, --nodeps     Skip all dependency checks"
+  echo "  -i, --install    Install package after successful build"
+  echo "  -f, --force      Overwrite existing package"
+  echo "  -h, --help       This help"
   echo
   echo "  if build_script is not specified, makepkg will look for a PKGBUILD"
   echo "  file in the current directory."
@@ -28,8 +65,13 @@ if [ "$1" = "--help" -o "$1" = "-h" ]; then
   exit 0
 fi
 
+# Options
 CLEANUP=0
 INSTALL=0
+DEP_BIN=0
+DEP_SRC=0
+NODEPS=0
+FORCE=0
 BUILDSCRIPT="./PKGBUILD"
 
 for arg in $*; do
@@ -37,8 +79,20 @@ for arg in $*; do
     -c|--clean)
       CLEANUP=1
       ;;
+    -d|--syncdeps)
+      DEP_BIN=1
+      ;;
+    -b|--builddeps)
+      DEP_SRC=1
+      ;;
+    -n|--nodeps)
+      NODEPS=1
+      ;;
     -i|--install)
       INSTALL=1
+      ;;
+    -f|--force)
+      FORCE=1
       ;;
     *)
       BUILDSCRIPT=$arg
@@ -79,35 +133,69 @@ if [ `echo $pkgrel | grep '-'` ]; then
   exit 1
 fi
 
-if [ `type -p pacman` ]; then
+if [ -f ${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" ]; then
+  msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
+  exit 1
+fi
+
+unset deplist
+if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
   msg "==> Checking Dependencies..."
-  missdep=`pacman -T ${depends[@]}`
-  ret=$?
-  if [ "$ret" != "0" ]; then
-    if [ "$ret" = "127" ]; then
-    msg "==> ERROR: Dependency Check Failed:"
-    msg ""
-    nl=0
-    for dep in $missdep; do
-      echo -ne "$dep " >&2
-      if [ "$nl" = "1" ]; then
-        nl=0
-        echo -ne "\n" >&2
-        continue
+	deplist=`checkdeps ${depends[@]}`
+  if [ "$deplist" != "" ]; then
+    if [ "$DEP_BIN" = "1" ]; then
+      # install missing deps from binary packages (using pacman -S)
+      msg "==> Installing missing dependencies..."
+      pacman -D $deplist
+      if [ "$?" = "127" ]; then
+        msg "==> ERROR: Failed to install missing dependencies."
+        exit 1
       fi
-        nl=1
-    done
-    msg ""
-  else
-    msg "==> ERROR: pacman returned a fatal error."
+			# TODO: check deps again to make sure they were resolved
+    elif [ "$DEP_SRC" = "1" ]; then
+      # install missing deps by building them from source.
+      # we look for each package name in $ABSROOT and build it.
+      if [ "$ABSROOT" = "" ]; then
+        msg "==> ERROR: The ABSROOT environment variable is not defined."
+        exit 1
+      fi
+      # TODO: handle version comparators (eg, glibc>=2.2.5)
+      msg "==> Building missing dependencies..."
+      for dep in $deplist; do
+        candidates=`find $ABSROOT -type d -name "$dep"`
+        if [ "$candidates" = "" ]; then
+          msg "==> ERROR: Could not find \"$dep\" under $ABSROOT"
+          exit 1
+        fi
+        success=0
+        for pkgdir in $candidates; do
+          if [ -f $pkgdir/PKGBUILD ]; then
+            cd $pkgdir
+            makepkg -i -c -b
+            if [ $? -eq 0 ]; then
+              success=1
+              break
+            fi
+          fi
+        done
+        if [ "$success" = "0" ]; then
+          msg "==> ERROR: Failed to build \"$dep\""
+          exit 1
+        fi
+      done
+			# TODO: check deps again to make sure they were resolved
+    else
+      exit 1
+    fi
   fi
-    exit 1
-  fi
+elif [ "$NODEPS" = "1" ]; then
+  msg "==> WARNING: skipping dependency checks."
 else
   msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
 fi
 
 d=`date`
+cd $startdir
 msg "==> Making package $pkgname  ($d)"
 
 # extract source
@@ -172,6 +260,44 @@ if [ $? -gt 0 ]; then
   exit 2
 fi
 
+# remove info/doc files
+cd $startdir
+rm -rf pkg/usr/info pkg/usr/share/info
+rm -rf pkg/usr/doc pkg/usr/share/doc
+
+# move /usr/share/man files to /usr/man
+if [ -d pkg/usr/share/man ]; then
+  mkdir -p pkg/usr/man 
+  cp -a pkg/usr/share/man/* pkg/usr/man/
+  rm -rf pkg/usr/share/man
+fi
+
+# compress man pages
+if [ -d pkg/usr/man ]; then
+  msg "==> Compressing man pages..."
+  for i in `find pkg/usr/man -type f`; do
+    ext=`echo $i | sed 's|.*\.||g'`
+    fn=`echo $i | sed 's|.*/||g'`
+    if [ "$ext" != "gz" ]; then
+      # update symlinks to this manpage
+      for ln in `find pkg/usr/man -lname "$fn"`; do
+        rm -f $ln
+        ln -sf ${fn}.gz ${ln}.gz
+      done
+      # compress the original
+      gzip -9 $i
+    fi
+  done
+fi
+
+
+# strip binaries
+cd $startdir
+msg "==> Stripping debugging symbols from libraries..."
+find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' ';' 2>&1
+msg "==> Stripping symbols from binaries..."
+find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' ';' 2>&1
+
 # get some package meta info
 builddate=`date -u "+%a %b %d %k:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
@@ -209,25 +335,6 @@ if [ "$install" != "" ]; then
   msg "==> Copying install script..."
   cp $startdir/$install $startdir/pkg/._install
 fi
-
-# remove info/doc files
-cd $startdir
-rm -rf pkg/usr/info pkg/usr/share/info
-rm -rf pkg/usr/doc pkg/usr/share/doc
-
-# move /usr/share/man files to /usr/man
-if [ -d pkg/usr/share/man ]; then
-  mkdir -p pkg/usr/man 
-  cp -a pkg/usr/share/man/* pkg/usr/man/
-  rm -rf pkg/usr/share/man
-fi
-
-# strip binaries
-cd $startdir
-msg "==> Stripping debugging symbols from libraries..."
-find pkg/{,usr,usr/local}/lib -type f -exec /usr/bin/strip --strip-debug '{}' ';' 2>&1
-msg "==> Stripping symbols from binaries..."
-find pkg/{,usr,usr/local}/{bin,sbin} -type f -exec /usr/bin/strip '{}' ';' 2>&1
 
 # tar it up
 msg "==> Compressing package..."

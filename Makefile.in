@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.2
+PACVER = 2.3
 LIBTAR_VERSION = 1.2.5
 
 TOPDIR = @srcdir@
@@ -70,10 +70,13 @@ OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)md5.o \
 					$(OBJDIR)md5driver.o
 
-all: libtar ftplib pacman convertdb man
+all: libtar ftplib pacman vercmp convertdb man
 
 pacman: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
+
+vercmp: $(OBJDIR)rpmvercmp.o $(OBJDIR)vercmp.o
+	$(CXX) $(OBJDIR)rpmvercmp.o $(OBJDIR)vercmp.o -o $@
 
 convertdb: $(SRCDIR)convertdb.c $(SRCDIR)list.c
 	$(CXX) -o convertdb $(SRCDIR)convertdb.c $(SRCDIR)list.c $(CXXFLAGS)
@@ -99,26 +102,24 @@ libtar:
 	LDFLAGS="" ./configure --disable-encap --disable-encap-install; \
 	make;)
 
-install: pacman convertdb man
+install: pacman vercmp convertdb man
 	$(INSTALL) -D -m0755 pacman $(DESTDIR)$(BINDIR)/pacman
+	$(INSTALL) -D -m0755 vercmp $(DESTDIR)$(BINDIR)/vercmp
 	$(INSTALL) -D -m0755 convertdb $(DESTDIR)$(BINDIR)/convertdb
 	$(INSTALL) -D -m0755 $(SCRDIR)makepkg $(DESTDIR)$(BINDIR)/makepkg
 	$(INSTALL) -D -m0755 $(SCRDIR)makeworld $(DESTDIR)$(BINDIR)/makeworld
-	$(INSTALL) -D -m0755 $(SCRDIR)abs $(DESTDIR)$(BINDIR)/abs
 	$(INSTALL) -D -m0755 $(SCRDIR)gensync $(DESTDIR)$(BINDIR)/gensync
 	$(INSTALL) -D -m0644 $(MANSRC)pacman.8 $(DESTDIR)$(MANDIR)/man8/pacman.8
 	$(INSTALL) -D -m0644 $(MANSRC)makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	$(INSTALL) -D -m0644 etc/pacman.conf $(DESTDIR)/etc/pacman.conf
 	$(INSTALL) -D -m0644 etc/makepkg.conf $(DESTDIR)/etc/makepkg.conf
-	$(INSTALL) -D -m0644 etc/supfile.arch $(DESTDIR)/etc/abs/supfile.arch
-	$(INSTALL) -D -m0644 etc/supfile.unofficial $(DESTDIR)/etc/abs/supfile.unofficial
 
 clean:
 	rm -f *~ $(OBJDIR)*.o $(MANSRC)*.8
 	(cd libftp; make clobber)
 
 distclean: clean
-	rm -f pacman convertdb
+	rm -f pacman convertdb vercmp
 	rm -rf libtar-$(LIBTAR_VERSION)
 
 # End of file
