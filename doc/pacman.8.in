@@ -1,4 +1,4 @@
-.TH pacman 8 "January 20, 2003" "pacman #VERSION#" ""
+.TH pacman 8 "April 10, 2003" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -75,6 +75,11 @@ a file is about to be \fIremoved\fP from the system the database is first
 checked to see if the file should be renamed to a .pacsave extension.  If
 \fB--nosave\fP is used, these designations are ignored and the files are
 removed.
+.TP
+.B "\-c, \-\-cascade"
+(only used with \fB--remove\fP)
+Remove all target packages, as well as all packages that depend on one
+or more target packages.  This operation is recursive.
 .TP
 .B "\-r, \-\-root <path>"
 Specify alternative installation root (default is "/"). This
@@ -170,17 +175,28 @@ NoUpgrade = etc/passed etc/group etc/shadow
 NoUpgrade = etc/fstab
 
 [current]
-Server = ftp://ftp.server.org/linux/archlinux/current
-Server = ftp://ftp.mirror.com/arch/current
+Server = ftp://ftp.archlinux.org/current
+Server = ftp://ftp.mirror.com/archlinux/current
 
 [custom]
 Server = local:///home/pkgs
 
 .fi
 .RE
-All files listed with a \fINoUpgrade\fP directive will never be touched during a package
-install/upgrade.  This directive is only valid in the options section.
+.SH CONFIG: OPTIONS
+.TP
+.B "NoUpgrade = <file> [file] ..."
+All files listed with a \fBNoUpgrade\fP directive will never be touched during a package
+install/upgrade.  \fINote:\fP do not include the leading slash when specifying files.
+.TP
+.B "IgnorePkg = <package> [package] ..."
+Instructs pacman to ignore any upgrades for this package when performing a
+\fB--sysupgrade\fP.
+.TP
+.B "NoPassiveFtp"
+Disables passive ftp connections when downloading packages. (aka Active Mode)
 
+.SH CONFIG: REPOSITORIES
 Each repository section defines a section name and at least one location where the packages
 can be found.  The section name is defined by the string within square brackets (eg, the two
 above are 'current' and 'custom').  Locations are defined with the \fIServer\fP directive and

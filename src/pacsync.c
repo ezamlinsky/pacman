@@ -42,6 +42,7 @@ static int offset;
 
 /* pacman options */
 extern char *pmo_root;
+extern unsigned char pmo_nopassiveftp;
 
 /* sync servers */
 extern PMList *pmc_syncs;
@@ -150,10 +151,12 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			sync_fnm[24] = '\0';
 
 			if(!server->islocal) {
-				/* passive mode */
-				/* TODO: make passive ftp an option */
-				if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
-					fprintf(stderr, "warning: failed to set passive mode\n");
+				if(!pmo_nopassiveftp) {
+					if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
+						fprintf(stderr, "warning: failed to set passive mode\n");
+					}
+				} else {
+					vprint("FTP passive mode not set\n");
 				}
 				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);

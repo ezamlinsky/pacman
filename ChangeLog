@@ -1,7 +1,20 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+2.4           - Added getopt-style options to makeworld
+              - Added -w <destdir> to makepkg
+              - makeworld now properly handles packages with --builddeps
+              - Added patches from Aurelien Foret:
+                - Cascading package removals. -Rc will remove a package and
+                  all packages that require it
+                - Support for getopt-style options in makepkg
+                - the REQUIREDBY field is now updated when a package is
+                  removed with --nodeps, then re-installed.
+                - Avoids duplicate dependency checks with sync
+                - Added a "NoPassiveFtp" option in pacman.conf
+                - Improvements to the --query listings
 2.3.2         - Added patches from Aurelien Foret:
                 - FTP resume feature
+								  - removed the hit-^C-and-delete-the-downloading-file safety
                 - IgnorePkg option in pacman.conf
                 - FTPAGENT setting in makepkg.conf
                 - Added --cleancache option to makepkg

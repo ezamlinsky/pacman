@@ -34,8 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.3.2
-LIBTAR_VERSION = 1.2.5
+PACVER = 2.4
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -44,11 +43,9 @@ MANSRC = $(TOPDIR)/doc/
 SCRDIR = $(TOPDIR)/scripts/
 
 CXX = @CC@
-CXXFLAGS += @CFLAGS@ -Wall -pedantic -fno-exceptions -fno-rtti \
-            -D_GNU_SOURCE -DPACVER=\"$(PACVER)\" -I. \
-						-Ilibtar-$(LIBTAR_VERSION)/lib -Ilibftp
-LDFLAGS += @LDFLAGS@ -static -Llibtar-$(LIBTAR_VERSION)/lib -Llibftp \
-           -lftp -ltar -lz
+CXXFLAGS += @CFLAGS@ -g -Wall -pedantic -fno-exceptions -fno-rtti \
+            -D_GNU_SOURCE -DPACVER=\"$(PACVER)\" -I. -Ilibftp
+LDFLAGS += @LDFLAGS@ -static -Llibftp -lftp -ltar -lz
 
 SRCS = $(SRCDIR)pacman.c \
 			 $(SRCDIR)db.c \
@@ -70,7 +67,7 @@ OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)md5.o \
 					$(OBJDIR)md5driver.o
 
-all: libtar ftplib pacman vercmp convertdb man
+all: ftplib pacman vercmp convertdb man
 
 pacman: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
@@ -96,12 +93,6 @@ dist: distclean
 ftplib:
 	(cd libftp; make libftp.a)
 
-libtar:
-	(tar xzf libtar-$(LIBTAR_VERSION).tar.gz; \
-	cd libtar-$(LIBTAR_VERSION); \
-	LDFLAGS="" ./configure --disable-encap --disable-encap-install; \
-	make;)
-
 install: pacman vercmp convertdb man
 	$(INSTALL) -D -m0755 pacman $(DESTDIR)$(BINDIR)/pacman
 	$(INSTALL) -D -m0755 vercmp $(DESTDIR)$(BINDIR)/vercmp
@@ -120,6 +111,5 @@ clean:
 
 distclean: clean
 	rm -f pacman convertdb vercmp
-	rm -rf libtar-$(LIBTAR_VERSION)
 
 # End of file

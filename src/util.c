@@ -37,6 +37,7 @@
 #include "pacsync.h"
 #include "pacman.h"
 
+/* command line options */
 extern char*          pmo_root;
 extern unsigned short pmo_op;
 extern unsigned short pmo_version;
@@ -53,13 +54,16 @@ extern unsigned short pmo_q_isfile;
 extern unsigned short pmo_q_info;
 extern unsigned short pmo_q_list;
 extern unsigned short pmo_q_owns;
+extern unsigned short pmo_r_cascade;
 extern unsigned short pmo_s_sync;
 extern unsigned short pmo_s_search;
 extern unsigned short pmo_s_clean;
 extern unsigned short pmo_s_upgrade;
 extern unsigned short pmo_s_downloadonly;
+/* configuration file options */
 extern PMList        *pmo_noupgrade;
 extern PMList        *pmo_ignorepkg;
+extern unsigned short pmo_nopassiveftp;
 
 extern PMList *pmc_syncs;
 extern PMList *pm_targets;
@@ -164,6 +168,7 @@ int parseargs(int op, int argc, char **argv)
 		{"sysupgrade", no_argument,       0, 'u'},
 		{"downloadonly", no_argument,     0, 'w'},
 		{"refresh",    no_argument,       0, 'y'},
+		{"cascade",    no_argument,       0, 'c'},
 		{0, 0, 0, 0}
 	};
 
@@ -196,7 +201,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'w': pmo_s_downloadonly = 1; break;
 			case 'y': pmo_s_sync = 1; break;
 			case 's': pmo_s_search = 1; break;
-			case 'c': pmo_s_clean = 1; break;
+			case 'c': pmo_s_clean = 1; pmo_r_cascade = 1; break;
 			case 'r': if(realpath(optarg, pmo_root) == NULL) {
 									perror("bad root path");
 									return(1);
@@ -249,10 +254,7 @@ int parseconfig(char *configfile)
 	while(fgets(line, PATH_MAX, fp)) {
 		linenum++;
 		trim(line);
-		if(strlen(line) == 0) {
-			continue;
-		}
-		if(line[0] == '#') {
+		if(strlen(line) == 0 || line[0] == '#') {
 			continue;
 		}
 		if(line[0] == '[' && line[strlen(line)-1] == ']') {
@@ -286,12 +288,21 @@ int parseconfig(char *configfile)
 			}
 			ptr = line;
 			key = strsep(&ptr, "=");
-			if(key == NULL || ptr == NULL) {
+			if(key == NULL) {
 				fprintf(stderr, "config: line %d: syntax error\n", linenum);
 				return(1);
+			}
+			trim(key);
+			key = strtoupper(key);
+			if(ptr == NULL) {
+				if(!strcmp(key, "NOPASSIVEFTP")) {
+					pmo_nopassiveftp = 1;
+					vprint("config: nopassiveftp\n");
+				} else {
+					fprintf(stderr, "config: line %d: syntax error\n", linenum);
+					return(1);			
+				}
 			} else {
-				trim(key);
-				key = strtoupper(key);
 				trim(ptr);
 				if(!strcmp(section, "options")) {
 					if(!strcmp(key, "NOUPGRADE")) {
@@ -517,6 +528,7 @@ void usage(int op, char *myname)
 			printf("options:\n");
 			printf("  -d, --nodeps        skip dependency checks\n");
 			printf("  -n, --nosave        remove configuration files as well\n");
+			printf("  -c, --cascade       remove packages and all packages that depend on them\n");
 		} else if(op == PM_UPGRADE) {
 			if(pmo_freshen) {
 				printf("usage:  %s {-F --freshen} [options] <file>\n", myname);

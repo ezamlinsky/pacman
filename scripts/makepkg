@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.3.2'
+myver='2.4'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -46,8 +46,7 @@ checkdeps() {
 }
 
 
-if [ "$1" = "--help" -o "$1" = "-h" ]; then
-  shift
+usage() {
   echo "makepkg version $myver"
   echo "usage: $0 [options] [build_script]"
   echo "options:"
@@ -58,13 +57,14 @@ if [ "$1" = "--help" -o "$1" = "-h" ]; then
   echo "  -d, --nodeps     Skip all dependency checks"
   echo "  -i, --install    Install package after successful build"
   echo "  -f, --force      Overwrite existing package"
+  echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
   echo "  -h, --help       This help"
   echo
   echo "  if build_script is not specified, makepkg will look for a PKGBUILD"
   echo "  file in the current directory."
   echo
   exit 0
-fi
+}
 
 # Options
 CLEANUP=0
@@ -74,35 +74,54 @@ DEP_BIN=0
 DEP_SRC=0
 NODEPS=0
 FORCE=0
+PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
 
-for arg in $*; do
-  case $arg in
-    -c|--clean)
-      CLEANUP=1
+while [ "$#" -ne "0" ]; do
+  case $1 in
+    --clean)      CLEANUP=1    ;;
+    --cleancache) CLEANCACHE=1 ;;
+    --syncdeps)   DEP_BIN=1    ;;
+    --builddeps)  DEP_SRC=1    ;;
+    --nodeps)     NODEPS=1     ;;
+    --install)    INSTALL=1    ;;
+    --force)      FORCE=1      ;;
+    --*)
+      usage
+			exit 1
       ;;
-    -C|--cleancache)
-      CLEANCACHE=1
-      ;;
-    -s|--syncdeps)
-      DEP_BIN=1
-      ;;
-    -b|--builddeps)
-      DEP_SRC=1
-      ;;
-    -d|--nodeps)
-      NODEPS=1
-      ;;
-    -i|--install)
-      INSTALL=1
-      ;;
-    -f|--force)
-      FORCE=1
+    -*)
+      while getopts "cCsbdifw:-" opt; do
+        case $opt in
+        c) CLEANUP=1 ;;
+        C) CLEANCACHE=1 ;;
+        s) DEP_BIN=1 ;;
+        b) DEP_SRC=1 ;;
+        d) NODEPS=1 ;;
+        i) INSTALL=1 ;;
+        f) FORCE=1 ;;
+        w)
+          PKGDEST=$OPTARG
+          shift
+          ;;
+        -)
+          OPTIND=0
+          break
+          ;;
+        *)
+          usage
+          ;;
+        esac
+      done
       ;;
     *)
-      BUILDSCRIPT=$arg
+      if [ "$#" -ne "1" ]; then
+        usage
+      fi
+      BUILDSCRIPT=$1
       ;;
   esac
+  shift
 done
 
 if [ "$CLEANCACHE" = "1" ]; then
@@ -132,7 +151,7 @@ if [ `echo $pkgrel | grep '-'` ]; then
   exit 1
 fi
 
-if [ -f ${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" ]; then
+if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" ]; then
   msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
   exit 1
 fi
@@ -170,7 +189,7 @@ if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
         for pkgdir in $candidates; do
           if [ -f $pkgdir/PKGBUILD ]; then
             cd $pkgdir
-            makepkg -i -c -b
+            makepkg -i -c -b -w $PKGDEST
             if [ $? -eq 0 ]; then
               success=1
               break
@@ -356,9 +375,9 @@ fi
 msg "==> Compressing package..."
 cd $startdir/pkg
 if [ -f $startdir/pkg/._install ]; then
-  tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO ._install * >../filelist
+  tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO ._install * >../filelist
 else
-  tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO * >../filelist
+  tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO * >../filelist
 fi
 
 cd $startdir
@@ -372,7 +391,7 @@ msg "==> Finished making $pkgname  ($d)"
 
 if [ "$INSTALL" = "1" ]; then
   msg "==> Running pacman --upgrade"
-  pacman --upgrade $pkgname-$pkgver-$pkgrel.pkg.tar.gz
+  pacman --upgrade $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz
 fi
 
 exit 0

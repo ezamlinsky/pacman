@@ -1,8 +1,8 @@
-.TH makepkg 8 "March 3, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "April 10, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
-\fBmakepkg\fP
+\fBmakepkg [options] [build_script]\fP
 .SH DESCRIPTION
 \fBmakepkg\fP will build packages for you.  All it needs is
 a build-capable linux platform, wget, and some build scripts.  The advantage
@@ -13,8 +13,8 @@ configure the buildtime settings, build the package, install the package
 into a temporary root, make customizations, generate meta-info, and package
 the whole thing up for \fBpacman\fP to use.
 
-\fBmakeworld\fP can be used to rebuild an entire package group, or the
-entire build tree.
+\fBmakeworld\fP can be used to rebuild an entire package group or the
+entire build tree.  See \fBmakeworld --help\fP for syntax.
 .SH BUILD PROCESS (or How To Build Your Own Packages)
 Start in an isolated directory (ie, it's not used for anything other
 than building this package).  The build script should be called PKGBUILD
@@ -229,6 +229,9 @@ by wget.
 .B "\-c, \-\-clean"
 Clean up leftover work files/directories after a successful build.
 .TP
+.B "\-C, \-\-cleancache"
+Removes all source files from the cache directory to free up diskspace.
+.TP
 .B "\-i, \-\-install"
 Install/Upgrade the package after a successful build.
 .TP
@@ -254,6 +257,10 @@ process if all of the dependencies aren't installed.
 \fBmakepkg\fP will not build a package if a \fIpkgname-pkgver-pkgrel.pkg.tar.gz\fP
 file already exists in the build directory.  You can override this behaviour with
 the \fB--force\fP switch.
+.TP
+.B "\-w <destdir>"
+Write the resulting package file to the directory \fI<destdir>\fP instead of the
+current working directory.
 
 .SH CONFIGURATION
 Configuration options are stored in \fI/etc/makepkg.conf\fP.  This file is parsed

@@ -53,7 +53,7 @@ char* MDFile(char *);
  *
  */
 
-/* pacman options */
+/* command line options */
 char          *pmo_root       = NULL;
 unsigned short pmo_op         = PM_MAIN;
 unsigned short pmo_verbose    = 0;
@@ -70,13 +70,16 @@ unsigned short pmo_q_isfile   = 0;
 unsigned short pmo_q_info     = 0;
 unsigned short pmo_q_list     = 0;
 unsigned short pmo_q_owns     = 0;
+unsigned short pmo_r_cascade  = 0;
 unsigned short pmo_s_upgrade  = 0;
 unsigned short pmo_s_downloadonly = 0;
 unsigned short pmo_s_sync     = 0;
 unsigned short pmo_s_search   = 0;
 unsigned short pmo_s_clean    = 0;
-PMList        *pmo_noupgrade  = NULL;
-PMList        *pmo_ignorepkg  = NULL;
+/* configuration file options */
+PMList        *pmo_noupgrade    = NULL;
+PMList        *pmo_ignorepkg    = NULL;
+unsigned short pmo_nopassiveftp = 0;
 
 
 /* list of sync_t structs for sync locations */
@@ -776,7 +779,9 @@ int pacman_add(pacdb_t *db, PMList *targets)
 	}
 	printf("done.\n");
 
-	if(!pmo_nodeps) {
+	/* No need to check deps if pacman_add was called during a sync:
+	 * it is already done in pacman_sync. */
+	if(!pmo_nodeps && pmo_op != PM_SYNC) {
 		vprint("checking dependencies...\n");
 		lp = checkdeps(db, (pmo_upgrade ? PM_UPGRADE : PM_ADD), alltargs);
 		if(lp) {
@@ -1052,13 +1057,25 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		} /*else*/ {
 			time_t t = time(NULL);
 
-			/* if this is an upgrade then propagate the old package's requiredby list over to
-			 * the new package */
-			if(pmo_upgrade && oldpkg) {
-				list_free(info->requiredby);
-				info->requiredby = NULL;
-				for(lp = oldpkg->requiredby; lp; lp = lp->next) {
-					info->requiredby = list_add(info->requiredby, strdup(lp->data));
+			/* Update the requiredby field by scaning the whole database 
+			 * looking for packages depending on the package to add */
+			for(lp = pm_packages; lp; lp = lp->next) {
+				pkginfo_t *tmpp = NULL;
+				PMList *tmppm = NULL;
+
+				tmpp = db_scan(db, ((pkginfo_t*)lp->data)->name, INFRQ_DEPENDS);
+				if (tmpp == NULL) {
+					continue;
+				}
+				for(tmppm = tmpp->depends; tmppm; tmppm = tmppm->next) {
+					depend_t depend;
+					if(splitdep(tmppm->data, &depend)) {
+						continue;
+					}
+					if(tmppm->data && !strcmp(depend.name, info->name)) {
+						info->requiredby = list_add(info->requiredby, strdup(tmpp->name));
+						continue;
+					}
 				}
 			}
 
@@ -1156,13 +1173,50 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		vprint("Checking dependencies...\n");
 		lp = checkdeps(db, PM_REMOVE, alltargs);
 		if(lp) {
-			fprintf(stderr, "error: this will break the following dependencies:\n");
-			for(j = lp; j; j = j->next) {
-				depmissing_t* miss = (depmissing_t*)j->data;
-				printf("  %s: is required by %s\n", miss->target, miss->depend.name);
+			if(pmo_r_cascade) {
+				int cols;
+				while(lp) {
+					for(j = lp; j; j = j->next) {
+						depmissing_t* miss = (depmissing_t*)j->data;
+						miss = (depmissing_t*)j->data;
+						info = db_scan(db, miss->depend.name, INFRQ_ALL);
+						list_add(alltargs, info);
+					}
+					list_free(lp);
+					lp = checkdeps(db, PM_REMOVE, alltargs);
+				}
+				/* list targets */
+				fprintf(stderr, "\nTargets: ");
+				cols = 9;
+				for(j = alltargs; j; j = j->next) {
+					char t[PATH_MAX];
+					int len;
+					snprintf(t, PATH_MAX, "%s ", (char*)j->data);
+					len = strlen(t);
+					if(len+cols > 78) {
+						cols = 9;
+						fprintf(stderr, "\n%9s", " ");
+					}
+					fprintf(stderr, "%s", t);
+					cols += len;
+				}
+				printf("\n");
+				/* get confirmation */
+				if(yesno("\nDo you want to remove these packages? [Y/n] ") == 0) {
+					list_free(alltargs);
+					list_free(lp);
+					return(1);
+				}
+			} else {
+				fprintf(stderr, "error: this will break the following dependencies:\n");
+				for(j = lp; j; j = j->next) {
+					depmissing_t* miss = (depmissing_t*)j->data;
+					printf("  %s: is required by %s\n", miss->target, miss->depend.name);
+				}
+				list_free(alltargs);
+				list_free(lp);
+				return(1);
 			}
-			list_free(lp);
-			return(1);
 		}
 		list_free(lp);
 	}
@@ -1286,6 +1340,8 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		}
 	}
 
+	list_free(alltargs);
+
 	/* run ldconfig if it exists */
 	snprintf(line, PATH_MAX, "%setc/ld.so.conf", pmo_root);
 	if(!stat(line, &buf)) {
@@ -1321,7 +1377,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 		/* output info for a .tar.gz package */
 		if(pmo_q_isfile) {
 			if(package == NULL) {
-				fprintf(stderr, "error: no package file was specified (-p)\n");
+				fprintf(stderr, "error: no package file was specified for --file\n");
 				return(1);
 			}
 			info = load_pkg(package, pmo_q_info);
@@ -1329,16 +1385,16 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				fprintf(stderr, "error: %s is not a package\n", package);
 				return(1);
 			}
-			if(pmo_q_list) {
+			if(pmo_q_info) {
+				printf("\n");
+			} else if(pmo_q_list) {
 				for(lp = info->files; lp; lp = lp->next) {
 					if(strcmp(lp->data, ".PKGINFO")) {
-						printf("%s\n", (char*)lp->data);
+						printf("%s %s\n", info->name, (char*)lp->data);
 					}
 				}
-			} else {
-				if(!pmo_q_info) {
-					printf("%s %s\n", info->name, info->version);
-				}
+			} else if(!pmo_q_info) {
+				printf("%s %s\n", info->name, info->version);
 			}
 			continue;
 		}
@@ -1357,7 +1413,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 					for(lp = info->files; lp; lp = lp->next) {
 						sprintf(path, "%s%s", pmo_root, (char*)lp->data);
 						if(!strcmp(path, rpath)) {
-							printf("%s %s\n", info->name, info->version);
+							printf("%s is owned by %s %s\n", package, info->name, info->version);
 							gotcha = 1;
 						}
 					}
@@ -1365,7 +1421,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				if(!gotcha) {
 					fprintf(stderr, "No package owns %s\n", package);
 				}
-				return(2);
+				continue;
 			} else {
 				fprintf(stderr, "error: %s is not a file.\n", package);
 				return(1);
@@ -1384,7 +1440,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 						return(1);
 					}
 					for(q = info->files; q; q = q->next) {
-						printf("%s%s\n", pmo_root, (char*)q->data);
+						printf("%s %s%s\n", info->name, pmo_root, (char*)q->data);
 					}
 				} else {
 					printf("%s %s\n", tmpp->name, tmpp->version);
@@ -1392,16 +1448,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 			}
 		} else {
 			/* find a target */
-			if(pmo_q_list) {
-				info = db_scan(db, package, INFRQ_DESC | INFRQ_FILES);
-				if(info == NULL) {
-					fprintf(stderr, "Package \"%s\" was not found.\n", package);
-					return(2);
-				}
-				for(lp = info->files; lp; lp = lp->next) {
-					printf("%s%s\n", pmo_root, (char*)lp->data);
-				}
-			} else if(pmo_q_info) {
+			if(pmo_q_info) {
 				int cols;
 
 				info = db_scan(db, package, INFRQ_DESC | INFRQ_DEPENDS);
@@ -1467,6 +1514,15 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				}
 				printf("Description   : %s\n", info->desc);
 				printf("\n");
+			} else if(pmo_q_list) {
+				info = db_scan(db, package, INFRQ_DESC | INFRQ_FILES);
+				if(info == NULL) {
+					fprintf(stderr, "Package \"%s\" was not found.\n", package);
+					return(2);
+				}
+				for(lp = info->files; lp; lp = lp->next) {
+					printf("%s %s%s\n", info->name, pmo_root, (char*)lp->data);
+				}
 			} else {
 				info = db_scan(db, package, INFRQ_DESC);
 				if(info == NULL) {
@@ -1833,20 +1889,20 @@ int splitdep(char *depstr, depend_t *depend)
 	} else {
 		/* no version specified - accept any */
 		depend->mod = DEP_ANY;
-		strcpy(depend->name, str);
-		strcpy(depend->version, "");
+		strncpy(depend->name, str, sizeof(depend->name));
+		strncpy(depend->version, "", sizeof(depend->version));
 	}
 
 	if(ptr == NULL) {
 		return(0);
 	}
 	*ptr = '\0';
-	strcpy(depend->name, str);
+	strncpy(depend->name, str, sizeof(depend->name));
 	ptr++;
 	if(depend->mod != DEP_EQ) {
 		ptr++;
 	}
-	strcpy(depend->version, ptr);
+	strncpy(depend->version, ptr, sizeof(depend->version));
 	FREE(str);
 	return(0);
 }

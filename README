@@ -2,6 +2,7 @@
                pacman - Package Management Utility
 
                by Judd Vinet <jvinet@zeroflux.org>
+               <http://www.archlinux.org/pacman/>
 
 DESCRIPTION:
 ------------
@@ -37,7 +38,7 @@ If your man files are located in a directory other than /usr/man, you may
 want to edit Makefile and modify the MANDIR line accordingly.
 
 Note:  Since pacman is compiled statically, you will need the static libraries
-       for glibc and zlib.
+       for libtar, glibc and zlib.
 
 
 BUGS:

@@ -124,16 +124,13 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 
 	while(!feof(fp)) {
 		fgets(line, PATH_MAX, fp);
-		if(output) {
-			printf("%s", line);
-		}
 		linenum++;
 		trim(line);
-		if(line[0] == '#') {
+		if(strlen(line) == 0 || line[0] == '#') {
 			continue;
 		}
-		if(strlen(line) == 0) {
-			continue;
+		if(output) {
+			printf("%s\n", line);
 		}
 		ptr = line;
 		key = strsep(&ptr, "=");
