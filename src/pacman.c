@@ -1081,7 +1081,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		if(allgood && final && final->data) {
 			if(pmo_s_downloadonly) {
 				if(pmo_noconfirm) {
-					printf("\nBeginning upgrade process...\n");
+					printf("\nBeginning download...\n");
+					confirm = 1;
 				} else {
 					confirm = yesno("\nProceed with download? [Y/n] ");
 				}
@@ -1091,7 +1092,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					confirm = 1;
 				} else {
 					if(pmo_noconfirm) {
-						printf("\nBeginning download...\n");
+						printf("\nBeginning upgrade process...\n");
+						confirm = 1;
 					} else {
 						confirm = yesno("\nProceed with upgrade? [Y/n] ");
 					}

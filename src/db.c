@@ -621,7 +621,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 				/* Make sure that the supposedly-conflicting file is not actually just
 				 * a symlink that points to a path that used to exist in the package.
 				 */
-/* XXX: Chu */
 				/* Check if any part of the conflicting file's path is a symlink */
 				if(dbpkg && !ok) {
 					if(!sym) MALLOC(sym, PATH_MAX);
@@ -636,12 +635,14 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 							memset(symlink, 0, PATH_MAX);
 							readlink(sym, symlink, PATH_MAX);
 							if(symlink[0] != '/') {
-								char *temp = NULL;
-								MALLOC(temp, PATH_MAX);
+								char *temp = strdup(sym);
 								strncpy(tempsym, symlink, PATH_MAX);
-								strncpy(temp, sym, PATH_MAX);
 								snprintf(symlink, PATH_MAX, "%s/%s", dirname(temp), tempsym);
 								FREE(temp);
+							}
+							/* If it's a directory, tack on a '/' */
+							if(!stat(symlink, &buf) && S_ISDIR(buf.st_mode)) {
+								strcat(symlink, "/");
 							}
 							if(strstr(symlink, root) == symlink) {
 								strncpy(tempsym, symlink+strlen(root), PATH_MAX-strlen(root));
@@ -649,7 +650,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 								if(is_in(tempsym, dbpkg->files)) {
 									/* See if the modified path used to */
 									snprintf(tempsym, PATH_MAX, "%s%s", symlink+strlen(root), path+strlen(sym)+strlen(root));
-									printf("check1: is_in(%s, %s->files)\n", tempsym, p->name);
 									if(is_in(tempsym, dbpkg->files)) {
 										ok = 1;
 										break;
@@ -662,7 +662,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 								if(is_in(tempsym, dbpkg->files)) {
 									/* See if the modified path used to */
 									snprintf(tempsym, PATH_MAX, "%s%s", symlink+strlen(root), path+strlen(sym)+strlen(root));
-									printf("check2: is_in(%s, %s->files)\n", tempsym, p->name);
 									if(is_in(tempsym, dbpkg->files)) {
 										ok = 1;
 										break;
@@ -699,7 +698,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 							{
 								/* Replace one with the other and check if it really did exist in the old package */
 								snprintf(tempsym, PATH_MAX, "%s%s", symlink, path+strlen(symlink));
-								printf("check3: !strncmp(%s, %s)\n", tempsym, path);
 								if(!strncmp(tempsym, path, PATH_MAX)) {
 									ok = 1;
 									break;
@@ -718,14 +716,13 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 							pkginfo_t *dbpkg2 = NULL;
 							dbpkg2 = db_scan(db, p1->name, INFRQ_DESC | INFRQ_FILES);
 							/* If it used to exist in there, but doesn't anymore */
-							if(!is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
+							if(dbpkg2 && !is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
 								ok = 1;
 							}
 							FREE(dbpkg2);
 						}
 					}
 				}
-/* XXX: Chu */
 				if(!ok) {
 					MALLOC(str, 512);
 					snprintf(str, 512, "%s: exists in filesystem", path);

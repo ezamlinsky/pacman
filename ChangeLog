@@ -1,5 +1,7 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.8.2         - Fixed a segfault bug in file-conflict checks
+              - Made --confirm actually work.  Go me.
 2.8.1         - Added a HoldPkg option in pacman.conf, for the more
                 exploratory users who run things like "pacman -R pacman".  It
                 will ask for confirmation before removing any packages listed
