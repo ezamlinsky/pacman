@@ -75,7 +75,7 @@ typedef struct __depmissing_t {
 	depend_t depend;
 } depmissing_t;
 
-pkginfo_t* load_pkg(char *pkgfile, unsigned short output);
+pkginfo_t* load_pkg(char *pkgfile);
 int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output);
 pkginfo_t* newpkg();
 void freepkg(pkginfo_t *pkg);
@@ -83,6 +83,7 @@ int pkgcmp(const void *p1, const void *p2);
 int is_pkgin(pkginfo_t *needle, PMList *haystack);
 void dump_pkg_full(pkginfo_t *info);
 void dump_pkg_sync(pkginfo_t *info);
+int split_pkgname(char *pkg, char **name, char **version);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

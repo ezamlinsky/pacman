@@ -71,7 +71,7 @@ PMList* db_loadpkgs(pacdb_t *db)
 	PMList *cache = NULL;
 
 	rewinddir(db->dir);
-	while((info = db_scan(db, NULL, INFRQ_DESC)) != NULL) {
+	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_DEPENDS)) != NULL) {
 		/* add to the collective */
 		/* we load all package names into a linear array first, so qsort can handle it */
 		if(arr == NULL) {
@@ -110,12 +110,12 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 	if(target != NULL) {
 		/* search for a specific package (by name only) */
 		rewinddir(db->dir);
-		/* read the . and .. first */
-		ent = readdir(db->dir);
-		ent = readdir(db->dir);
-
 		ent = readdir(db->dir);
 		while(!found && ent != NULL) {
+			if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+				ent = readdir(db->dir);
+				continue;
+			}
 			strncpy(name, ent->d_name, 255);
 			/* truncate the string at the second-to-last hyphen, */
 			/* which will give us the package name */
@@ -137,14 +137,14 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 	} else {
 		/* normal iteration */
 		ent = readdir(db->dir);
-		if(ent && !strcmp(ent->d_name, ".")) {
-			ent = readdir(db->dir);
-		}
-		if(ent && !strcmp(ent->d_name, "..")) {
-			ent = readdir(db->dir);
-		}
 		if(ent == NULL) {
 			return(NULL);
+		}
+		if(!strcmp(ent->d_name, ".")) {
+			ent = readdir(db->dir);
+		}
+		if(!strcmp(ent->d_name, "..")) {
+			ent = readdir(db->dir);
 		}
 	}
 	return(db_read(db, ent, inforeq));
@@ -452,6 +452,65 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 
 	umask(oldmask);
 	return(0);
+}
+
+void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles)
+{
+	PMList *i, *j;
+	if(needles == NULL || needles->data == NULL) {
+		return;
+	}
+
+	for(i = needles; i; i = i->next) {
+		char *targ = strdup(i->data);
+		strtoupper(targ);
+		for(j = cache; j; j = j->next) {
+			pkginfo_t *pkg = (pkginfo_t*)j->data;
+			char *haystack;
+			int match = 0;
+			/* check name */
+			haystack = strdup(pkg->name);
+			strtoupper(haystack);
+			if(strstr(haystack, targ)) {
+				match = 1;
+			}
+			FREE(haystack);
+
+			/* check description */
+			if(!match) {
+				haystack = strdup(pkg->desc);
+				strtoupper(haystack);
+				if(strstr(haystack, targ)) {
+					match = 1;
+				}
+				FREE(haystack);
+			}
+
+			/* check provides */
+			if(!match) {
+				PMList *m;
+				pkginfo_t *info = db_scan(db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
+				if(info != NULL) {
+					for(m = info->provides; m; m = m->next) {
+						haystack = strdup(m->data);
+						strtoupper(haystack);
+						if(strstr(haystack, targ)) {
+							match = 1;
+						}
+						FREE(haystack);
+					}
+					FREEPKG(info);
+				}
+			}
+
+			if(match) {
+				printf("%s/%s %s\n    ", treename, pkg->name, pkg->version);
+				indentprint(pkg->desc, 4);
+				printf("\n");
+			}
+		}
+		FREE(targ);
+	}
 }
 
 

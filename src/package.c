@@ -30,7 +30,7 @@
 #include "util.h"
 #include "package.h"
 
-pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
+pkginfo_t* load_pkg(char *pkgfile)
 {
 	char *expath;
 	int i;
@@ -66,7 +66,7 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 			mkstemp(descfile);
 			tar_extract_file(tar, descfile);
 			/* parse the info file */
-			parse_descfile(descfile, info, &backup, output);
+			parse_descfile(descfile, info, &backup, 0);
 			if(!strlen(info->name)) {
 				fprintf(stderr, "load_pkg: missing package name in %s.\n", pkgfile);
 				FREEPKG(info);
@@ -377,6 +377,35 @@ void dump_pkg_sync(pkginfo_t *info)
 	printf("Description    : ");
 	indentprint(info->desc, 17);
 	printf("\nMD5 Sum        : %s\n", info->md5sum);
+}
+
+int split_pkgname(char *pkg, char **name, char **version)
+{
+	char tmp[256];
+	char *p, *q;
+
+	strncpy(tmp, pkg, 256);
+
+	p = strstr(tmp, ".pkg.tar.gz");
+	if(p == NULL) {
+		return(-1);
+	}
+	*p = 0;
+
+	for(q = --p; *q && *q != '-'; q--);
+	if(*q != '-' || q == tmp) {
+		return(-1);
+	}
+	for(p = --q; *p && *p != '-'; p--);
+	if(*p != '-' || p == tmp) {
+		return(-1);
+	}
+	*version = strdup(p+1);
+	*p = 0;
+
+	*name = strdup(tmp);
+
+	return(0);
 }
 
 /* vim: set ts=2 sw=2 noet: */

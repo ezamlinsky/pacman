@@ -41,6 +41,7 @@ PMList* db_loadpkgs(pacdb_t *db);
 pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq);
 pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq);
 int db_write(pacdb_t *db, pkginfo_t *info);
+void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles);
 PMList* db_find_conflicts(pacdb_t *db, PMList* targets, char *root);
 PMList *whatprovides(pacdb_t *db, char* package);
 PMList *find_groups(pacdb_t *db);

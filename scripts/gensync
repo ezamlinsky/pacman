@@ -20,15 +20,15 @@
 #   USA.
 #
 
-myver='2.7.7'
+myver='2.7.8'
 
 usage() {
   echo "gensync $myver"
   echo "usage: $0 <root> <destfile> [package_directory]"
 	echo
 	echo "gensync will generate a sync database by reading all PKGBUILD files"
-	echo "from <root>.  gensync builds the database in /tmp/.gensync and then"
-	echo "compresses it to <destfile>."
+	echo "from <root>.  gensync builds the database in a temporary directory"
+	echo "and then compresses it to <destfile>."
 	echo
 	echo "gensync will calculate md5sums of packages in <destdir>, unless an"
 	echo "alternate [package_directory] is specified."
@@ -66,7 +66,7 @@ db_write_entry()
 	unset pkgname pkgver pkgrel pkgdesc
 	unset groups replaces provides depends conflicts
 	source $1 || return 1
-	cd /tmp/.gensync
+	cd $gstmpdir
 	mkdir $pkgname-$pkgver-$pkgrel
 	cd $pkgname-$pkgver-$pkgrel
 	# desc
@@ -143,43 +143,40 @@ pkgdir=
 if [ "$3" != "" ]; then
 	pkgdir=$3
 fi
-
-rm -rf /tmp/.gensync || exit 1
-mkdir -p /tmp/.gensync || exit 1
+gstmpdir=$(mktemp -dt gensync.XXXXXXXXXX) || exit 1
 
 if [ ! -d $rootdir ]; then
 	echo "gensync: invalid root dir: $rootdir" >&2
-	rm -rf /tmp/.gensync
+	rm -rf $gstmpdir
 	exit 1
 fi
 
 echo "gensync: building database entries, generating md5sums..." >&2
 cd `dirname $2`
-#for category in `find $rootdir/* -type d -maxdepth 0`; do
 for file in `find $rootdir/* -name PKGBUILD`; do
 	pkgmd5sum=`get_md5checksum $file $pkgdir`
 	if [ -z $pkgmd5sum ]; then
 		echo "gensync: error generating checksum for $file" >&2
-		rm -rf /tmp/.gensync
+		rm -rf $gstmpdir
 		exit 1
 	fi
 	db_write_entry $file
 	if [ $? -gt 0 ]; then
 		echo "gensync: error writing entry for $file" >&2
-		rm -rf /tmp/.gensync
+		rm -rf $gstmpdir
 		exit 1
 	fi
 done
 
 echo "gensync: compressing to $destfile..." >&2
-cd /tmp/.gensync
+cd $gstmpdir
 tar c * | gzip -9 >$destfile
 if [ $? -gt 0 ]; then
 	echo "gensync: error writing to $destfile" >&2
-	rm -rf /tmp/.gensync
+	rm -rf $gstmpdir
 	exit 1
 fi
 
-rm -rf /tmp/.gensync
+rm -rf $gstmpdir
 
 exit 0

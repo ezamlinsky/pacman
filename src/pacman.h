@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.7.7"
+#define PACVER    "2.7.8"
 #endif
 
 #ifndef PKGDIR
@@ -31,6 +31,10 @@
 
 #ifndef PACCONF
 #define PACCONF   "etc/pacman.conf"
+#endif
+
+#ifndef CACHEDIR
+#define CACHEDIR "var/cache/pacman/pkg"
 #endif
 
 /* Operations */

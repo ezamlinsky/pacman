@@ -1562,6 +1562,8 @@ GLOBALREF int HttpGet(const char *host, const char *outputfile, const char *path
  */
 GLOBALREF void HttpQuit(netbuf *nControl)
 {
-	net_close(nControl->handle);
-	free(nControl);
+	if(nControl) {
+		net_close(nControl->handle);
+		free(nControl);
+	}
 }

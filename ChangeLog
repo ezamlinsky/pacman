@@ -1,5 +1,25 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.8         - added post_remove scriptlet support
+              - added -Qs option (bug #854)
+              - a provisio does not imply conflict, to make a provisio target
+                conflict with anything else that provides the same thing, you
+                can now do this by specifying the provisio target as both a
+                provides and a conflict, eg:
+                   conflicts=('x-server')
+                   provides=('x-server')
+              - cleaned up the download progress bar a bit
+              - added %o parameter to XferCommand so wget can resume properly
+              - fixed a segfault in downloadfiles() (bug #787)
+              - patches from Oliver Burnett-Hall
+                - gensync uses a better temp dir (bug #774)
+                - PKGDEST can be set in makepkg.conf (bug #783)
+              - patches from Aurelien Foret
+                - segfault fix, couple memory leaks
+                - more sanity checks in "provides" searches
+                - fixed a little display bug in the progress bar
+                - made -Qip look like -Qi
+                - -Sc now removes OLD packages from cache, use -Scc for all
 2.7.7         - added an XferCommand directive that will make pacman use an
                 external download utility like wget
               - added a license field to package meta-data

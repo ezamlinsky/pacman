@@ -1,4 +1,4 @@
-.TH pacman 8 "April 14, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "April 29, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -101,9 +101,11 @@ Output more status and error messages.
 .SH SYNC OPTIONS
 .TP
 .B "\-c, \-\-clean"
-Remove packages from the cache.  When pacman downloads packages,
+Remove old packages from the cache.  When pacman downloads packages,
 it saves them in \fI/var/cache/pacman/pkg\fP.  If you need to free up
 diskspace, you can remove these packages by using the --clean option.
+Using one --clean (or -c) switch will only remove \fIold\fP packages.
+Use it twice to remove \fIall\fP packages from the cache.
 .TP
 .B "\-g, \-\-groups"
 Display all the members for each package group specified.  If no group
@@ -163,6 +165,10 @@ Search for the package that owns <file>.
 Tells pacman that the package supplied on the command line is a
 file, not an entry in the database.  Pacman will decompress the
 file and query it.  This is useful with \fB--info\fP and \fB--list\fP.
+.TP
+.B "\-s, \-\-search <string>"
+This will search each locally-installed package for names or descriptions
+that contains <string>.
 .SH HANDLING CONFIG FILES
 pacman uses the same logic as rpm to determine action against files
 that are designated to be backed up.  During an upgrade, it uses 3
@@ -230,8 +236,11 @@ If set, pacman will use this proxy server for all ftp/http transfers.
 .TP
 .B "XferCommand = /path/to/command %u"
 If set, pacman will use this external program to download all remote files.
-All instances of \fB%u\fP will be replaced with the URL to be downloaded.
-This is useful for users who experience problems with pacman's built-in http/ftp
+All instances of \fB%u\fP will be replaced with the URL to be downloaded.  If
+present, instances of \fB%o\fP will be replaced with the local filename, plus a
+".part" extension, which allows programs like wget to do file resumes properly.
+
+This option is useful for users who experience problems with pacman's built-in http/ftp
 support, or need the more advanced proxy support that comes with utilities like
 wget.
 .TP

@@ -20,8 +20,9 @@
 #   USA.
 #
 
-myver='2.7.7'
+myver='2.7.8'
 startdir=`pwd`
+PKGDEST=$startdir
 USE_COLOR="n"
 
 # source Arch's abs.conf if it's present
@@ -208,7 +209,6 @@ FORCE=0
 NOEXTRACT=0
 NOSTRIP=0
 RMDEPS=0
-PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
 
 ARGLIST=$@
@@ -275,7 +275,11 @@ while [ "$#" -ne "0" ]; do
 done
 
 # convert a (possibly) relative path to absolute
-cd $PKGDEST
+cd $PKGDEST 2>/dev/null
+if [ $? -ne 0 ]; then
+	error "Package destination directory does not exist or permission denied."
+	exit 1
+fi
 PKGDEST=`pwd`
 cd -
 

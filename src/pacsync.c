@@ -182,6 +182,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 
 			if(pmo_xfercommand) {
 				int ret;
+				int usepart = 0;
 				char *ptr1, *ptr2;
 				char origCmd[PATH_MAX];
 				char parsedCmd[PATH_MAX] = "";
@@ -190,8 +191,21 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 				/* build the full download url */
 				snprintf(url, PATH_MAX, "%s://%s%s%s", server->protocol, server->server,
 						server->path, fn);
-				/* replace all occurrences of %u with the download URL */
+				/* replace all occurrences of %o with fn.part */
 				strncpy(origCmd, pmo_xfercommand, sizeof(origCmd));
+				ptr1 = origCmd;
+				while((ptr2 = strstr(ptr1, "%o"))) {
+					usepart = 1;
+					ptr2[0] = '\0';
+					strcat(parsedCmd, ptr1);
+					strcat(parsedCmd, fn);
+					strcat(parsedCmd, ".part");
+					ptr1 = ptr2 + 2;
+				}
+				strcat(parsedCmd, ptr1);
+				/* replace all occurrences of %u with the download URL */
+				strncpy(origCmd, parsedCmd, sizeof(origCmd));
+				parsedCmd[0] = '\0';
 				ptr1 = origCmd;
 				while((ptr2 = strstr(ptr1, "%u"))) {
 					ptr2[0] = '\0';
@@ -214,11 +228,16 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 					return(1);
 				} else if(ret != 0) {
 					/* download failed */
-					vprint("XferCommand command returned non-zero status code (%d)\n",
-							WEXITSTATUS(ret));
+					vprint("XferCommand command returned non-zero status code (%d)\n", ret);
 				} else {
 					/* download was successful */
 					complete = list_add(complete, fn);
+					if(usepart) {
+						char fnpart[PATH_MAX];
+						/* rename "output.part" file to "output" file */
+						snprintf(fnpart, PATH_MAX, "%s.part", fn);
+						rename(fnpart, fn);
+					}
 				}
 				chdir(cwd);
 			} else {
@@ -337,7 +356,7 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 						for(j = strlen(out); j < maxcols-64; j++) {
 							printf(" ");
 						}
-						fputs("] 100% |   LOCAL |", stdout);
+						fputs("] 100%    LOCAL ", stdout);
 					} else {
 						log_progress(control, fsz-offset, &fsz);
 					}
@@ -351,9 +370,9 @@ int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 			}
 		}
 		if(!pmo_xfercommand) {
-			if(!strcmp(server->protocol, "ftp")) {
+			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
 				FtpQuit(control);
-			} else if(!strcmp(server->protocol, "http")) {
+			} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
 				HttpQuit(control);
 			}
 		}
@@ -408,9 +427,9 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 		(i < cur) ? printf("#") : printf(" ");
 	}
 	if(rate > 1000) {
-		printf("] %3d%%| %6dK| %6.0fK/s| %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
+		printf("] %3d%%  %6dK  %6.0fK/s  %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
 	} else {
-		printf("] %3d%%| %6dK| %6.1fK/s| %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
+		printf("] %3d%%  %6dK  %6.1fK/s  %02d:%02d:%02d\r", pct, ((xfered+offset) / 1024), rate, eta_h, eta_m, eta_s);
 	}
 	fflush(stdout);
 	return(1);

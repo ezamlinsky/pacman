@@ -35,6 +35,7 @@
 #include <zlib.h>
 #include <syslog.h>
 #include <libtar.h>
+#include <dirent.h>
 /* pacman */
 #include "rpmvercmp.h"
 #include "md5.h"
@@ -68,6 +69,7 @@ unsigned short pmo_q_info     = 0;
 unsigned short pmo_q_list     = 0;
 unsigned short pmo_q_orphans  = 0;
 unsigned short pmo_q_owns     = 0;
+unsigned short pmo_q_search   = 0;
 unsigned short pmo_r_cascade  = 0;
 unsigned short pmo_r_dbonly   = 0;
 unsigned short pmo_r_recurse  = 0;
@@ -322,21 +324,96 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	}
 
 	if(pmo_s_clean) {
-		mode_t oldmask;
+		if(pmo_s_clean == 1) {
+			/* incomplete cleanup: we keep latest packages and partial downloads */
+			DIR *dir;
+			struct dirent *ent;
+			PMList *cache = NULL;
+			PMList *clean = NULL;
+			PMList *i, *j;
 
-		printf("removing packages from cache... ");
-		if(rmrf("/var/cache/pacman/pkg")) {
-			fprintf(stderr, "error: could not remove cache directory: %s\n", strerror(errno));
-			return(1);
+			printf("removing old packages from cache... ");
+			dir = opendir("/var/cache/pacman/pkg");
+			if(dir == NULL) {
+				fprintf(stderr, "error: could not access cache directory\n");
+				return(1);
+			}
+			rewinddir(dir);
+			while((ent = readdir(dir)) != NULL) {
+				if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+					continue;
+				}
+				cache = list_add(cache, strdup(ent->d_name));
+			}
+			closedir(dir);
+
+			for(i = cache; i; i = i->next) {
+				char *str = (char *)i->data;
+				char *name, *version;
+
+				if(split_pkgname(str, &name, &version) != 0) {
+					clean = list_add(clean, strdup(str));
+					continue;
+				}
+				/* we keep partially downloaded files */
+				if(strstr(str, ".pkg.tar.gz.part")) {
+					FREE(name);
+					FREE(version);
+					continue;
+				}
+				for(j = i->next; j; j = j->next) {
+					char *s = (char *)j->data;
+					char *n, *v;
+
+					if(split_pkgname(s, &n, &v) != 0) {
+						continue;
+					}
+					if(!strcmp(name, n)) {
+						char *ptr;
+						if(rpmvercmp(version, v) < 0) {
+							ptr = str;
+						} else {
+							ptr = s;
+						}
+						if(!is_in(ptr, clean)) {
+							clean = list_add(clean, strdup(ptr));
+						}
+					}
+					FREE(n);
+					FREE(v);
+				}
+				FREE(name);
+				FREE(version);
+			}
+			FREELIST(cache);
+
+			for(i = clean; i; i = i->next) {
+				char path[PATH_MAX];
+
+				snprintf(path, PATH_MAX, "%s%s/%s", pmo_root, CACHEDIR, (char *)i->data);
+				unlink(path);
+			}
+			FREELIST(clean);
+		} else {
+			/* full cleanup */
+			mode_t oldmask;
+			char path[PATH_MAX];
+
+			snprintf(path, PATH_MAX, "%s%s", pmo_root, CACHEDIR);
+
+			printf("removing all packages from cache... ");
+			if(rmrf(path)) {
+				fprintf(stderr, "error: could not remove cache directory: %s\n", strerror(errno));
+				return(1);
+			}
+
+			oldmask = umask(0000);
+			if(makepath(path)) {
+				fprintf(stderr, "error: could not create new cache directory: %s\n", strerror(errno));
+				return(1);
+			}
+			umask(oldmask);
 		}
-
-		oldmask = umask(0000);
-		if(makepath("/var/cache/pacman/pkg")) {
-			fprintf(stderr, "error: could not create new cache directory: %s\n", strerror(errno));
-			return(1);
-		}
-		umask(oldmask);
-
 		printf("done.\n");
 		return(0);
 	}
@@ -374,53 +451,9 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	if(pmo_s_search) {
 		/* search sync databases */
 		if(targets) {
-			for(i = targets; i; i = i->next) {
-				char *targ = strdup(i->data);
-				strtoupper(targ);
-				for(j = databases; j; j = j->next) {
-					dbsync_t *dbs = (dbsync_t*)j->data;
-					for(k = dbs->pkgcache; k; k = k->next) {
-						pkginfo_t *pkg = (pkginfo_t*)k->data;
-						char *haystack;
-						PMList *m;
-						int match = 0;
-						/* check name */
-						haystack = strdup(pkg->name);
-						strtoupper(haystack);
-						if(strstr(haystack, targ)) {
-							match = 1;
-						}
-						FREE(haystack);
-
-						/* check description */
-						haystack = strdup(pkg->desc);
-						strtoupper(haystack);
-						if(strstr(haystack, targ)) {
-							match = 1;
-						}
-						FREE(haystack);
-
-						if(!match) {
-							pkg = db_scan(dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
-							/* check provides */
-							for(m = pkg->provides; m; m = m->next) {
-								haystack = strdup(m->data);
-								strtoupper(haystack);
-								if(strstr(haystack, targ)) {
-									match = 1;
-								}
-								FREE(haystack);
-							}
-						}
-
-						if(match) {
-							printf("%s/%s %s\n    ", dbs->sync->treename, pkg->name, pkg->version);
-							indentprint(pkg->desc, 4);
-							printf("\n");
-						}
-					}
-				}
-				FREE(targ);
+			for(j = databases; j; j = j->next) {
+				dbsync_t *dbs = (dbsync_t*)j->data;
+				db_search(dbs->db, dbs->pkgcache, dbs->sync->treename, targets);
 			}
 		} else {
 			for(j = databases; j; j = j->next) {
@@ -1381,7 +1414,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 	for(targ = targets; targ; targ = targ->next) {
 		/* Populate the package struct */
 		vprint("reading %s... ", (char*)targ->data);
-		info = load_pkg((char*)targ->data, 0);
+		info = load_pkg((char*)targ->data);
 		if(info == NULL) {
 			return(1);
 		}
@@ -1957,7 +1990,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 					depmissing_t* miss = (depmissing_t*)j->data;
 					printf("  %s: is required by %s\n", miss->target, miss->depend.name);
 				}
-				list_free(alltargs);
+				FREELISTPKGS(alltargs);
 				list_free(lp);
 				return(1);
 			}
@@ -1973,7 +2006,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			list_display("\nTargets:", alltargs);
 			/* get confirmation */
 			if(yesno("\nDo you want to remove these packages? [Y/n] ") == 0) {
-				list_free(alltargs);
+				FREELISTPKGS(alltargs);
 				return(1);
 			}
 		}
@@ -2048,6 +2081,18 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			}
 		}
 
+		if(!pmo_upgrade) {
+			/* run the post-remove script if it exists  */
+			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
+			if(!stat(pm_install, &buf)) {
+				vprint("Executing post-remove script...\n");
+				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", pmo_dbpath, db->treename, info->name, info->version);
+				snprintf(line, PATH_MAX, "chroot %s /bin/sh %s post_remove %s", pmo_root, pm_install, info->version);
+
+				system(line);
+			}
+		}
+
 		/* remove the package from the database */
 		snprintf(line, PATH_MAX, "%s%s/%s/%s-%s", pmo_root, pmo_dbpath, db->treename,
 			info->name, info->version);
@@ -2118,7 +2163,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		}
 	}
 
-	FREELIST(alltargs);
+	FREELISTPKGS(alltargs);
 
 	/* run ldconfig if it exists */
 	snprintf(line, PATH_MAX, "%setc/ld.so.conf", pmo_root);
@@ -2142,6 +2187,11 @@ int pacman_query(pacdb_t *db, PMList *targets)
 	pkginfo_t *info = NULL;
 	PMList *targ, *lp, *q;
 	int done = 0;
+
+	if(pmo_q_search) {
+		db_search(db, pm_packages, "local", targets);
+		return(0);
+	}
 
 	for(targ = targets; !done; targ = (targ ? targ->next : NULL)) {
 		if(targets == NULL) {
@@ -2187,12 +2237,13 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				fprintf(stderr, "error: no package file was specified for --file\n");
 				return(1);
 			}
-			info = load_pkg(package, pmo_q_info);
+			info = load_pkg(package);
 			if(info == NULL) {
 				fprintf(stderr, "error: %s is not a package\n", package);
 				return(1);
 			}
 			if(pmo_q_info) {
+				dump_pkg_full(info);
 				printf("\n");
 			} else if(pmo_q_list) {
 				for(lp = info->files; lp; lp = lp->next) {
@@ -2670,8 +2721,26 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 			for(j = tp->conflicts; j; j = j->next) {
 				/* check targets against database */
 				for(k = pm_packages; k; k = k->next) {
+					int conflict = 0;
 					pkginfo_t *dp = (pkginfo_t*)k->data;
+					if(!strcmp(dp->name, tp->name)) {
+						/* a package cannot conflict with itself -- that's just not nice */
+						continue;
+					}
 					if(!strcmp(j->data, dp->name)) {
+						/* dp is listed in tp's conflict list */
+						conflict = 1;
+					} else {
+						/* see if dp provides something in tp's conflict list */ 
+						PMList *m;
+						for(m = dp->provides; m; m = m->next) {
+							if(!strcmp(m->data, j->data)) {
+								conflict = 1;
+								break;
+							}
+						}
+					}
+					if(conflict) {
 						MALLOC(miss, sizeof(depmissing_t));
 						miss->type = CONFLICT;
 						miss->depend.mod = DEP_ANY;
@@ -2685,14 +2754,32 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 				}
 				/* check targets against targets */
 				for(k = targets; k; k = k->next) {
-					pkginfo_t *a = (pkginfo_t*)k->data;
-					if(!strcmp(a->name, (char*)j->data)) {
+					int conflict = 0;
+					pkginfo_t *otp = (pkginfo_t*)k->data;
+					if(!strcmp(otp->name, tp->name)) {
+						/* a package cannot conflict with itself -- that's just not nice */
+						continue;
+					}
+					if(!strcmp(otp->name, (char*)j->data)) {
+						/* otp is listed in tp's conflict list */
+						conflict = 1;
+					} else {
+						/* see if otp provides something in tp's conflict list */ 
+						PMList *m;
+						for(m = otp->provides; m; m = m->next) {
+							if(!strcmp(m->data, j->data)) {
+								conflict = 1;
+								break;
+							}
+						}
+					}
+					if(conflict) {
 						MALLOC(miss, sizeof(depmissing_t));
 						miss->type = CONFLICT;
 						miss->depend.mod = DEP_ANY;
 						miss->depend.version[0] = '\0';
 						strncpy(miss->target, tp->name, 256);
-						strncpy(miss->depend.name, a->name, 256);
+						strncpy(miss->depend.name, otp->name, 256);
 						if(!list_isin(baddeps, miss)) {
 							baddeps = list_add(baddeps, miss);
 						}
@@ -2703,7 +2790,24 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 			rewinddir(db->dir);
 			while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_DEPENDS)) != NULL) {
 				for(j = info->conflicts; j; j = j->next) {
+					int conflict = 0;
+					if(!strcmp(info->name, tp->name)) {
+						/* a package cannot conflict with itself -- that's just not nice */
+						continue;
+					}
 					if(!strcmp((char*)j->data, tp->name)) {
+						conflict = 1;
+					} else {
+						/* see if tp provides something in info's conflict list */ 
+						PMList *m;
+						for(m = tp->provides; m; m = m->next) {
+							if(!strcmp(m->data, j->data)) {
+								conflict = 1;
+								break;
+							}
+						}
+					}
+					if(conflict) {
 						MALLOC(miss, sizeof(depmissing_t));
 						miss->type = CONFLICT;
 						miss->depend.mod = DEP_ANY;
@@ -3015,7 +3119,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'h': pmo_help = 1; break;
 			case 'V': pmo_version = 1; break;
 			case 'b': strcpy(pmo_dbpath, optarg); break;
-			case 'c': pmo_s_clean = 1; pmo_r_cascade = 1; break;
+			case 'c': pmo_s_clean++; pmo_r_cascade = 1; break;
 			case 'd': pmo_nodeps = 1; break;
 			case 'e': pmo_q_orphans = 1; break;
 			case 'f': pmo_force = 1; break;
@@ -3030,7 +3134,7 @@ int parseargs(int op, int argc, char **argv)
 									perror("bad root path");
 									return(1);
 								} break;
-			case 's': pmo_s_search = 1; pmo_r_recurse = 1; break;
+			case 's': pmo_s_search = 1; pmo_q_search = 1; pmo_r_recurse = 1; break;
 			case 'u': pmo_s_upgrade = 1; break;
 			case 'v': pmo_verbose = 1; break;
 			case 'w': pmo_s_downloadonly = 1; break;
@@ -3317,20 +3421,21 @@ void usage(int op, char *myname)
 			printf("  -o, --owns <file>   query the package that owns <file>\n");
 			printf("  -p, --file          pacman will query the package file [package] instead of\n");
 			printf("                      looking in the database\n");
+			printf("  -s, --search        search locally-installed packages for matching strings\n");
 		} else if(op == PM_SYNC) {
 			printf("usage:  %s {-S --sync} [options] [package]\n", myname);
 			printf("options:\n");
-			printf("  -c, --clean         remove packages from cache directory to free up diskspace\n");
+			printf("  -c, --clean         remove old packages from cache directory (use -cc for all)\n");
 			printf("  -d, --nodeps        skip dependency checks\n");
 			printf("  -f, --force         force install, overwrite conflicting files\n");
 			printf("  -g, --groups        view all members of a package group\n");
 			printf("  -i, --info          view package information\n");
 			printf("  -l, --list          list all packages belonging to the specified repository\n");
 			printf("  -p, --print-uris    print out download URIs for each package to be installed\n");
-			printf("  -s, --search        search sync database for matching strings\n");
+			printf("  -s, --search        search remote repositories for matching strings\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
 			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");
-			printf("  -y, --refresh       download a fresh package sync database from the server\n");
+			printf("  -y, --refresh       download fresh package databases from the server\n");
 		}
 		printf("  -v, --verbose       be verbose\n");
 		printf("  -r, --root <path>   set an alternate installation root\n");
