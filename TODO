@@ -1,7 +1,14 @@
+- have "group" designations
+- use 'set -e' in makepkg?
+- if a package fails, ask before aborting the full operation
+- ask, then remove conflicting packages with --sync
+- use a provides tag (instead of an OR operator in depends)
+- add a freshen operation
+- add a 'cascade' option to --remove that will remove a package and
+  all requiredby packages under it
 - check $PACCONF env var
 - ftp transfer progress bar breaks after ~42000 K
 - use a 'trust pacman' config option for downgrading?
-- use a provides tag (instead of an OR operator in depends)
 - instead of 'conflicts' use a ! operator in depends
 - add a --pretend option
 - add a consistency/sanity check operation
@@ -11,12 +18,10 @@
 - use package caches more for performance
 + add an "ignore package" option in either pacman.conf or in each package
   record. this will prevent it from being upgraded from the sync set
+- if a package is removed with --nodeps and re-installed, the requiredby
+  fields of it's required packages are not updated
 - duplicate dep checks occur with sync (one in sync, one in add)
 - clean up output a bit (message queue?)
-- add an OR operator to dependencies or allow a sibling tag (ie, mawk, gawk)
 - run ldd on every executable in a newly built package to find required so's
-- add a freshen operation
-- allow multiple ftp servers to be defined and fallback to backups on failure
 - use a files.cache gdbm (or whatever) for --owns and db_find_conflicts
-- things like 'groupadd' and 'useradd' in the install scriptlets will affect
-  the real root, not the one specified with -r
+

@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.0"
+#define PACVER    "2.1"
 #endif
 
 #ifndef PKGDIR
@@ -50,7 +50,7 @@ int pacman_sync(pacdb_t *db, PMList *targets);
 int pacman_deptest(pacdb_t *db, PMList *targets);
 
 PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets);
-int resolvedeps(pacdb_t *local, pacdb_t *sync, pkginfo_t *package, PMList *list, PMList *trail);
+int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *sync, PMList *list, PMList *trail);
 int splitdep(char *depstr, depend_t *depend);
 
 int lckmk(char *file, int retries, unsigned int sleep_secs);

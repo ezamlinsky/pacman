@@ -31,6 +31,7 @@
 #include "package.h"
 #include "db.h"
 #include "util.h"
+#include "pacsync.h"
 #include "pacman.h"
 
 extern PMList *pm_packages;

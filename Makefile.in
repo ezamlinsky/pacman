@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.0
+PACVER = 2.1
 LIBTAR_VERSION = 1.2.5
 
 TOPDIR = @srcdir@
@@ -105,11 +105,13 @@ install: pacman convertdb man
 	$(INSTALL) -D -m0755 $(SCRDIR)makepkg $(DESTDIR)$(BINDIR)/makepkg
 	$(INSTALL) -D -m0755 $(SCRDIR)makeworld $(DESTDIR)$(BINDIR)/makeworld
 	$(INSTALL) -D -m0755 $(SCRDIR)abs $(DESTDIR)$(BINDIR)/abs
+	$(INSTALL) -D -m0755 $(SCRDIR)gensync $(DESTDIR)$(BINDIR)/gensync
 	$(INSTALL) -D -m0644 $(MANSRC)pacman.8 $(DESTDIR)$(MANDIR)/man8/pacman.8
 	$(INSTALL) -D -m0644 $(MANSRC)makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	$(INSTALL) -D -m0644 etc/pacman.conf $(DESTDIR)/etc/pacman.conf
 	$(INSTALL) -D -m0644 etc/makepkg.conf $(DESTDIR)/etc/makepkg.conf
-	$(INSTALL) -D -m0644 etc/supfile $(DESTDIR)/etc/abs/supfile
+	$(INSTALL) -D -m0644 etc/supfile.arch $(DESTDIR)/etc/abs/supfile.arch
+	$(INSTALL) -D -m0644 etc/supfile.unofficial $(DESTDIR)/etc/abs/supfile.unofficial
 
 clean:
 	rm -f *~ $(OBJDIR)*.o $(MANSRC)*.8

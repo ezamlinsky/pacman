@@ -21,8 +21,31 @@
 #ifndef _PAC_PACSYNC_H
 #define _PAC_PACSYNC_H
 
+typedef struct __server_t {
+	unsigned short islocal;
+	char* server;
+	char* path;
+} server_t;
+
+typedef struct __sync_t {
+	char* treename;
+	PMList *servers;
+} sync_t;
+
+/* linking structs */
+typedef struct __dbsync_t {
+	pacdb_t *db;
+	sync_t *sync;
+	PMList *pkgcache;
+} dbsync_t;
+
+typedef struct __syncpkg_t {
+	pkginfo_t *pkg;
+	dbsync_t *dbs;
+} syncpkg_t;
+
 int sync_synctree();
-int downloadfiles(char *server, char *remotepath, char *localpath, PMList *files);
+int downloadfiles(PMList *servers, char *localpath, PMList *files);
 
 #endif
 

@@ -3,7 +3,7 @@
 #
 
 # this is the host containing the master ABS files
-*default host=archlinux.org
+*default host=cvs.archlinux.org
 
 *default base=/usr/abs
 *default prefix=/usr/abs
@@ -20,4 +20,4 @@
 #
 *default tag=CURRENT
 
-abs
+arch

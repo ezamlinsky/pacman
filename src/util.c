@@ -34,6 +34,7 @@
 #include "package.h"
 #include "db.h"
 #include "util.h"
+#include "pacsync.h"
 #include "pacman.h"
 
 extern char*          pmo_root;
@@ -54,11 +55,9 @@ extern unsigned short pmo_s_sync;
 extern unsigned short pmo_s_search;
 extern unsigned short pmo_s_clean;
 extern unsigned short pmo_s_upgrade;
+extern PMList        *pmo_noupgrade;
 
-extern char pmc_syncserver[512];
-extern char pmc_syncname[512];
-extern char pmc_syncpath[512];
-
+extern PMList *pmc_syncs;
 extern PMList *pm_targets;
 
 /* borrowed and modifed from Per Liden's pkgutils (http://crux.nu) */
@@ -221,6 +220,7 @@ int parseargs(int op, int argc, char **argv)
 	return(0);
 }
 
+#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 int parseconfig(char *configfile)
 {
 	FILE *fp = NULL;
@@ -228,6 +228,8 @@ int parseconfig(char *configfile)
 	char *ptr = NULL;
 	char *key = NULL;
 	int linenum = 0;
+	char section[256] = "";
+	sync_t *sync = NULL;
 
 	if((fp = fopen(configfile, "r")) == NULL) {
 		perror(configfile);
@@ -243,25 +245,126 @@ int parseconfig(char *configfile)
 		if(line[0] == '#') {
 			continue;
 		}
-		ptr = line;
-		key = strsep(&ptr, "=");
-		if(key == NULL || ptr == NULL) {
-			fprintf(stderr, "syntax error in config file (line %d)\n", linenum);
+		if(line[0] == '[' && line[strlen(line)-1] == ']') {
+			/* new config section */
+			ptr = line;
+			ptr++;
+			strncpy(section, ptr, min(255, strlen(ptr)-1));
+			section[min(255, strlen(ptr)-1)] = '\0';
+			vprint("config: new section '%s'\n", section);
+			if(!strlen(section)) {
+				fprintf(stderr, "config: line %d: bad section name\n", linenum);
+				return(1);
+			}
+			if(!strcmp(section, "local")) {
+				fprintf(stderr, "config: line %d: %s is reserved and cannot be used as a package tree\n",
+					linenum, section);
+				return(1);
+			}
+			if(strcmp(section, "options")) {
+				/* start a new sync record */
+				MALLOC(sync, sizeof(sync_t));
+				sync->treename = strdup(section);
+				sync->servers = NULL;
+				pmc_syncs = list_add(pmc_syncs, sync);
+			}
 		} else {
-			trim(key);
-			key = strtoupper(key);
-			trim(ptr);
-			if(!strcmp(key, "SYNC_SERVER")) {
-				strncpy(pmc_syncserver, ptr, sizeof(pmc_syncserver)-1);
-			} else if(!strcmp(key, "SYNC_TREE_PATH")) {
-				strncpy(pmc_syncpath, ptr, sizeof(pmc_syncpath)-1);
-			} else if(!strcmp(key, "SYNC_TREE_NAME")) {
-				strncpy(pmc_syncname, ptr, sizeof(pmc_syncname)-1);
+			/* directive */
+			if(!strlen(section)) {
+				fprintf(stderr, "config: line %d: all directives must belong to a section\n", linenum);
+				return(1);
+			}
+			ptr = line;
+			key = strsep(&ptr, "=");
+			if(key == NULL || ptr == NULL) {
+				fprintf(stderr, "config: line %d: syntax error\n", linenum);
+				return(1);
 			} else {
-				fprintf(stderr, "Syntax error in description file line %d\n", linenum);
+				trim(key);
+				key = strtoupper(key);
+				trim(ptr);
+				if(!strcmp(section, "options")) {
+					if(!strcmp(key, "NOUPGRADE")) {
+						char *p = ptr;
+						char *q;
+						while((q = strchr(p, ' '))) {
+							*q = '\0';
+							pmo_noupgrade = list_add(pmo_noupgrade, strdup(p));
+							vprint("config: noupgrade: %s\n", p);
+							p = q;
+							p++;
+						}
+						pmo_noupgrade = list_add(pmo_noupgrade, strdup(p));
+						vprint("config: noupgrade: %s\n", p);
+					} else {
+						fprintf(stderr, "config: line %d: syntax error\n", linenum);
+						return(1);
+					}
+				} else {
+					if(!strcmp(key, "SERVER")) {
+						/* parse our special url */
+						server_t *server;
+						char *p;
+
+						MALLOC(server, sizeof(server_t));
+						server->server = server->path = NULL;
+						server->islocal = 0;
+
+						p = strstr(ptr, "://");
+						if(p == NULL) {
+							fprintf(stderr, "config: line %d: bad server location\n", linenum);
+							return(1);
+						}
+						*p = '\0';
+						p++; p++; p++;
+						if(p == NULL || *p == '\0') {
+							fprintf(stderr, "config: line %d: bad server location\n", linenum);
+							return(1);
+						}
+						server->islocal = !strcmp(ptr, "local");
+						if(!server->islocal) {
+							char *slash;
+							/* no http support yet */
+							if(strcmp(ptr, "ftp")) {
+								fprintf(stderr, "config: line %d: protocol %s is not supported\n", linenum, ptr);
+								return(1);
+							}
+							/* split the url into domain and path */
+							slash = strchr(p, '/');
+							if(slash == NULL) {
+								/* no path included, default to / */
+								server->path = strdup("/");
+							} else {
+								/* add a trailing slash if we need to */
+								if(slash[strlen(slash)-1] == '/') {
+									server->path = strdup(slash);
+								} else {
+									MALLOC(server->path, strlen(slash)+2);
+									sprintf(server->path, "%s/", slash);
+								}
+								*slash = '\0';
+							}
+							server->server = strdup(p);
+						} else {
+							/* add a trailing slash if we need to */
+							if(p[strlen(p)-1] == '/') {
+								server->path = strdup(p);
+							} else {
+								MALLOC(server->path, strlen(p)+2);
+								sprintf(server->path, "%s/", p);
+							}
+						}
+						/* add to the list */
+						vprint("config: %s: server: %s %s\n", section, server->server, server->path);
+						sync->servers = list_add(sync->servers, server);
+					} else {
+						fprintf(stderr, "config: line %d: syntax error\n", linenum);
+						return(1);
+					}
+				}
+				line[0] = '\0';
 			}
 		}
-		line[0] = '\0';
 	}
 	fclose(fp);
 
@@ -272,7 +375,7 @@ int copyfile(char *src, char *dest)
 {
 	FILE *in, *out;
 	size_t len;
-	char buf[1025];
+	char buf[4097];
 
 	in = fopen(src, "r");
 	if(in == NULL) {
@@ -283,7 +386,7 @@ int copyfile(char *src, char *dest)
 		return(1);
 	}
 
-	while((len = fread(buf, 1, 1024, in))) {
+	while((len = fread(buf, 1, 4096, in))) {
 		fwrite(buf, 1, len, out);
 	}
 

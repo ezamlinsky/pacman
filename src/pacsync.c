@@ -41,125 +41,171 @@ static char sync_fnm[25];
 
 /* pacman options */
 extern char *pmo_root;
-/* configuration options */
-extern char pmc_syncserver[512];
-extern char pmc_syncpath[512];
-extern char pmc_syncname[512];
+
+/* sync servers */
+extern PMList *pmc_syncs;
 
 int sync_synctree()
 {
 	char ldir[PATH_MAX] = "";
 	char path[PATH_MAX];
 	mode_t oldmask;
-	char *str;
 	PMList *files = NULL;
+	PMList *i;
+	int success = 0;
+	
+	for(i = pmc_syncs; i; i = i->next) {
+		sync_t *sync = (sync_t*)i->data;		
+		snprintf(ldir, PATH_MAX, "%s%s", pmo_root, PKGDIR);
 
-	snprintf(ldir, PATH_MAX, "%s%s/%s", pmo_root, PKGDIR, pmc_syncname);
+		/* build a one-element list */
+		snprintf(path, PATH_MAX, "%s.db.tar.gz", sync->treename);
+		files = list_add(files, strdup(path));
 
-	/* remove the old dir */
-	vprint("Removing %s (if it exists)\n", ldir);
-	rmrf(ldir);
-
-	/* make the new dir */
-	oldmask = umask(0000);
-  mkdir(ldir, 0755);
-	umask(oldmask);
-
-	/* build out list of one */
-	snprintf(path, PATH_MAX, "%s.db.tar.gz", pmc_syncname);
-	str = strdup(path);
-	files = list_add(files, str);
-	if(downloadfiles(pmc_syncserver, pmc_syncpath, ldir, files)) {
+		success = 1;
+		if(downloadfiles(sync->servers, ldir, files)) {
+			fprintf(stderr, "failed to synchronize %s\n", sync->treename);
+			success = 0;
+		}
+		/*printf("\n");*/
 		list_free(files);
-		return(1);
+		files = NULL;
+		snprintf(path, PATH_MAX, "%s/%s.db.tar.gz", ldir, sync->treename);
+
+		if(success) {
+			snprintf(ldir, PATH_MAX, "%s%s/%s", pmo_root, PKGDIR, sync->treename);
+			/* remove the old dir */
+			vprint("removing %s (if it exists)\n", ldir);
+			rmrf(ldir);
+
+			/* make the new dir */
+			oldmask = umask(0000);
+			mkdir(ldir, 0755);
+			umask(oldmask);
+
+			/* uncompress the sync database */
+			vprint("Unpacking %s...\n", path);
+			if(unpack(path, ldir)) {
+				return(1);
+			}
+		}
+		/* remove the .tar.gz */
+		unlink(path);
 	}
 
-	/* uncompress the sync database */
-	snprintf(path, PATH_MAX, "%s/%s", ldir, (char*)files->data);
-	list_free(files);
-	vprint("Unpacking %s...\n", path);
-	if(unpack(path, ldir)) {
-		return(1);
-	}
-
-	/* remove the .tar.gz */
-	unlink(path);
-
-	return(0);
+	return(!success);
 }
 
-int downloadfiles(char *server, char *remotepath, char *localpath, PMList *files)
+int downloadfiles(PMList *servers, char *localpath, PMList *files)
 {
 	int fsz;
 	netbuf *control = NULL;
 	PMList *lp;
-	int ret = 0;
+	int done = 0;
+	PMList *complete = NULL;
+	PMList *i;
 
 	if(files == NULL) {
 		return(0);
 	}
 
-	FtpInit();
-	if(!FtpConnect(server, &control)) {
-		fprintf(stderr, "error: cannot connect to %s\n", server);
-		return(1);
-	}
-	if(!FtpLogin("anonymous", "arch@guest", control)) {
-		fprintf(stderr, "error: anonymous login failed\n");
-		FtpQuit(control);
-		return(1);
-	}
+	for(i = servers; i && !done; i = i->next) {
+		server_t *server = (server_t*)i->data;
 
-	
-	if(!FtpChdir(remotepath, control)) {
-		fprintf(stderr, "error: could not cwd to %s: %s\n", remotepath,
-			FtpLastResponse(control));
-		return(1);
-	}
-
-	/* get each file in the list */
-	for(lp = files; lp; lp = lp->next) {
-		char output[PATH_MAX];
-		int j;
-
-		snprintf(output, PATH_MAX, "%s/%s", localpath, (char*)lp->data);
-
-		/* passive mode */
-		/* TODO: make passive ftp an option */
-		if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
-			fprintf(stderr, "warning: failed to set passive mode\n");
+		if(!server->islocal) {
+			FtpInit();
+			if(!FtpConnect(server->server, &control)) {
+				fprintf(stderr, "error: cannot connect to %s\n", server->server);
+				continue;
+			}
+			if(!FtpLogin("anonymous", "arch@guest", control)) {
+				fprintf(stderr, "error: anonymous login failed\n");
+				FtpQuit(control);
+				continue;
+			}	
+			if(!FtpChdir(server->path, control)) {
+				fprintf(stderr, "error: could not cwd to %s: %s\n", server->path,
+					FtpLastResponse(control));
+				continue;
+			}
 		}
 
-		if(!FtpSize((char*)lp->data, &fsz, FTPLIB_IMAGE, control)) {
-			fprintf(stderr, "warning: failed to get filesize for %s\n", (char*)lp->data);
-		}
+		/* get each file in the list */
+		for(lp = files; lp; lp = lp->next) {
+			char output[PATH_MAX];
+			int j;
+			char *fn = (char*)lp->data;
 
-		/* set up our progress bar's callback */
-		FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-		FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-		FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-		FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+			if(is_in(fn, complete)) {
+				continue;
+			}
+
+			snprintf(output, PATH_MAX, "%s/%s", localpath, fn);
+			strncpy(sync_fnm, lp->data, 24);
+			for(j = strlen(sync_fnm); j < 24; j++) {
+				sync_fnm[j] = ' ';
+			}
+			sync_fnm[24] = '\0';
+
+			if(!server->islocal) {
+				/* passive mode */
+				/* TODO: make passive ftp an option */
+				if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
+					fprintf(stderr, "warning: failed to set passive mode\n");
+				}
+				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
+					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
+				}
+				/* set up our progress bar's callback */
+				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
 		
-		strncpy(sync_fnm, lp->data, 24);
-		for(j = strlen(sync_fnm); j < 24; j++) {
-			sync_fnm[j] = ' ';
+				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
+					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+						fn, server->server, FtpLastResponse(control));
+					/* unlink the file */
+					unlink(output);
+				} else {
+					log_progress(control, fsz, &fsz);
+					complete = list_add(complete, fn);
+				}
+				printf("\n");
+				fflush(stdout);
+			} else {
+				/* local repository, just copy the file */
+				char src[PATH_MAX], dest[PATH_MAX];
+				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
+				snprintf(dest, PATH_MAX, "%s/%s", localpath, fn);
+				vprint("copying %s to %s\n", src, dest);
+				if(copyfile(src, dest)) {
+					fprintf(stderr, "failed copying %s\n", src);
+				} else {
+					char out[56];
+					printf("%s [", sync_fnm);
+					strncpy(out, server->path, 33);
+					printf("%s", out);
+					for(j = strlen(out); j < 33; j++) {
+						printf(" ");
+					}
+					fputs("] 100% |   LOCAL\n", stdout);
+					fflush(stdout);
+
+					complete = list_add(complete, fn);
+				}
+			}
 		}
-		sync_fnm[24] = '\0';
-		if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
-			fprintf(stderr, "\nerror: could not download %s: %s\n", (char*)lp->data,
-				FtpLastResponse(control));
-			/* unlink the file */
-			unlink(output);
-			ret = 1;
-		} else {
-			log_progress(control, fsz, &fsz);
+		if(list_count(complete) == list_count(files)) {
+			done = 1;
 		}
-		printf("\n");
-		fflush(stdout);
+
+		if(!server->islocal) {
+			FtpQuit(control);
+		}
 	}
-	
-	FtpQuit(control);
-	return(ret);
+
+	return(!done);
 }
 
 static int log_progress(netbuf *ctl, int xfered, void *arg)

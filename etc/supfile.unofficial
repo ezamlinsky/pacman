@@ -1,0 +1,16 @@
+#
+# /etc/abs/supfile.unofficial
+#
+
+# this is the host containing the unofficial PKGBUILD files
+*default host=unofficial.archlinux.org
+
+*default base=/usr/abs
+*default prefix=/usr/abs
+*default release=cvs
+*default delete
+*default use-rel-suffix
+*default compress
+
+*default tag=CURRENT
+unofficial

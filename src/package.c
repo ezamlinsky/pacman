@@ -30,6 +30,7 @@
 #include "package.h"
 #include "db.h"
 #include "util.h"
+#include "pacsync.h"
 #include "pacman.h"
 
 extern tartype_t gztype;

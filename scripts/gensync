@@ -1,0 +1,104 @@
+#!/bin/bash
+
+myver='2.1'
+
+usage() {
+  echo "gensync $myver"
+  echo "usage: $0 <root> <destfile>"
+	echo
+	echo "gensync will generate a sync database by reading all PKGBUILD files"
+	echo "from <root>.  gensync builds the database in /tmp/.gensync and then"
+	echo "compresses it to <destfile>."
+	echo
+	echo "note: The <destfile> name is important.  It must be of the form"
+	echo "      {treename}.db.tar.gz where {treename} is the name of the custom"
+	echo "      package repository you configured in /etc/pacman.conf.  The"
+	echo "      generated database must reside in the same directory as your"
+	echo "      custom packages (also configured in /etc/pacman.conf)"
+	echo
+	echo "example:  gensync /usr/abs/local /home/mypkgs/custom.db.tar.gz"
+	echo
+  echo
+  exit 0
+}
+
+db_write_entry()
+{
+	unset pkgname pkgver pkgrel
+	unset depends conflicts
+	source $1 || return 1
+	cd /tmp/.gensync
+	mkdir $pkgname-$pkgver-$pkgrel
+	cd $pkgname-$pkgver-$pkgrel
+	# desc
+	echo "%NAME%" >desc
+	echo "$pkgname" >>desc
+	echo "" >>desc
+	echo "%VERSION%" >>desc
+	echo "$pkgver-$pkgrel" >>desc
+	echo "" >>desc
+	echo "%DESC%" >>desc
+	echo "$pkgdesc" >>desc
+	echo "" >>desc
+	# depends
+	echo "%DEPENDS%" >depends
+	for depend in "${depends[@]}"; do
+	  echo "$depend" >>depends
+	done
+	echo "" >>depends
+	echo "%CONFLICTS%" >>depends
+	for conflict in "${conflicts[@]}"; do
+	  echo "$conflict" >>depends
+	done
+	echo "" >>depends
+}
+
+if [ $# -lt 2 ]; then
+	usage
+	exit 0
+fi
+
+if [ "$1" = "-h" -o "$1" = "--help" ]; then
+	usage
+	exit 0
+fi
+
+d=`dirname $1`
+rootdir=`cd $d && pwd`
+rootdir="$rootdir/`basename $1`"
+d=`dirname $2`
+destfile=`cd $d && pwd`
+destfile="$destfile/`basename $2`"
+
+rm -rf /tmp/.gensync || exit 1
+mkdir -p /tmp/.gensync || exit 1
+
+if [ ! -d $rootdir ]; then
+	echo "gensync: invalid root dir: $rootdir" >&2
+	rm -rf /tmp/.gensync
+	exit 1
+fi
+
+echo "gensync: building database entries..." >&2
+#for category in `find $rootdir/* -type d -maxdepth 0`; do
+for file in `find $rootdir/* -name PKGBUILD`; do
+	db_write_entry $file
+	if [ $? -gt 0 ]; then
+		echo "gensync: error writing entry for $file" >&2
+		rm -rf /tmp/.gensync
+		exit 1
+	fi
+done
+
+echo "gensync: compressing to $destfile..." >&2
+cd /tmp/.gensync
+tar c * | gzip -9 >$destfile
+if [ $? -gt 0 ]; then
+	echo "gensync: error writing to $destfile" >&2
+	rm -rf /tmp/.gensync
+	exit 1
+fi
+
+rm -rf /tmp/.gensync
+
+exit 0

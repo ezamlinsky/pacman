@@ -93,6 +93,18 @@ int list_count(PMList *list)
 	return(i);
 }
 
+int list_isin(PMList *haystack, void *needle)
+{
+	PMList *lp;
+
+	for(lp = haystack; lp; lp = lp->next) {
+		if(lp->data == needle) {
+			return(1);
+		}
+	}
+	return(0);
+}
+
 /* List one is extended and returned
  * List two is freed (but not its data)
  */

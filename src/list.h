@@ -12,6 +12,7 @@ PMList* list_new();
 void list_free(PMList* list);
 PMList* list_add(PMList* list, void* data);
 int list_count(PMList* list);
+int list_isin(PMList *haystack, void *needle);
 PMList* list_merge(PMList *one, PMList *two);
 PMList* list_last(PMList* list);
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.0'
+myver='2.1'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -30,20 +30,25 @@ fi
 
 CLEANUP=0
 INSTALL=0
+BUILDSCRIPT="./PKGBUILD"
 
-if [ "$1" = "-c" -o "$1" = "--clean" ]; then
-	shift
-	CLEANUP=1
-fi
-if [ "$1" = "-i" -o "$1" = "--install" ]; then
-	shift
-	INSTALL=1
-fi
+for arg in $*; do
+  case $arg in
+    -c|--clean)
+      CLEANUP=1
+      ;;
+    -i|--install)
+      INSTALL=1
+      ;;
+    *)
+      BUILDSCRIPT=$arg
+      ;;
+  esac
+done
 
 unset pkgname pkgver pkgrel pkgdesc
 unset depends conflicts backup source install build
 umask 0022
-
 
 # check for a download utility
 if [ -x /usr/bin/wget ]; then
@@ -57,11 +62,6 @@ else
  	exit 1
 fi
 
-BUILDSCRIPT="./PKGBUILD"
-if [ "$1" != "" ]; then
-  BUILDSCRIPT=$1
-fi
-
 if [ ! -f $BUILDSCRIPT ]; then
   msg "==> ERROR:  $BUILDSCRIPT does not exist."
   exit 1
@@ -71,40 +71,40 @@ source $BUILDSCRIPT
 
 # check for no-no's
 if [ `echo $pkgver | grep '-'` ]; then
-	msg "==> ERROR:  pkgver is not allowed to contain hyphens."
-	exit 1
+  msg "==> ERROR:  pkgver is not allowed to contain hyphens."
+  exit 1
 fi
 if [ `echo $pkgrel | grep '-'` ]; then
-	msg "==> ERROR:  pkgrel is not allowed to contain hyphens."
-	exit 1
+  msg "==> ERROR:  pkgrel is not allowed to contain hyphens."
+  exit 1
 fi
 
 if [ `type -p pacman` ]; then
-	msg "==> Checking Dependencies..."
-	missdep=`pacman -T ${depends[@]}`
-	ret=$?
-	if [ "$ret" != "0" ]; then
-		if [ "$ret" = "127" ]; then
-			msg "==> ERROR: Dependency Check Failed:"
-			msg ""
-			nl=0
-			for dep in $missdep; do
-				echo -ne "$dep " >&2
-				if [ "$nl" = "1" ]; then
-					nl=0
-					echo -ne "\n" >&2
-					continue
-				fi
-				nl=1
-			done
-			msg ""
-		else
-			msg "==> ERROR: pacman returned a fatal error."
-		fi
-		exit 1
-	fi
+  msg "==> Checking Dependencies..."
+  missdep=`pacman -T ${depends[@]}`
+  ret=$?
+  if [ "$ret" != "0" ]; then
+    if [ "$ret" = "127" ]; then
+    msg "==> ERROR: Dependency Check Failed:"
+    msg ""
+    nl=0
+    for dep in $missdep; do
+      echo -ne "$dep " >&2
+      if [ "$nl" = "1" ]; then
+        nl=0
+        echo -ne "\n" >&2
+        continue
+      fi
+        nl=1
+    done
+    msg ""
+  else
+    msg "==> ERROR: pacman returned a fatal error."
+  fi
+    exit 1
+  fi
 else
-	msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
+  msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
 fi
 
 d=`date`
@@ -143,21 +143,21 @@ for netfile in ${source[@]}; do
     cmd="tar --use-compress-program=gzip -xf $file" ;;
 	    *.tar.bz2)
     cmd="tar --use-compress-program=bzip2 -xf $file" ;;
-		  *.tar)
-	  cmd="tar -xf $file" ;;
+	    *.tar)
+    cmd="tar -xf $file" ;;
 	    *.zip)
     cmd="unzip -qq $file" ;;
-	    *)
-    cmd="cp ../$file ." ;;
-	esac
-	msg "==> $cmd"
-	$cmd
+	    *.gz)
+    cmd="gunzip $file" ;;
+  esac
+  msg "==> $cmd"
+  $cmd
 done
 
 # check for existing pkg directory
 if [ -d $startdir/pkg ]; then
-	msg "==> Removing existing pkg directory..."
-	rm -rf $startdir/pkg
+  msg "==> Removing existing pkg directory..."
+  rm -rf $startdir/pkg
 fi
 mkdir -p $startdir/pkg
 
@@ -172,9 +172,9 @@ fi
 # get some package meta info
 builddate=`date -u "+%a %b %d %k:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
-	packager="$PACKAGER"
+  packager="$PACKAGER"
 else
-	packager="Arch Linux (http://www.archlinux.org)"
+  packager="Arch Linux (http://www.archlinux.org)"
 fi
 size=`du -cb $startdir/pkg | tail -1 | awk '{print $1}'`
 
@@ -203,8 +203,8 @@ done
 
 # check for an install script
 if [ "$install" != "" ]; then
-	msg "==> Copying install script..."
-	cp $startdir/$install $startdir/pkg/._install
+  msg "==> Copying install script..."
+  cp $startdir/$install $startdir/pkg/._install
 fi
 
 # remove info/doc files
@@ -214,9 +214,9 @@ rm -rf pkg/usr/doc pkg/usr/share/doc
 
 # move /usr/share/man files to /usr/man
 if [ -d pkg/usr/share/man ]; then
-	mkdir -p pkg/usr/man 
-	cp -a pkg/usr/share/man/* pkg/usr/man/
-	rm -rf pkg/usr/share/man
+  mkdir -p pkg/usr/man 
+  cp -a pkg/usr/share/man/* pkg/usr/man/
+  rm -rf pkg/usr/share/man
 fi
 
 # strip binaries
@@ -230,23 +230,23 @@ find pkg/{,usr,usr/local}/{bin,sbin} -type f -exec /usr/bin/strip '{}' ';' 2>&1
 msg "==> Compressing package..."
 cd $startdir/pkg
 if [ -f $startdir/pkg/._install ]; then
-	tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO ._install * >../filelist
+  tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO ._install * >../filelist
 else
-	tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO * >../filelist
+  tar czvf $startdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO * >../filelist
 fi
 
 cd $startdir
 if [ "$CLEANUP" = "1" ]; then
-	msg "==> Cleaning up"
-	rm -rf src pkg
+  msg "==> Cleaning up"
+  rm -rf src pkg
 fi
 
 d=`date`
 msg "==> Finished making $pkgname  ($d)"
 
 if [ "$INSTALL" = "1" ]; then
-	msg "==> Running pacman --upgrade"
-	pacman --upgrade $pkgname-$pkgver-$pkgrel.pkg.tar.gz
+  msg "==> Running pacman --upgrade"
+  pacman --upgrade $pkgname-$pkgver-$pkgrel.pkg.tar.gz
 fi
 
 exit 0

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.0'
+myver='2.1'
 ABS_ROOT=/usr/abs
 
 usage() {
@@ -9,7 +9,7 @@ usage() {
 	echo
 	echo "abs will synchronize PKGBUILD scripts from the CVS repository"
 	echo "into /usr/abs.  You can follow different package trees by editing"
-	echo "/etc/abs/supfile"
+	echo "/etc/abs/supfile.arch"
   echo
   exit 0
 }
@@ -25,17 +25,14 @@ update() {
 		exit 1
 	fi
 
-	if [ ! -r /etc/abs/supfile ]; then
-		echo "abs: missing config file /etc/abs/supfile"
-		exit 1
-	fi
-
 	if [ "`id -u`" != "0" ]; then
 		echo "abs: you must be root to update your ABS tree"
 		exit 1
 	fi
 
-	cd $ABS_ROOT && cvsup -L 1 -r 0 -g -c .sup /etc/abs/supfile
+	for sup in `find /etc/abs -name "supfile.*"`; do
+		cd $ABS_ROOT && cvsup -L 1 -r 0 -g -c .sup $sup
+	done		
 }
 
 for opt in "$@"; do
