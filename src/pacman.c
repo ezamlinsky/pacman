@@ -972,7 +972,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 									db_write(db, depender);
 									
 									/* add the new requiredby */
-									new->requiredby = list_add(new->requiredby, k->data);
+									new->requiredby = list_add(new->requiredby, strdup(k->data));
 								}
 							}
 						}
@@ -1013,9 +1013,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		db_close(dbs->db);
 		for(j = dbs->pkgcache; j; j = j->next) {
 			if(j->data) {
-				/* XXX: this freepkg() still locks up, but only when the "replaces"
-				 *      code has been run
-				freepkg(j->data);*/
+				freepkg(j->data);
 				j->data = NULL;
 			}
 		}

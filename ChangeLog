@@ -1,5 +1,6 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.6.3         - A couple memory fixes in the new replaces code
 2.6.2         - Fixed a memory cleanup bug
               - Aurelien's patch:
                 - bug #159 implemented (for -S and -R)
