@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.9
+PACVER = 2.9.1
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -108,10 +108,6 @@ install: pacman vercmp convertdb man
 	$(INSTALL) -D -m0644 $(MANSRC)makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	$(INSTALL) -D -m0644 etc/pacman.conf $(DESTDIR)/etc/pacman.conf
 	$(INSTALL) -D -m0644 etc/makepkg.conf $(DESTDIR)/etc/makepkg.conf
-	$(INSTALL) -D -m0644 etc/current $(DESTDIR)/etc/pacman.d/current
-	$(INSTALL) -D -m0644 etc/release $(DESTDIR)/etc/pacman.d/release
-	$(INSTALL) -D -m0644 etc/extra $(DESTDIR)/etc/pacman.d/extra
-	$(INSTALL) -D -m0644 etc/unstable $(DESTDIR)/etc/pacman.d/unstable
 
 clean:
 	rm -f *~ $(OBJDIR)*.o $(MANSRC)*.8

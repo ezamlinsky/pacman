@@ -1085,6 +1085,10 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				}
 			}
 			mb = (double)(totalsize / 1048576.0);
+			/* round up to 0.1 */
+			if(mb < 0.1) {
+				mb = 0.1;
+			}
 			printf("\nTargets: ");
 			str = buildstring(list);
 			indentprint(str, 9);

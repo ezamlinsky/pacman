@@ -31,6 +31,7 @@ typedef struct __server_t {
 /* Repositories */
 typedef struct __sync_t {
 	char* treename;
+	char* lastupdate;
 	PMList *servers;
 } sync_t;
 
@@ -48,7 +49,11 @@ typedef struct __syncpkg_t {
 } syncpkg_t;
 
 int sync_synctree();
+
 int downloadfiles(PMList *servers, const char *localpath, PMList *files);
+int downloadfiles_forreal(PMList *servers, const char *localpath,
+		PMList *files, const char *mtime1, char *mtime2);
+
 syncpkg_t* find_pkginsync(char *needle, PMList *haystack);
 PMList* rm_pkginsync(char *needle, PMList *haystack);
 

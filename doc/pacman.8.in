@@ -219,7 +219,7 @@ global options.
 .RS
 .nf
 [options]
-NoUpgrade = etc/passed etc/group etc/shadow
+NoUpgrade = etc/passwd etc/group etc/shadow
 NoUpgrade = etc/fstab
 
 Include = /etc/pacman.d/current

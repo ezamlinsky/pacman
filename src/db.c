@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <libgen.h>
 #include <unistd.h>
@@ -43,7 +44,7 @@ pacdb_t* db_open(char *root, char *pkgdir, char *treename)
 	if(db->dir == NULL) {
 		return(NULL);
 	}
-	strncpy(db->treename, treename, sizeof(db->treename));
+	strncpy(db->treename, treename, sizeof(db->treename)-1);
 	
 	return(db);
 }
@@ -61,6 +62,52 @@ void db_close(pacdb_t* db)
 	return;
 }
 
+/* reads dbpath/.lastupdate and populates *ts with the contents.
+ * *ts should be malloc'ed and should be at least 15 bytes.
+ *
+ * Returns 0 on success, 1 on error
+ *
+ */
+int db_getlastupdate(const char *dbpath, char *ts)
+{
+	FILE *fp;
+	char path[PATH_MAX];
+	/* get the last update time, if it's there */
+	snprintf(path, PATH_MAX, "%s/.lastupdate", dbpath);
+	if((fp = fopen(path, "r")) == NULL) {
+		return(1);
+	} else {
+		char line[256];
+		if(fgets(line, sizeof(line), fp)) {
+			strncpy(ts, line, 15); /* YYYYMMDDHHMMSS */
+			ts[14] = '\0';
+		} else {
+			fclose(fp);
+			return(1);
+		}
+	}
+	fclose(fp);
+	return(0);
+}
+
+/* writes the db->path/.lastupdate with the contents of *ts
+ */
+int db_setlastupdate(const char *dbpath, const char *ts)
+{
+	FILE *fp;
+	char path[PATH_MAX];
+
+	snprintf(path, PATH_MAX, "%s/.lastupdate", dbpath);
+	if((fp = fopen(path, "w")) == NULL) {
+		return(1);
+	}
+	if(fputs(ts, fp) <= 0) {
+		fclose(fp);
+		return(1);
+	}
+	fclose(fp);
+	return(0);
+}
 
 /* frees pkgcache if necessary and returns a new package
  * cache from db 
@@ -82,6 +129,8 @@ PMList* db_loadpkgs(pacdb_t *db)
 pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 {
 	struct dirent *ent = NULL;
+	struct stat sbuf;
+	char path[PATH_MAX];
 	char name[256];
 	char *ptr = NULL;
 	int found = 0;
@@ -96,6 +145,11 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 				continue;
 			}
 			strncpy(name, ent->d_name, 255);
+			/* stat the entry, make sure it's a directory */
+			snprintf(path, PATH_MAX, "%s/%s", db->path, name);
+			if(stat(path, &sbuf) || !S_ISDIR(sbuf.st_mode)) {
+				continue;
+			}
 			/* truncate the string at the second-to-last hyphen, */
 			/* which will give us the package name */
 			if((ptr = rindex(name, '-'))) {
@@ -115,15 +169,21 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 		}
 	} else {
 		/* normal iteration */
-		ent = readdir(db->dir);
-		if(ent == NULL) {
-			return(NULL);
-		}
-		if(!strcmp(ent->d_name, ".")) {
+		int isdir = 0;
+		while(!isdir) {
 			ent = readdir(db->dir);
-		}
-		if(!strcmp(ent->d_name, "..")) {
-			ent = readdir(db->dir);
+			if(ent == NULL) {
+				return(NULL);
+			}
+			/* stat the entry, make sure it's a directory */
+			snprintf(path, PATH_MAX, "%s/%s", db->path, ent->d_name);
+			if(!stat(path, &sbuf) && S_ISDIR(sbuf.st_mode)) {
+				isdir = 1;
+			}
+			if(!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, "..")) {
+				isdir = 0;
+				continue;
+			}
 		}
 	}
 	return(db_read(db, ent, inforeq));
@@ -651,7 +711,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 				}
 				if(!ok) {
 					MALLOC(str, 512);
-					snprintf(str, 512, "%s: exists in filesystem", path);
+					snprintf(str, 512, "%s: %s: exists in filesystem", p->name, path);
 					conflicts = list_add(conflicts, str);
 				}
 			}
