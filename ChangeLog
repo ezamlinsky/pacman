@@ -1,7 +1,14 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.8.3         - Fixed a little makepkg bug with bash 3.0
+              - Fixed resolvedeps to always prefer literals over provisios
+              - Added --config option to specify an alternate config file
+              - Added "Include" directive to include repositories from
+                config files (inspired by Michael Baehr's patch)
+              - Added patch from Jason Chu:
+                - Even smarter file-conflict checking
 2.8.2         - Fixed a segfault bug in file-conflict checks
-              - Made --confirm actually work.  Go me.
+              - Made --noconfirm actually work.  Go me.
 2.8.1         - Added a HoldPkg option in pacman.conf, for the more
                 exploratory users who run things like "pacman -R pacman".  It
                 will ask for confirmation before removing any packages listed

@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.8.2'
+myver='2.8.3'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -187,6 +187,7 @@ usage() {
 	echo "  -j <jobs>        Set MAKEFLAGS to \"-j<jobs>\" before building"
 	echo "  -m, --nocolor    Disable colorized output messages"
 	echo "  -n, --nostrip    Do not strip binaries/libraries"
+	echo "  -o, --nobuild    Download and extract files only"
 	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
 	echo "  -r, --rmdeps     Remove installed dependencies after a successful build"
 	echo "  -s, --syncdeps   Install missing dependencies with pacman"
@@ -209,6 +210,7 @@ NODEPS=0
 FORCE=0
 NOEXTRACT=0
 NOSTRIP=0
+NOBUILD=0
 RMDEPS=0
 BUILDSCRIPT="./PKGBUILD"
 
@@ -225,6 +227,7 @@ while [ "$#" -ne "0" ]; do
 		--install)    INSTALL=1 ;;
 		--force)      FORCE=1 ;;
 		--nostrip)    NOSTRIP=1 ;;
+		--nobuild)    NOBUILD=1 ;;
 		--nocolor)    USE_COLOR="n" ;;
 		--genmd5)     GENMD5=1 ;;
 		--rmdeps)     RMDEPS=1 ;;
@@ -237,27 +240,28 @@ while [ "$#" -ne "0" ]; do
 			exit 1
 			;;
 		-*)
-			while getopts "cCsbdehifgj:mnrp:w:-" opt; do
+			while getopts "cCsbdehifgj:mnorp:w:-" opt; do
 				case $opt in
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
-					s) DEP_BIN=1 ;;
 					b) DEP_SRC=1 ;;
 					d) NODEPS=1 ;;
 					e) NOEXTRACT=1 ;;
-					i) INSTALL=1 ;;
-					g) GENMD5=1 ;;
 					f) FORCE=1 ;;
-					m) USE_COLOR="n" ;;
-					n) NOSTRIP=1 ;;
-					w) PKGDEST=$OPTARG ;;
-					p) BUILDSCRIPT=$OPTARG ;;
-					j) export MAKEFLAGS="-j$OPTARG" ;;
-					r) RMDEPS=1 ;;
+					g) GENMD5=1 ;;
 					h)
 						usage
 						exit 0
 						;;
+					i) INSTALL=1 ;;
+					j) export MAKEFLAGS="-j$OPTARG" ;;
+					m) USE_COLOR="n" ;;
+					n) NOSTRIP=1 ;;
+					o) NOBUILD=1 ;;
+					p) BUILDSCRIPT=$OPTARG ;;
+					r) RMDEPS=1 ;;
+					s) DEP_BIN=1 ;;
+					w) PKGDEST=$OPTARG ;;
 					-)
 						OPTIND=0
 						break
@@ -283,7 +287,7 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 PKGDEST=`pwd`
-cd -
+cd $OLDPWD
 
 if [ "$CLEANCACHE" = "1" ]; then
 	if [ "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
@@ -537,6 +541,11 @@ if [ -d $startdir/pkg ]; then
 	rm -rf $startdir/pkg
 fi
 mkdir -p $startdir/pkg
+
+if [ "$NOBUILD" = "1" ]; then
+	msg "Sources are ready."
+	exit 0
+fi
 
 # build
 msg "Starting build()..."

@@ -83,6 +83,7 @@ unsigned short pmo_s_clean    = 0;
 unsigned short pmo_group      = 0;
 /* configuration file options */
 char          *pmo_dbpath       = NULL;
+char          *pmo_configfile   = NULL;
 char          *pmo_logfile      = NULL;
 char          *pmo_proxyhost    = NULL;
 unsigned short pmo_proxyport    = 0;
@@ -112,7 +113,6 @@ int main(int argc, char *argv[])
 {
 	int ret = 0;
 	char *ptr    = NULL;
-	char path[PATH_MAX];	
 	pacdb_t *db_local = NULL;
 	char *cenv = NULL;
 
@@ -132,6 +132,9 @@ int main(int argc, char *argv[])
 	/* default dbpath */
 	MALLOC(pmo_dbpath, PATH_MAX);
 	strcpy(pmo_dbpath, PKGDIR);
+	/* default configuration file */
+	MALLOC(pmo_configfile, PATH_MAX);
+	strcpy(pmo_configfile, PACCONF);
 
 	/* parse the command line */
 	ret = parseargs(PM_ADD, argc, argv);
@@ -168,8 +171,7 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, cleanup);
 
 	/* parse the system-wide config file */
-	snprintf(path, PATH_MAX, "/%s", PACCONF);
-	if(parseconfig(path)) {
+	if(parseconfig(pmo_configfile)) {
 		cleanup(1);
 	}
 
@@ -2709,7 +2711,6 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 
 			/* find the package in one of the repositories */
 			for(j = databases; !found && j; j = j->next) {
-				PMList *provides;
 				dbsync_t *dbs = (dbsync_t*)j->data;
 				/* check literals */
 				for(k = dbs->pkgcache; !found && k; k = k->next) {
@@ -2721,17 +2722,19 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 						sync->dbs = dbs;
 					}
 				}
+			}
+			for(j = databases; !found && j; j = j->next) {
+				PMList *provides;
+				dbsync_t *dbs = (dbsync_t*)j->data;
 				/* check provides */
-				if(!found) {
-					provides = whatprovides(dbs->db, miss->depend.name);
-					if(provides) {
-						found = 1;
-						/* re-fetch the package record with dependency info */
-						sync->pkg = db_scan(dbs->db, provides->data, INFRQ_DESC | INFRQ_DEPENDS);
-						sync->dbs = dbs;
-					}
-					list_free(provides);
+				provides = whatprovides(dbs->db, miss->depend.name);
+				if(provides) {
+					found = 1;
+					/* re-fetch the package record with dependency info */
+					sync->pkg = db_scan(dbs->db, provides->data, INFRQ_DESC | INFRQ_DEPENDS);
+					sync->dbs = dbs;
 				}
+				list_free(provides);
 			}
 			if(!found) {
 				fprintf(stderr, "error: cannot resolve dependencies for \"%s\":\n", miss->target);
@@ -3257,7 +3260,8 @@ int parseargs(int op, int argc, char **argv)
 		{"cascade",    no_argument,       0, 'c'},
 		{"recursive",  no_argument,       0, 's'},
 		{"groups",     no_argument,       0, 'g'},
-		{"noconfirm",  no_argument,       0, 999},
+		{"noconfirm",  no_argument,       0, 1000},
+		{"config",     required_argument, 0, 1001},
 		{0, 0, 0, 0}
 	};
 
@@ -3267,7 +3271,8 @@ int parseargs(int op, int argc, char **argv)
 		}
 		switch(opt) {
 			case 0:   break;
-			case 999: pmo_noconfirm = 1; break;
+			case 1000: pmo_noconfirm = 1; break;
+			case 1001: strcpy(pmo_configfile, optarg); break;
 			case 'A': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_ADD);     break;
 			case 'R': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_REMOVE);  break;
 			case 'U': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); break;
@@ -3362,23 +3367,29 @@ int parseconfig(char *configfile)
 				return(1);
 			}
 			if(!strcmp(section, "local")) {
-				fprintf(stderr, "config: line %d: %s is reserved and cannot be used as a package tree\n",
+				fprintf(stderr, "config: line %d: '%s' is reserved and cannot be used as a package tree\n",
 					linenum, section);
 				return(1);
 			}
 			if(strcmp(section, "options")) {
-				/* start a new sync record */
-				MALLOC(sync, sizeof(sync_t));
-				sync->treename = strdup(section);
-				sync->servers = NULL;
-				pmc_syncs = list_add(pmc_syncs, sync);
+				PMList *i;
+				int found = 0;
+				for(i = pmc_syncs; i && !found; i = i->next) {
+					sync = (sync_t*)i->data;
+					if(!strcmp(sync->treename, section)) {
+						found = 1;
+					}
+				}
+				if(!found) {
+					/* start a new sync record */
+					MALLOC(sync, sizeof(sync_t));
+					sync->treename = strdup(section);
+					sync->servers = NULL;
+					pmc_syncs = list_add(pmc_syncs, sync);
+				}
 			}
 		} else {
 			/* directive */
-			if(!strlen(section)) {
-				fprintf(stderr, "config: line %d: all directives must belong to a section\n", linenum);
-				return(1);
-			}
 			ptr = line;
 			key = strsep(&ptr, "=");
 			if(key == NULL) {
@@ -3387,6 +3398,10 @@ int parseconfig(char *configfile)
 			}
 			trim(key);
 			key = strtoupper(key);
+			if(!strlen(section) && strcmp(key, "INCLUDE")) {
+				fprintf(stderr, "config: line %d: all directives must belong to a section\n", linenum);
+				return(1);
+			}
 			if(ptr == NULL) {
 				if(!strcmp(key, "NOPASSIVEFTP")) {
 					pmo_nopassiveftp = 1;
@@ -3400,7 +3415,12 @@ int parseconfig(char *configfile)
 				}
 			} else {
 				trim(ptr);
-				if(!strcmp(section, "options")) {
+				if(!strcmp(key, "INCLUDE")) {
+					char conf[PATH_MAX];
+					strncpy(conf, ptr, PATH_MAX);
+					vprint("config: including %s\n", conf);
+					parseconfig(conf);
+				} else if(!strcmp(section, "options")) {
 					if(!strcmp(key, "NOUPGRADE")) {
 						char *p = ptr;
 						char *q;
@@ -3610,6 +3630,7 @@ void usage(int op, char *myname)
 			printf("  -w, --downloadonly  download packages but do not install/upgrade anything\n");
 			printf("  -y, --refresh       download fresh package databases from the server\n");
 		}
+		printf("      --config <path> set an alternate configuration file\n");
 		printf("      --noconfirm     do not ask for any confirmation\n");
 		printf("  -v, --verbose       be verbose\n");
 		printf("  -r, --root <path>   set an alternate installation root\n");

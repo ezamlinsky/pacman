@@ -1,4 +1,4 @@
-.TH makepkg 8 "July 2, 2004" "makepkg #VERSION#" ""
+.TH makepkg 8 "August 3, 2004" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -367,6 +367,9 @@ Disable color in output messages
 .TP
 .B "\-n, \-\-nostrip"
 Do not strip binaries and libraries.
+.TP
+.B "\-o, \-\-nobuild"
+Download and extract files only, do not build.
 .TP
 .B "\-p <buildscript>"
 Read the package script \fI<buildscript>\fP instead of the default (\fIPKGBUILD\fP).

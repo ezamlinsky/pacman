@@ -1,0 +1,21 @@
+#
+# The Release tree.  This tree is a snapshot view of the Current (core)
+# repository as it was when the last ISO was released.
+#
+# If you use the RELEASE tree, you should disable the CURRENT
+# tree to avoid conflicts
+#
+[release]
+Server = ftp://ftp.archlinux.org/release/os/i686
+Server = ftp://ftp.archlinux.de/pub/archlinux/release/os/i686
+Server = ftp://ftp.ibiblio.org/pub/linux/distributions/archlinux/release/os/i686
+Server = http://archlinux.antesis.org/release/os/i686
+Server = ftp://ftp.mpi-sb.mpg.de/pub/linux/mirror/ftp.ibiblio.org/pub/Linux/distributions/archlinux/release/os/i686
+Server = ftp://ftp.oit.unc.edu/pub/Linux/distributions/archlinux/release/os/i686
+Server = ftp://ftp.tu-chemnitz.de/pub/linux/sunsite.unc-mirror/distributions/archlinux/release/os/i686
+Server = ftp://ftp.parrswood.net/Mirrors/ftp.archlinux.org/release/os/i686
+Server = ftp://ftp.kegep.tuc.gr/archlinux/release/os/i686
+Server = http://darkstar.ist.utl.pt/archlinux/release/os/i686
+Server = ftp://gd.tuwien.ac.at/opsys/linux/archlinux/release/os/i686
+Server = ftp://saule.mintis.lt/pub/linux/release/os/i686
+Server = ftp://ftp.rez-gif.supelec.fr/pub/Linux/distrib/archlinux/release/os/i686

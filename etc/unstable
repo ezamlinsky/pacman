@@ -1,0 +1,17 @@
+#
+# The Unstable tree.  Contains unstable or development versions of packages.
+#
+[unstable]
+Server = ftp://ftp.archlinux.org/unstable/os/i686
+Server = ftp://ftp.archlinux.de/pub/archlinux/unstable/os/i686
+Server = ftp://ftp.ibiblio.org/pub/linux/distributions/archlinux/unstable/os/i686
+Server = http://archlinux.antesis.org/unstable/os/i686
+Server = ftp://ftp.mpi-sb.mpg.de/pub/linux/mirror/ftp.ibiblio.org/pub/Linux/distributions/archlinux/unstable/os/i686
+Server = ftp://ftp.oit.unc.edu/pub/Linux/distributions/archlinux/unstable/os/i686
+Server = ftp://ftp.tu-chemnitz.de/pub/linux/sunsite.unc-mirror/distributions/archlinux/unstable/os/i686
+Server = ftp://ftp.parrswood.net/Mirrors/ftp.archlinux.org/unstable/os/i686
+Server = http://darkstar.ist.utl.pt/archlinux/unstable/os/i686
+Server = ftp://archlinux.creativa.cl/unstable/os/i686
+Server = ftp://gd.tuwien.ac.at/opsys/linux/archlinux/unstable/os/i686
+Server = ftp://saule.mintis.lt/pub/linux/unstable/os/i686
+Server = ftp://ftp.rez-gif.supelec.fr/pub/Linux/distrib/archlinux/unstable/os/i686
