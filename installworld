@@ -1,0 +1,25 @@
+#!/bin/bash
+
+if [ "$1" = "" ]; then
+  echo "usage: $0 <pkg_directory>"
+  echo ""
+  echo "call this while in the root of the install tree and"
+  echo "pass it the path of the directory containing packages"
+  echo "to be installed"
+  echo ""
+  exit
+fi
+
+echo "Initializing pacman database..."
+mkdir -p var/lib/pacman && touch var/lib/pacman/pacman.db
+
+for pkg in `find $1/*`; do
+  echo "==> $pkg" >>install.log
+  echo "==> $pkg"
+  pacman -A -r . $pkg 2>&1 >>install.log
+done
+
+echo "Syncing..."
+sync
+
+echo "Done."

@@ -1,0 +1,5 @@
+VERSION         DESCRIPTION
+------------------------------------------------------------------
+              - Changed db_find_conflicts() to ignore directories
+1.0           - Initial Release
+

@@ -1,0 +1,29 @@
+#!/bin/bash
+
+toplevel=`pwd`
+
+if [ $# -lt 1 ]; then
+  echo "usage: $0 <destdir>"
+  exit 1
+fi
+
+for port in `find $toplevel -type d -maxdepth 1 -mindepth 1 | sort`; do
+  cd $port
+  if [ -f PKGBUILD ]; then
+    . PKGBUILD
+    donebuild=0
+    if [ ! -f $1/$pkgname-$pkgver-$pkgrel.pkg.tar.gz ]; then
+      makepkg
+      rm -rf pkg src
+      mv -v $pkgname-$pkgver-$pkgrel.pkg.tar.gz $1/
+      donebuild=1
+    fi
+    d=`date +"[%b %d %H:%M]"`
+    echo -n "$d  " >>$toplevel/build.log
+    if [ $donebuild = 1 ]; then
+      echo "$pkgname was built successfully" >>$toplevel/build.log
+    else
+      echo "$pkgname already built -- skipping" >>$toplevel/build.log
+    fi
+  fi
+done

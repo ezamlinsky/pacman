@@ -1,0 +1,48 @@
+
+               pacman - Package Management Utility
+
+               by Judd Vinet <jvinet@zeroflux.org>
+
+DESCRIPTION:
+------------
+   pacman is a utility which manages software packages in Linux.  It uses
+   simple .tar.gz files as a package format, and maintains a text-based
+   package database, just in case some hand tweaking is necessary.
+
+   pacman does not strive to "do everything."  It will add, remove and
+   upgrade packages in the system, and it will allow you to query the
+   package database for installed packages, files and owners.
+
+   Plans exist for dependency checking and remote file fetching, as well.
+   See TODO for more info.
+
+
+INSTALL:
+--------
+$ make install
+or
+$ make DESTDIR=/your/path/here install
+
+If your man files are located in a directory other than /usr/man, you may
+want to edit Makefile and modify the MANDIR line accordingly.
+
+Note:  Since pacman is compiled statically, you will need the static libraries
+       for glibc and zlib.
+
+
+BUGS:
+-----
+If you find bugs (which is quite likely at version 1.0), please submit
+them to <jvinet@zeroflux.org> with specific information, such as your
+commandline, the nature of the bug, and even the package database, if
+it helps.
+
+
+COPYRIGHT:
+----------
+pacman is Copyright (c) 2002 Judd vinet <jvinet@zeroflux.org> and is
+licensed through the GNU General Public License (see COPYING).
+
+pacman uses "libtar", a library for reading/writing tar-files. This 
+library is Copyright (c) 1998-2001 Mark D. Roth <roth@uiuc.edu> (see 
+libtar-X.X.X/COPYRIGHT for further details).

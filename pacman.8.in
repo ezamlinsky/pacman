@@ -1,0 +1,72 @@
+.TH pacman 8 "Feb 10, 2002" "pacman #VERSION#" ""
+.SH NAME
+pacman \- package manager utility
+.SH SYNOPSIS
+\fBpacman  <operation> [options] <package>\fP
+.SH DESCRIPTION
+\fBpacman\fP is a \fIpackage management\fP utility.  Package
+information is maintained in a basic text format for easy
+tweaking, if necessary, and packages are in a standard
+\fIgzipped tar\fP format.
+.SH OPERATIONS
+.TP
+.B "\-A, \-\-add"
+Add a package to the system.  Package will be uncompressed
+into the installation root and the database will be updated.
+.TP
+.B "\-R, \-\-remove"
+Remove a package from the system.  Files belonging to the
+specified package will be deleted, and the database will
+be updated.  Note that files with \fI.conf\fP extensions will
+be renamed with \fI.conf.save\fP extensions.
+.TP
+.B "\-U, \-\-upgrade"
+Upgrade a package.  This is essentially a "remove-then-install"
+process.  Files with \fI.conf\fP extensions will be saved.
+.TP
+.B "\-Q, \-\-query"
+Query the package database.  This operation allows you to
+view installed packages and their files.  See \fBQUERY OPTIONS\fP
+below.
+.TP
+.B "\-V, \-\-version"
+Display version and exit.
+.TP
+.B "\-h, \-\-help"
+Display syntax for the given operation.  If no operation was
+supplied, then the general syntax is shown.
+.SH QUERY OPTIONS
+.TP
+.B "\-o, \-\-owns <file>"
+Output the name of the package that owns <file>.
+.TP
+.B "\-l, \-\-list"
+Instead of outputting the package name, output the list of
+files owned by the package.
+.TP
+.B "\-i, \-\-info"
+Output the .PKGINFO file contained in <package>.  This option
+can only be used with the \fB-p\fP option.
+.SH OPTIONS
+.TP
+.B "\-v, \-\-verbose"
+Output more status and error messages.
+.TP
+.B "\-f, \-\-force"
+Force installation, overwriting conflicting files.  If the package
+that is about to be installed contains files that are already
+installed this option will cause all those files to be overwritten.
+This option should be used with care, preferably not at all.
+.TP
+.B "\-r, \-\-root <path>"
+Specify alternative installation root (default is "/"). This
+should \fInot\fP be used as a way to install software into
+e.g. /usr/local instead of /usr. Instead this should be used
+if you want to install a package on a temporary mounted partition,
+which is "owned" by another system. By using this option you not only
+specify where the software should be installed, but you also
+specify which package database to use.
+.SH AUTHOR
+.nf
+Judd Vinet <jvinet@zeroflux.org>
+.fi
