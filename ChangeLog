@@ -1,5 +1,17 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+2.3.1         - Fixed the progress bar overflow
+              - Pacman does not ask "Are you sure" when you use --downloadonly
+              - Switched up a couple makepkg options to be more consistent
+                with pacman's options
+              - If you ^C out of a file download, the package will now be
+                removed from the cache directory
+2.3           - The beginnings of source-side dependency resolution, makepkg
+                can now either A) download/install missing deps with pacman
+                -S; or B) find missing deps in the /usr/abs tree and
+                build/install them.
+              - Added a --nodeps option to makepkg
+              - Improved the --search output
 2.2           - More bugfixes
               - Added --downloadonly switch to --sync
 2.1           - Lots of bugfixes

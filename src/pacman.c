@@ -85,7 +85,8 @@ PMList *pm_packages = NULL;
 /* list of targets specified on command line */
 PMList *pm_targets  = NULL;
 
-char *lckfile = "/tmp/pacman.lck";
+char *lckfile  = "/tmp/pacman.lck";
+char *workfile = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -470,7 +471,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					allgood = 0;
 					continue;
 				}
-				if(local) {
+				if(local && !pmo_s_downloadonly) {
 					/* this is an upgrade, compare versions and determine if it is necessary */
 					cmp = rpmvercmp(local->version, sync->pkg->version);
 					if(cmp > 0) {
@@ -1502,44 +1503,45 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 	list_free(targ);
 	for(i = deps; i; i = i->next) {
 		int found = 0;
-		syncpkg_t *sync = NULL;
 		depmissing_t *miss = (depmissing_t*)i->data;
-		MALLOC(sync, sizeof(syncpkg_t));
 
-		/* find the package in one of the repositories */
-		for(j = databases; !found && j; j = j->next) {
-			dbsync_t *dbs = (dbsync_t*)j->data;
-			for(k = dbs->pkgcache; !found && k; k = k->next) {
-				pkginfo_t *pkg = (pkginfo_t*)k->data;
-				if(!strcmp(miss->depend.name, pkg->name)) {
-					found = 1;
-					/* re-fetch the package record with dependency info */
-					sync->pkg = db_scan(dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
-					sync->dbs = dbs;
-				}
-			}
-		}
-		if(!found) {
-			fprintf(stderr, "error: cannot resolve dependencies for \"%s\":\n", miss->target);
-			fprintf(stderr, "       \"%s\" is not in the package set\n", miss->depend.name);
-			return(1);
-		}
-		found = 0;
-		for(j = list; j; j = j->next) {
-			syncpkg_t *tmp = (syncpkg_t*)j->data;
-			if(tmp && !strcmp(tmp->pkg->name, sync->pkg->name)) {
-				found = 1;
-			}
-		}
-		if(found) {
-			/* this dep is already in the target list */
-			continue;
-		}
 		if(miss->type == CONFLICT) {
 			fprintf(stderr, "error: cannot resolve dependencies for \"%s\":\n", miss->target);
 			fprintf(stderr, "       %s conflicts with %s\n", miss->target, miss->depend.name);
 			return(1);
 		} else if(miss->type == DEPEND) {
+			syncpkg_t *sync = NULL;
+			MALLOC(sync, sizeof(syncpkg_t));
+
+			/* find the package in one of the repositories */
+			for(j = databases; !found && j; j = j->next) {
+				dbsync_t *dbs = (dbsync_t*)j->data;
+				for(k = dbs->pkgcache; !found && k; k = k->next) {
+					pkginfo_t *pkg = (pkginfo_t*)k->data;
+					if(!strcmp(miss->depend.name, pkg->name)) {
+						found = 1;
+						/* re-fetch the package record with dependency info */
+						sync->pkg = db_scan(dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
+						sync->dbs = dbs;
+					}
+				}
+			}
+			if(!found) {
+				fprintf(stderr, "error: cannot resolve dependencies for \"%s\":\n", miss->target);
+				fprintf(stderr, "       \"%s\" is not in the package set\n", miss->depend.name);
+				return(1);
+			}
+			found = 0;
+			for(j = list; j; j = j->next) {
+				syncpkg_t *tmp = (syncpkg_t*)j->data;
+				if(tmp && !strcmp(tmp->pkg->name, sync->pkg->name)) {
+					found = 1;
+				}
+			}
+			if(found) {
+				/* this dep is already in the target list */
+				continue;
+			}
 			/*printf("resolving %s\n", sync->pkg->name); fflush(stdout);*/
 			found = 0;
 			for(j = trail; j; j = j->next) {
@@ -1864,6 +1866,11 @@ void cleanup(int signum)
 {
 	if(lckrm(lckfile)) {
 		fprintf(stderr, "warning: could not remove lock file %s\n", lckfile);
+	}
+	if(workfile) {
+		/* remove the current file being downloaded (as it's not complete) */
+		unlink(workfile);
+		FREE(workfile);
 	}
 	exit(signum);
 }

@@ -104,6 +104,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 	int done = 0;
 	PMList *complete = NULL;
 	PMList *i;
+	extern char* workfile;
 
 	if(files == NULL) {
 		return(0);
@@ -161,6 +162,14 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
 				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
 				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+
+				/* declare our working file so it can be removed it on interrupt */
+				/* by the cleanup() function */
+				if(workfile) {
+					FREE(workfile);
+				}
+				MALLOC(workfile, PATH_MAX);
+				strcpy(workfile, output);
 		
 				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
@@ -171,6 +180,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 					log_progress(control, fsz, &fsz);
 					complete = list_add(complete, fn);
 				}
+				FREE(workfile);
 				printf("\n");
 				fflush(stdout);
 			} else {
@@ -211,7 +221,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 static int log_progress(netbuf *ctl, int xfered, void *arg)
 {
     int fsz = *(int*)arg;
-    int pct = (unsigned int)(xfered * 100) / fsz;
+		int pct = ((float)xfered / fsz) * 100;
 		int i;
 		
 		printf("%s [", sync_fnm);

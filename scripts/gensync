@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.3'
+myver='2.3.1'
 
 usage() {
   echo "gensync $myver"

@@ -1,0 +1,365 @@
+Content-type: text/html
+
+<HTML><HEAD><TITLE>Manpage of makepkg</TITLE>
+</HEAD><BODY>
+<H1>makepkg</H1>
+Section:  (8)<BR>Updated: March 3, 2003<BR><A HREF="#index">Index</A>
+<A HREF="http://localhost/cgi-bin/man/man2html">Return to Main Contents</A><HR>
+
+<A NAME="lbAB">&nbsp;</A>
+<H2>NAME</H2>
+
+makepkg - package build utility
+<A NAME="lbAC">&nbsp;</A>
+<H2>SYNOPSIS</H2>
+
+<B>makepkg</B>
+<A NAME="lbAD">&nbsp;</A>
+<H2>DESCRIPTION</H2>
+
+<B>makepkg</B> will build packages for you.  All it needs is
+a build-capable linux platform, wget, and some build scripts.  The advantage
+to a script-based build is that you only really do the work once.  Once you
+have the build script for a package, you just need to run makepkg and it
+will do the rest: download source files, check dependencies, 
+configure the buildtime settings, build the package, install the package
+into a temporary root, make customizations, generate meta-info, and package
+the whole thing up for <B>pacman</B> to use.
+<P>
+<B>makeworld</B> can be used to rebuild an entire package group, or the
+entire build tree.
+<A NAME="lbAE">&nbsp;</A>
+<H2>BUILD PROCESS (or How To Build Your Own Packages)</H2>
+
+Start in an isolated directory (ie, it's not used for anything other
+than building this package).  The build script should be called PKGBUILD
+and it should bear resemblance to the example below.
+<P>
+<B>NOTE:</B> If you have a local copy of the Arch Build System (ABS) tree
+on your computer, you can copy the PKGBUILD.proto file to your new package
+build directory and edit it from there.  To acquire/sync the ABS tree, use
+the <B>abs</B> script included with pacman/makepkg.
+<P>
+<DL COMPACT>
+<DT><DT></DL>
+<A NAME="lbAF">&nbsp;</A>
+<H2>PKGBUILD Example:</H2>
+
+<DD>
+<DD>
+<DL COMPACT><DT><DD>
+<PRE>
+pkgname=modutils
+pkgver=2.4.13
+pkgrel=1
+pkgdesc=&quot;Utilities for inserting and removing modules from the linux kernel&quot;
+backup=(etc/modules.conf)
+depends=('glibc&gt;=2.2.5' 'bash' 'zlib')
+source=(<A HREF="ftp://ftp.server.com/$pkgname-$pkgver.tar.gz">ftp://ftp.server.com/$pkgname-$pkgver.tar.gz</A> modules.conf)
+
+build() {
+  cd $startdir/src/$pkgname-$pkgver
+  ./configure --prefix=/usr
+  make || return 1
+  make prefix=$startdir/pkg/usr install
+  # copy our custom modules.conf into the package root
+  mkdir -p $startdir/pkg/etc
+  cp ../modules.conf $startdir/pkg/etc
+}
+</PRE>
+
+</DL>
+
+<P>
+As you can see, the setup is fairly simple.  The first three lines define
+the package name and version info.  They also define the final package name
+which will be of the form <I>$pkgname-$pkgver-$pkgrel.pkg.tar.gz</I>.  The fourth
+line provides a brief description of the package.  These four lines should
+be present in every PKGBUILD script.
+<P>
+The line with <I>backup=</I> specifies files that should be treated specially
+when removing or upgrading packages.  See <B>HANDLING CONFIG FILES</B> in
+the <I>pacman</I> manpage for more information on this.
+<P>
+The sixth line lists the dependencies for this package.  In order to build/run
+the package, all dependencies must be satisifed first.  makepkg will check this
+before attempting to build the package.
+<P>
+Once your PKGBUILD is created, you can run <I>makepkg</I> from the build directory.
+makepkg will then check dependencies and look for the source files required to
+build.  If some are missing it will attempt to download them, provided there is
+a fully-qualified URL in the <I>source</I> array.
+<P>
+The sources are then extracted into a directory called ./src and
+the <I>build</I> function is called.  This is where all package configuration,
+building, and installing should be done.  Any customization will likely take
+place here.
+<P>
+After a package is built, the <I>build</I> function must install the package
+files into a special package root, which can be referenced by <B>$startdir/pkg</B>
+in the <I>build</I> function.  The typical way to do this is one of the following:
+<DL COMPACT><DT><DD>
+<PRE>
+
+make DESTDIR=$startdir/pkg install
+
+or
+
+make prefix=$startdir/pkg/usr install
+
+</PRE>
+
+</DL>
+
+Notice that the &quot;/usr&quot; portion should be present with &quot;prefix&quot;, but not &quot;DESTDIR&quot;.
+<P>
+Once the package is successfully installed into the package root, <I>makepkg</I>
+will remove some directories (as per Arch Linux package guidelines; if you use
+this elsewhere, feel free to change it) like /usr/doc and /usr/info.  It will
+then strip debugging info from libraries and binaries and generate a meta-info
+file.  Finally, it will compress everything into a .pkg.tar.gz file and leave it
+in the directory you ran <B>makepkg</B> from.
+<P>
+At this point you should have a package file in the current directory, named
+something like name-version-release.pkg.tar.gz.  Done!
+<P>
+<A NAME="lbAG">&nbsp;</A>
+<H2>Install/Upgrade/Remove Scripting</H2>
+
+Pacman has the ability to store and execute a package-specific script when it
+installs, removes, or upgrades a package.  This allows a package to &quot;configure
+itself&quot; after installation and do the opposite right before it is removed.
+<P>
+The exact time the script is run varies with each operation:
+<DL COMPACT>
+<DT><B>post_install</B>
+
+<DD>
+script is run right after files are installed.
+<P>
+<DT><B>post_upgrade</B>
+
+<DD>
+script is run after all files have been upgraded.
+<P>
+<DT><B>pre_remove</B>
+
+<DD>
+script is run right before files are removed.
+<P>
+
+To use this feature, just create a file (eg, pkgname.install) and put it in
+the same directory as the PKGBUILD script.  Then use the <I>install</I> directive:
+<DL COMPACT><DT><DD>
+<PRE>
+install=pkgname.install
+</PRE>
+
+</DL>
+
+<P>
+The install script does not need to be specified in the <I>source</I> array.
+<P>
+<DT><DT></DL>
+<A NAME="lbAH">&nbsp;</A>
+<H2>Install scripts must follow this format:</H2>
+
+<DD>
+<DD>
+<DL COMPACT><DT><DD>
+<PRE>
+# arg 1:  the new package version
+post_install() {
+  #
+  #  do post-install stuff here
+  #
+  /bin/true
+}
+
+# arg 1:  the new package version
+# arg 2:  the old package version
+post_upgrade() {
+  #
+  #  do post-upgrade stuff here
+  #
+  /bin/true
+}
+
+# arg 1:  the old package version
+pre_remove() {
+  #
+  #  do pre-remove stuff here
+  #
+  /bin/true
+}
+
+op=$1
+shift
+
+$op $*
+</PRE>
+
+</DL>
+
+<P>
+This template is also available in your ABS tree (/usr/abs/install.proto).
+<P>
+<A NAME="lbAI">&nbsp;</A>
+<H2>PKGBUILD Directives</H2>
+
+<DL COMPACT>
+<DT><B>pkgname</B>
+
+<DD>
+The name of the package.  This has be a unix-friendly name as it will be
+used in the package filename.
+<P>
+<DT><B>pkgver</B>
+
+<DD>
+This is the version of the software as released from the author (eg, 2.7.1).
+<P>
+<DT><B>pkgrel</B>
+
+<DD>
+This is the release number specific to Arch Linux packages.
+<P>
+<DT><B>pkgdesc</B>
+
+<DD>
+This should be a brief description of the package and its functionality.
+<P>
+<DT><B>backup</B>
+
+<DD>
+A space-delimited array of filenames (without a preceding slash). The
+<I>backup</I> line will be propagated to the package meta-info file for
+pacman.  This will designate all files listed there to be backed up if this
+package is ever removed from a system.  See <B>HANDLING CONFIG FILES</B> in
+the <I>pacman</I> manpage for more information.
+<P>
+<DT><B>install</B>
+
+<DD>
+Specified a special install script that is to be included in the package.
+This file should reside in the same directory as the PKGBUILD, and will be
+copied into the package by makepkg.  It does not need to be included in the
+<I>source</I> array.  (eg, install=modutils.install)
+<P>
+<DT><B>depends</B>
+
+<DD>
+An array of packages that this package depends on to build and run.  Packages
+in this list should be surrounded with single quotes and contain at least the
+package name.  They can also include a version requirement of the form
+<B>name&lt;&gt;version</B>, where &lt;&gt; is one of these three comparisons: <B>&gt;=</B>
+(greater than equal to), <B>&lt;=</B> (less than or equal to), or <B>=</B> (equal to).
+See the PKGBUILD example above for an example of the <I>depends</I> directive.
+<P>
+<DT><B>conflicts</B>
+
+<DD>
+An array of packages that will conflict with this package (ie, they cannot both
+be installed at the same time).  This directive follows the same format as
+<I>depends</I> except you cannot specify versions here, only package names.
+<P>
+<DT><B>source</B>
+
+<DD>
+The <I>source</I> line is an array of source files required to build the
+package.  Source files must reside in the same directory as the PKGBUILD
+file, unless they have a fully-qualified URL.  Then if the source file
+does not already exist in /var/cache/pacman/src, the file is downloaded
+by wget.
+<P>
+</DL>
+<A NAME="lbAJ">&nbsp;</A>
+<H2>MAKEPKG OPTIONS</H2>
+
+<DL COMPACT>
+<DT><B>-c, --clean</B>
+
+<DD>
+Clean up leftover work files/directories after a successful build.
+<DT><B>-i, --install</B>
+
+<DD>
+Install/Upgrade the package after a successful build.
+<DT><B>-s, --syncdeps</B>
+
+<DD>
+Install missing dependencies using pacman.  When makepkg finds missing
+dependencies, it will run pacman to try and resolve them.  If successful,
+pacman will download the missing packages from a package repository and
+install them for you.
+<DT><B>-b, --builddeps</B>
+
+<DD>
+Build missing dependencies from source.  When makepkg finds missing
+dependencies, it will look for the dependencies' PKGBUILD files under
+$ABSROOT (set in your /etc/makepkg.conf).  If it finds them it will
+run another copy of makepkg to build and install the missing dependencies.
+The child makepkg calls will be made with the <B>-b</B> and <B>-i</B> options.
+<DT><B>-d, --nodeps</B>
+
+<DD>
+Do not perform any dependency checks.  This will let you override/ignore any
+dependencies required.  There's a good chance this option will break the build
+process if all of the dependencies aren't installed.
+<DT><B>-f, --force</B>
+
+<DD>
+<B>makepkg</B> will not build a package if a <I>pkgname-pkgver-pkgrel.pkg.tar.gz</I>
+file already exists in the build directory.  You can override this behaviour with
+the <B>--force</B> switch.
+<P>
+</DL>
+<A NAME="lbAK">&nbsp;</A>
+<H2>CONFIGURATION</H2>
+
+Configuration options are stored in <I>/etc/makepkg.conf</I>.  This file is parsed
+as a bash script, so you can export any special compiler flags you wish
+to use.  This is helpful for building for different architectures, or with
+different optimizations.
+<P>
+<B>NOTE:</B> This does not guarantee that all package Makefiles will use
+your exported variables.  Some of them are flaky...
+<A NAME="lbAL">&nbsp;</A>
+<H2>SEE ALSO</H2>
+
+<B>pacman</B> is the package manager that uses packages built by makepkg.
+<P>
+See the Arch Linux Documentation for package-building guidelines if you wish
+to contribute packages to the Arch Linux project.
+<A NAME="lbAM">&nbsp;</A>
+<H2>AUTHOR</H2>
+
+<PRE>
+Judd Vinet &lt;<A HREF="mailto:jvinet@zeroflux.org">jvinet@zeroflux.org</A>&gt;
+</PRE>
+
+<P>
+
+<HR>
+<A NAME="index">&nbsp;</A><H2>Index</H2>
+<DL>
+<DT><A HREF="#lbAB">NAME</A><DD>
+<DT><A HREF="#lbAC">SYNOPSIS</A><DD>
+<DT><A HREF="#lbAD">DESCRIPTION</A><DD>
+<DT><A HREF="#lbAE">BUILD PROCESS (or How To Build Your Own Packages)</A><DD>
+<DT><A HREF="#lbAF">PKGBUILD Example:</A><DD>
+<DT><A HREF="#lbAG">Install/Upgrade/Remove Scripting</A><DD>
+<DT><A HREF="#lbAH">Install scripts must follow this format:</A><DD>
+<DT><A HREF="#lbAI">PKGBUILD Directives</A><DD>
+<DT><A HREF="#lbAJ">MAKEPKG OPTIONS</A><DD>
+<DT><A HREF="#lbAK">CONFIGURATION</A><DD>
+<DT><A HREF="#lbAL">SEE ALSO</A><DD>
+<DT><A HREF="#lbAM">AUTHOR</A><DD>
+</DL>
+<HR>
+This document was created by
+<A HREF="http://localhost/cgi-bin/man/man2html">man2html</A>,
+using the manual pages.<BR>
+Time: 17:22:11 GMT, March 04, 2003
+</BODY>
+</HTML>

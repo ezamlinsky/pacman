@@ -1,4 +1,4 @@
-.TH makepkg 8 "February 18, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "March 3, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -232,7 +232,7 @@ Clean up leftover work files/directories after a successful build.
 .B "\-i, \-\-install"
 Install/Upgrade the package after a successful build.
 .TP
-.B "\-d, \-\-syncdeps"
+.B "\-s, \-\-syncdeps"
 Install missing dependencies using pacman.  When makepkg finds missing
 dependencies, it will run pacman to try and resolve them.  If successful,
 pacman will download the missing packages from a package repository and
@@ -245,7 +245,7 @@ $ABSROOT (set in your /etc/makepkg.conf).  If it finds them it will
 run another copy of makepkg to build and install the missing dependencies.
 The child makepkg calls will be made with the \fB-b\fP and \fB-i\fP options.
 .TP
-.B "\-n, \-\-nodeps"
+.B "\-d, \-\-nodeps"
 Do not perform any dependency checks.  This will let you override/ignore any
 dependencies required.  There's a good chance this option will break the build
 process if all of the dependencies aren't installed.

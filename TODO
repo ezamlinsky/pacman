@@ -1,14 +1,14 @@
+- fix the broken pipe bug
 - add some logging mechanism (/var/log/pacman.log)
 - handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
+- have "group" designations
+- IgnorePkg option/switch in pacman.conf to ignore updates from the sync repo
 - record md5sums of all files in a package
 - add a way to clean /var/cache/pacman/src
 - duplicate dep checks occur with sync (one in sync, one in add)
 - if a package is removed with --nodeps and re-installed, the requiredby
   fields of it's required packages are not updated
-- have "group" designations
-- IgnorePkg option in pacman.conf to ignore updates from the sync repo
 - add an option equivalent to 'pacman -Ql pkg | grep filename'
-- ftp transfer progress bar breaks after ~42000 K
 - add other options to config file: db location, overwrite behaviour, etc.
 - use the COLUMNS env var for the progress bar
 ? use 'set -e' in makepkg?
