@@ -29,9 +29,6 @@ documentation and/or software.
 #define TEST_BLOCK_LEN 1000
 #define TEST_BLOCK_COUNT 1000
 
-char* MDFile(char *);
-void  MDPrint(unsigned char [16]);
-
 #define MD_CTX MD5_CTX
 #define MDInit MD5Init
 #define MDUpdate MD5Update

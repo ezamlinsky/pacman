@@ -29,8 +29,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "list.h"
-
-char* trim(char *str);
+#include "util.h"
 
 int main(int argc, char* argv[])
 {
@@ -137,27 +136,6 @@ int main(int argc, char* argv[])
 	}
 	umask(oldumask);
 	return(0);
-}
-
-/* Trim whitespace and newlines from a string
- */
-char* trim(char *str)
-{
-	char *pch = str;
-	while(isspace(*pch)) {
-		pch++;
-	}
-	if(pch != str) {
-		memmove(str, pch, (strlen(pch) + 1));
-	}
-	
-	pch = (char*)(str + (strlen(str) - 1));
-	while(isspace(*pch)) {
-		pch--;
-	}
-	*++pch = '\0';
-
-	return str;
 }
 
 /* vim: set ts=2 sw=2 noet: */

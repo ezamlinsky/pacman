@@ -21,6 +21,8 @@
 #ifndef _PAC_PACKAGE_H
 #define _PAC_PACKAGE_H
 
+#include "list.h"
+
 /* mods for depend_t.mod */
 #define DEP_ANY 0
 #define DEP_EQ	1
@@ -33,6 +35,7 @@ typedef struct __pkginfo_t {
 	char name[256];
 	char version[64];
 	char desc[512];
+	char url[255];
 	char builddate[32];
 	char installdate[32];
 	char packager[64];
@@ -62,6 +65,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 pkginfo_t* newpkg();
 void freepkg(pkginfo_t *pkg);
 int pkgcmp(const void *p1, const void *p2);
+int is_pkgin(pkginfo_t *needle, PMList *haystack);
+void dump_pkg(pkginfo_t *info);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

@@ -20,14 +20,9 @@
  */
 
 #include "config.h"
-#include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
-#include <errno.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <stdio.h>
 #include "list.h"
 
 PMList* list_new()
@@ -105,6 +100,20 @@ int list_isin(PMList *haystack, void *needle)
 	return(0);
 }
 
+/* Test for existence of a string in a PMList
+ */
+int is_in(char *needle, PMList *haystack)
+{
+	PMList *lp;
+
+	for(lp = haystack; lp; lp = lp->next) {
+		if(lp->data && !strcmp(lp->data, needle)) {
+			return(1);
+		}
+	}
+	return(0);
+}
+
 /* List one is extended and returned
  * List two is freed (but not its data)
  */
@@ -129,6 +138,79 @@ PMList* list_last(PMList *list)
 
 	for(ptr = list; ptr && ptr->next; ptr = ptr->next);
 	return(ptr);
+}
+
+/* Helper function for sorting a list of strings
+ */
+int list_strcmp(const void *s1, const void *s2)
+{
+	char **str1 = (char **)s1;
+	char **str2 = (char **)s2;
+
+	return(strcmp(*str1, *str2));
+}
+
+PMList *list_sort(PMList *list)
+{
+	char **arr = NULL;
+	PMList *lp;
+	unsigned int arrct;
+	int i;
+
+	if(list == NULL) {
+		return(NULL);
+	}
+
+	arrct = list_count(list);
+	arr = (char **)malloc(arrct*sizeof(char*));
+	for(lp = list, i = 0; lp; lp = lp->next) {
+		arr[i++] = (char *)lp->data;
+	}
+
+	qsort(arr, (size_t)arrct, sizeof(char *), list_strcmp);
+
+	lp = NULL;
+	for(i = 0; i < arrct; i++) {
+		lp = list_add(lp, strdup(arr[i]));
+	}
+
+	free(arr);
+
+	return(lp);
+}
+
+void list_display(const char *title, PMList *list)
+{
+	PMList *lp;
+	int cols, len, maxcols = 80;
+	char *cenv = NULL;
+
+	cenv = getenv("COLUMNS");
+	if(cenv) {
+		maxcols = atoi(cenv);
+	}
+
+	len = strlen(title);
+	printf("%s", title);
+
+	if(list) {
+		for(lp = list, cols = len; lp; lp = lp->next) {
+			int s = strlen((char*)lp->data)+1;
+			if(s+cols >= maxcols) {
+				int i;
+				cols = len;
+				printf("\n");
+				for (i = 0; i < len; i++) {
+					printf(" ");
+				}
+			}
+			printf("%s ", (char*)lp->data);
+			cols += s;
+		}
+		printf("\n");
+	} else {
+		printf("None\n");
+	}
 }
 
 /* vim: set ts=2 sw=2 noet: */

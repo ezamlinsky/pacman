@@ -1,4 +1,4 @@
-.TH pacman 8 "April 10, 2003" "pacman #VERSION#" ""
+.TH pacman 8 "May 27, 2003" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -14,18 +14,6 @@ the local system.  pacman package are \fIgzipped tar\fP format.
 Add a package to the system.  Package will be uncompressed
 into the installation root and the database will be updated.
 .TP
-.B "\-R, \-\-remove"
-Remove a package from the system.  Files belonging to the
-specified package will be deleted, and the database will
-be updated.  Most configuration files will be saved with a
-\fI.pacsave\fP extension unless the \fB--nosave\fP option was
-used.
-.TP
-.B "\-U, \-\-upgrade"
-Upgrade a package.  This is essentially a "remove-then-add"
-process.  See \fBHANDLING CONFIG FILES\fP for an explanation
-on how pacman takes care of config files.
-.TP
 .B "\-F, \-\-freshen"
 This is like --upgrade except that, unlike --upgrade, this will only
 upgrade packages that are already installed on your system.
@@ -38,12 +26,24 @@ build date, size).  This can be run against the local package
 database or can be used on individual .tar.gz packages.  See
 \fBQUERY OPTIONS\fP below.
 .TP
+.B "\-R, \-\-remove"
+Remove a package from the system.  Files belonging to the
+specified package will be deleted, and the database will
+be updated.  Most configuration files will be saved with a
+\fI.pacsave\fP extension unless the \fB--nosave\fP option was
+used.
+.TP
 .B "\-S, \-\-sync"
 Synchronize packages.  With this function you can install packages
 directly from the ftp servers, complete with all dependencies required
 to run the packages.  For example, \fBpacman -S qt\fP will download
 qt and all the packages it depends on and install them. You could also use
 \fBpacman -Su\fP to upgrade all packages that are out of date (see below).
+.TP
+.B "\-U, \-\-upgrade"
+Upgrade a package.  This is essentially a "remove-then-add"
+process.  See \fBHANDLING CONFIG FILES\fP for an explanation
+on how pacman takes care of config files.
 .TP
 .B "\-V, \-\-version"
 Display version and exit.
@@ -53,20 +53,22 @@ Display syntax for the given operation.  If no operation was
 supplied then the general syntax is shown.
 .SH OPTIONS
 .TP
-.B "\-v, \-\-verbose"
-Output more status and error messages.
-.TP
-.B "\-f, \-\-force"
-Bypass file conflict checks,, overwriting conflicting files.  If the
-package that is about to be installed contains files that are already
-installed, this option will cause all those files to be overwritten.
-This option should be used with care, ideally not at all.
+.B "\-c, \-\-cascade"
+(only used with \fB--remove\fP)
+Remove all target packages, as well as all packages that depend on one
+or more target packages.  This operation is recursive.
 .TP
 .B "\-d, \-\-nodeps"
 Skips all dependency checks.  Normally, pacman will always check
 a package's dependency fields to ensure that all dependencies are
 installed and there are no package conflicts in the system.  This
 switch disables these checks.
+.TP
+.B "\-f, \-\-force"
+Bypass file conflict checks,, overwriting conflicting files.  If the
+package that is about to be installed contains files that are already
+installed, this option will cause all those files to be overwritten.
+This option should be used with care, ideally not at all.
 .TP
 .B "\-n, \-\-nosave"
 (only used with \fB--remove\fP)
@@ -76,11 +78,6 @@ checked to see if the file should be renamed to a .pacsave extension.  If
 \fB--nosave\fP is used, these designations are ignored and the files are
 removed.
 .TP
-.B "\-c, \-\-cascade"
-(only used with \fB--remove\fP)
-Remove all target packages, as well as all packages that depend on one
-or more target packages.  This operation is recursive.
-.TP
 .B "\-r, \-\-root <path>"
 Specify alternative installation root (default is "/"). This
 should \fInot\fP be used as a way to install software into
@@ -89,12 +86,19 @@ if you want to install a package on a temporary mounted partition,
 which is "owned" by another system. By using this option you not only
 specify where the software should be installed, but you also
 specify which package database to use.
+.TP
+.B "\-v, \-\-verbose"
+Output more status and error messages.
 .SH SYNC OPTIONS
 .TP
-.B "\-y, \-\-refresh"
-Download a fresh copy of the master package list from the ftp server
-defined in \fI/etc/pacman.conf\fP.  This should typically be used each
-time you use \fB--sysupgrade\fP.
+.B "\-c, \-\-clean"
+Remove packages from the cache.  When pacman downloads packages,
+it saves them in \fI/var/cache/pacman/pkg\fP.  If you need to free up
+diskspace, you can remove these packages by using the --clean option.
+.TP
+.B "\-s, \-\-search <string>"
+This will search each package in the package list for names or descriptions
+that contains <string>.
 .TP
 .B "\-u, \-\-sysupgrade"
 Upgrades all packages that are out of date.  pacman will examine every
@@ -104,29 +108,25 @@ it wants to upgrade and will not proceed without user confirmation.
 Dependencies are automatically resolved at this level and will be
 installed/upgraded if necessary.
 .TP
-.B "\-s, \-\-search <string>"
-This will search each package in the package list for names or descriptions
-that contains <string>.
-.TP
 .B "\-w, \-\-downloadonly"
 Retrieve all packages from the server, but do not install/upgrade anything.
 .TP
-.B "\-c, \-\-clean"
-Remove packages from the cache.  When pacman downloads packages,
-it saves them in \fI/var/cache/pacman/pkg\fP.  If you need to free up
-diskspace, you can remove these packages by using the --clean option.
+.B "\-y, \-\-refresh"
+Download a fresh copy of the master package list from the ftp server
+defined in \fI/etc/pacman.conf\fP.  This should typically be used each
+time you use \fB--sysupgrade\fP.
 .SH QUERY OPTIONS
 .TP
-.B "\-o, \-\-owns <file>"
-Search for the package that owns <file>.
+.B "\-i, \-\-info"
+Display information on a given package.  If it is used with the \fB-p\fP
+option then the .PKGINFO file will be printed.
 .TP
 .B "\-l, \-\-list"
 List all files owned by <package>.  Multiple packages can be specified on
 the command line.
 .TP
-.B "\-i, \-\-info"
-Display information on a given package.  If it is used with the \fB-p\fP
-option then the .PKGINFO file will be printed.
+.B "\-o, \-\-owns <file>"
+Search for the package that owns <file>.
 .TP
 .B "\-p, \-\-file"
 Tells pacman that the package supplied on the command line is a
@@ -185,9 +185,9 @@ Server = local:///home/pkgs
 .RE
 .SH CONFIG: OPTIONS
 .TP
-.B "NoUpgrade = <file> [file] ..."
-All files listed with a \fBNoUpgrade\fP directive will never be touched during a package
-install/upgrade.  \fINote:\fP do not include the leading slash when specifying files.
+.B "DBPath = /path/to/db/dir"
+Overrides the default location of the toplevel database directory.  The default is
+\fI/var/lib/pacman\fP.
 .TP
 .B "IgnorePkg = <package> [package] ..."
 Instructs pacman to ignore any upgrades for this package when performing a
@@ -195,6 +195,10 @@ Instructs pacman to ignore any upgrades for this package when performing a
 .TP
 .B "NoPassiveFtp"
 Disables passive ftp connections when downloading packages. (aka Active Mode)
+.TP
+.B "NoUpgrade = <file> [file] ..."
+All files listed with a \fBNoUpgrade\fP directive will never be touched during a package
+install/upgrade.  \fINote:\fP do not include the leading slash when specifying files.
 
 .SH CONFIG: REPOSITORIES
 Each repository section defines a section name and at least one location where the packages

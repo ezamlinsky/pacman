@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.4.1
+PACVER = 2.5
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -43,7 +43,7 @@ MANSRC = $(TOPDIR)/doc/
 SCRDIR = $(TOPDIR)/scripts/
 
 CXX = @CC@
-CXXFLAGS += @CFLAGS@ -g -Wall -pedantic -fno-exceptions -fno-rtti \
+CXXFLAGS += @CFLAGS@ -g -Wall -pedantic -fno-exceptions \
             -D_GNU_SOURCE -DPACVER=\"$(PACVER)\" -I. -Ilibftp
 LDFLAGS += @LDFLAGS@ -static -Llibftp -lftp -ltar -lz
 
@@ -53,9 +53,10 @@ SRCS = $(SRCDIR)pacman.c \
 			 $(SRCDIR)list.c \
 			 $(SRCDIR)package.c \
 			 $(SRCDIR)pacsync.c \
-			 $(SRCDIR)rpmvercmp.c \
 			 $(SRCDIR)md5.c \
-			 $(SRCDIR)md5driver.c
+			 $(SRCDIR)md5driver.c \
+			 $(SRCDIR)vercmp.c \
+			 $(SRCDIR)rpmvercmp.c
 
 OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)db.o \
@@ -63,20 +64,20 @@ OBJECTS = $(OBJDIR)pacman.o \
 					$(OBJDIR)list.o \
 					$(OBJDIR)package.o \
 					$(OBJDIR)pacsync.o \
-					$(OBJDIR)rpmvercmp.o \
 					$(OBJDIR)md5.o \
-					$(OBJDIR)md5driver.o
+					$(OBJDIR)md5driver.o \
+					$(OBJDIR)rpmvercmp.o
 
 all: ftplib pacman vercmp convertdb man
 
 pacman: $(OBJECTS)
 	$(CXX) $(OBJECTS) -o $@ $(LDFLAGS)
 
-vercmp: $(OBJDIR)rpmvercmp.o $(OBJDIR)vercmp.o
-	$(CXX) $(OBJDIR)rpmvercmp.o $(OBJDIR)vercmp.o -o $@
+vercmp: $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o
+	$(CXX) $(OBJDIR)vercmp.o $(OBJDIR)rpmvercmp.o $(CXXFLAGS) -o $@
 
-convertdb: $(SRCDIR)convertdb.c $(SRCDIR)list.c
-	$(CXX) -o convertdb $(SRCDIR)convertdb.c $(SRCDIR)list.c $(CXXFLAGS)
+convertdb: $(OBJDIR)convertdb.o $(OBJDIR)list.o $(OBJDIR)util.o
+	$(CXX) $(OBJDIR)convertdb.o $(OBJDIR)list.o $(OBJDIR)util.o $(CXXFLAGS) -lz -ltar -o $@
 
 .c.o: $(SRCS)
 	$(CXX) $(CXXFLAGS) -o $@ -c $<

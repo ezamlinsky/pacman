@@ -21,11 +21,8 @@
 
 #include "config.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
-#include <errno.h>
 #include <string.h>
-#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <ftplib.h>
 /* pacman */
@@ -42,7 +39,7 @@ static int offset;
 
 /* pacman options */
 extern char *pmo_root;
-extern unsigned char pmo_nopassiveftp;
+extern unsigned short pmo_nopassiveftp;
 
 /* sync servers */
 extern PMList *pmc_syncs;
@@ -130,6 +127,13 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 					FtpLastResponse(control));
 				continue;
 			}
+			if(!pmo_nopassiveftp) {
+				if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
+					fprintf(stderr, "warning: failed to set passive mode\n");
+				}
+			} else {
+				vprint("FTP passive mode not set\n");
+			}
 		}
 
 		/* get each file in the list */
@@ -151,13 +155,6 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			sync_fnm[24] = '\0';
 
 			if(!server->islocal) {
-				if(!pmo_nopassiveftp) {
-					if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
-						fprintf(stderr, "warning: failed to set passive mode\n");
-					}
-				} else {
-					vprint("FTP passive mode not set\n");
-				}
 				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
 				}
@@ -244,6 +241,25 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 	printf("] %3d%% | %6dK\r ", pct, ((xfered+offset)/1024));
 	fflush(stdout);
 	return(1);
+}
+
+/* Test for existence of a package in a PMList*
+ * of syncpkg_t*
+ */
+int is_pkginsync(syncpkg_t *needle, PMList *haystack)
+{
+	PMList *lp;
+	syncpkg_t *sync;
+	int found = 0;
+
+	for(lp = haystack; lp && !found; lp = lp->next) {
+		sync = (syncpkg_t*)lp->data;
+		if(sync && !strcmp(sync->pkg->name, needle->pkg->name)) {
+			found = 1;
+		}
+	}
+
+	return found;
 }
 
 /* vim: set ts=2 sw=2 noet: */

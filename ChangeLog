@@ -1,5 +1,15 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+2.5           - Added an URL tag to package info
+              - Sped up package load times by about 500% by introducing
+                a .FILELIST into the package
+              - Renamed the install scriptlet from ._install to .INSTALL
+              - Added patch from Aurlien Foret:
+                - Better lock handling (RW and RO)
+                - Sorted package order in -Qi's dependency lists
+                - Added a DBPath option to pacman.conf
+                - Fixed memory leaks
+                - Added the --nodeps option to -S
 2.4.1         - Fixed a bug in makepkg's option parsing
 2.4           - Added getopt-style options to makeworld
               - Added -w <destdir> to makepkg

@@ -21,12 +21,14 @@
 #ifndef _PAC_PACSYNC_H
 #define _PAC_PACSYNC_H
 
+/* Servers */
 typedef struct __server_t {
 	unsigned short islocal;
 	char* server;
 	char* path;
 } server_t;
 
+/* Repositories */
 typedef struct __sync_t {
 	char* treename;
 	PMList *servers;
@@ -46,6 +48,7 @@ typedef struct __syncpkg_t {
 
 int sync_synctree();
 int downloadfiles(PMList *servers, char *localpath, PMList *files);
+int is_pkginsync(syncpkg_t *needle, PMList *haystack);
 
 #endif
 

@@ -24,21 +24,10 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <limits.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include "list.h"
 #include "package.h"
-#include "db.h"
 #include "util.h"
-#include "pacsync.h"
-#include "pacman.h"
-
-extern PMList *pm_packages;
-extern char *pmo_root;
-extern unsigned short pmo_upgrade;
-
-extern int errno;
+#include "db.h"
 
 /* Verify database integrity and build a list of
  * installed packages
@@ -47,14 +36,14 @@ extern int errno;
  *             1 if db is not initialized
  *             2 if db is corrupt
  */
-pacdb_t* db_open(char *dbpath, char *treename)
+pacdb_t* db_open(char *root, char *pkgdir, char *treename)
 {
 	pacdb_t *db = NULL;
-	char path[PATH_MAX];
 
 	MALLOC(db, sizeof(pacdb_t));
-	snprintf(path, PATH_MAX-1, "%s/%s", dbpath, treename);
-	db->dir = opendir(path);
+	MALLOC(db->path, strlen(root)+strlen(pkgdir)+strlen(treename)+2);
+	sprintf(db->path, "%s%s/%s", root, pkgdir, treename);
+	db->dir = opendir(db->path);
 	if(db->dir == NULL) {
 		return(NULL);
 	}
@@ -65,7 +54,14 @@ pacdb_t* db_open(char *dbpath, char *treename)
 
 void db_close(pacdb_t* db)
 {
-	closedir(db->dir);
+	if(db) {
+		if(db->dir) {
+			closedir(db->dir);
+		}
+		FREE(db->path);
+	}
+	FREE(db);
+
 	return;
 }
 
@@ -114,6 +110,8 @@ PMList* db_loadpkgs(pacdb_t *db, PMList *pkgcache)
 	for(i = 0; i < arrct; i++) {
 		cache = list_add(cache, arr[i]);
 	}
+
+	free(arr);
 
 	return(cache);
 }
@@ -174,19 +172,17 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 	struct stat buf;
 	pkginfo_t *info = NULL;
 	char path[PATH_MAX];
-	char topdir[PATH_MAX];
 	char line[512];
 
 	if(ent == NULL) {
 		return(NULL);
 	}
-	snprintf(topdir, PATH_MAX, "%s%s/%s", pmo_root, PKGDIR, db->treename);
 	info = newpkg();
 
 	/* we always load DESC */
 	inforeq |= INFRQ_DESC;
 
-	snprintf(path, PATH_MAX, "%s/%s", topdir, ent->d_name);
+	snprintf(path, PATH_MAX, "%s/%s", db->path, ent->d_name);
 	if(stat(path, &buf)) {
 		/* directory doesn't exist or can't be opened */
 		return(NULL);
@@ -194,7 +190,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 
 	/* DESC */
 	if(inforeq & INFRQ_DESC) {
-		snprintf(path, PATH_MAX, "%s/%s/desc", topdir, ent->d_name);
+		snprintf(path, PATH_MAX, "%s/%s/desc", db->path, ent->d_name);
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "error: %s: %s\n", path, strerror(errno));
@@ -206,32 +202,37 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 			}
 			trim(line);
 			if(!strcmp(line, "%NAME%")) {
-				if(fgets(info->name, 256, fp) == NULL) {
+				if(fgets(info->name, sizeof(info->name), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->name);
 			} else if(!strcmp(line, "%VERSION%")) {
-				if(fgets(info->version, 64, fp) == NULL) {
+				if(fgets(info->version, sizeof(info->version), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->version);
 			} else if(!strcmp(line, "%DESC%")) {
-				if(fgets(info->desc, 512, fp) == NULL) {
+				if(fgets(info->desc, sizeof(info->desc), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->desc);
+			} else if(!strcmp(line, "%URL%")) {
+				if(fgets(info->url, sizeof(info->url), fp) == NULL) {
+					return(NULL);
+				}
+				trim(info->url);
 			} else if(!strcmp(line, "%BUILDDATE%")) {
-				if(fgets(info->builddate, 32, fp) == NULL) {
+				if(fgets(info->builddate, sizeof(info->builddate), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->builddate);
 			} else if(!strcmp(line, "%INSTALLDATE%")) {
-				if(fgets(info->installdate, 32, fp) == NULL) {
+				if(fgets(info->installdate, sizeof(info->installdate), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->installdate);
 			} else if(!strcmp(line, "%PACKAGER%")) {
-				if(fgets(info->packager, 64, fp) == NULL) {
+				if(fgets(info->packager, sizeof(info->packager), fp) == NULL) {
 					return(NULL);
 				}
 				trim(info->packager);
@@ -249,7 +250,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 
 	/* FILES */
 	if(inforeq & INFRQ_FILES) {
-		snprintf(path, PATH_MAX, "%s/%s/files", topdir, ent->d_name);
+		snprintf(path, PATH_MAX, "%s/%s/files", db->path, ent->d_name);
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "error: %s: %s\n", path, strerror(errno));
@@ -275,7 +276,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 
 	/* DEPENDS */
 	if(inforeq & INFRQ_DEPENDS) {
-		snprintf(path, PATH_MAX, "%s/%s/depends", topdir, ent->d_name);
+		snprintf(path, PATH_MAX, "%s/%s/depends", db->path, ent->d_name);
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "db_read: error: %s: %s\n", path, strerror(errno));
@@ -307,7 +308,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 	}
 
 	/* INSTALL */
-	snprintf(path, PATH_MAX, "%s/%s/install", topdir, ent->d_name);
+	snprintf(path, PATH_MAX, "%s/%s/install", db->path, ent->d_name);
 	if(!stat(path, &buf)) {
 		info->scriptlet = 1;
 	}
@@ -317,8 +318,8 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 
 int db_write(pacdb_t *db, pkginfo_t *info)
 {
-	FILE *fp = NULL;
 	char topdir[PATH_MAX];
+	FILE *fp = NULL;
 	char path[PATH_MAX];
 	mode_t oldmask;
 	PMList *lp = NULL;
@@ -326,11 +327,11 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	if(info == NULL) {
 		return(1);
 	}
-	snprintf(topdir, PATH_MAX, "%s%s/%s/%s-%s", pmo_root, PKGDIR, db->treename,
-		info->name, info->version);
 
+	snprintf(topdir, PATH_MAX, "%s/%s-%s", db->path,
+		info->name, info->version);
 	oldmask = umask(0000);
-  mkdir(topdir, 0755);
+	mkdir(topdir, 0755);
 	umask(oldmask);
 
 	/* DESC */
@@ -346,6 +347,8 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	fprintf(fp, "%s\n\n", info->version);
 	fputs("%DESC%\n", fp);
 	fprintf(fp, "%s\n\n", info->desc);
+	fputs("%URL%\n", fp);
+	fprintf(fp, "%s\n\n", info->url);
 	fputs("%BUILDDATE%\n", fp);
 	fprintf(fp, "%s\n\n", info->builddate);
 	fputs("%INSTALLDATE%\n", fp);
@@ -406,7 +409,7 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 }
 
 
-PMList* db_find_conflicts(pacdb_t *db, PMList *targets)
+PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 {
 	PMList *i, *j, *k;
 	char *filestr = NULL;
@@ -450,7 +453,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets)
 	}*/
 
 	/* CHECK 2: check every target against every target */
-	vprint("Checking targets against targets...\n");
+	/* orelien - vprint("Checking targets against targets...\n"); */
 	for(i = targets; i; i = i->next) {
 		pkginfo_t *p1 = (pkginfo_t*)i->data;
 		for(j = i; j; j = j->next) {
@@ -458,7 +461,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets)
 			if(strcmp(p1->name, p2->name)) {
 				for(k = p1->files; k; k = k->next) {
 					filestr = k->data;
-					if(!strcmp(filestr, "._install")) {
+					if(!strcmp(filestr, "._install") || !strcmp(filestr, ".INSTALL")) {
 						continue;
 					}
 					if(rindex(filestr, '/') == filestr+strlen(filestr)-1) {
@@ -477,13 +480,13 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets)
 	}
 
 	/* CHECK 3: check every target against the filesystem */
-	vprint("Checking targets against filesystem...\n");
+	/* orelien - vprint("Checking targets against filesystem...\n"); */
 	for(i = targets; i; i = i->next) {
 		pkginfo_t *p = (pkginfo_t*)i->data;
 		pkginfo_t *dbpkg = NULL;
 		for(j = p->files; j; j = j->next) {
 			filestr = (char*)j->data;
-			snprintf(path, PATH_MAX, "%s%s", pmo_root, filestr);
+			snprintf(path, PATH_MAX, "%s%s", root, filestr);
 			if(!stat(path, &buf) && !S_ISDIR(buf.st_mode)) {
 				int ok = 0;
 				if(dbpkg == NULL) {

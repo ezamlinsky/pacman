@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.4.1"
+#define PACVER    "2.5"
 #endif
 
 #ifndef PKGDIR
@@ -42,6 +42,8 @@
 #define PM_SYNC     6
 #define PM_DEPTEST  7
 
+#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
+
 int pacman_add(pacdb_t *db, PMList *targets);
 int pacman_remove(pacdb_t *db, PMList *targets);
 int pacman_upgrade(pacdb_t *db, PMList *targets);
@@ -53,6 +55,14 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets);
 int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *sync, PMList *list, PMList *trail);
 int splitdep(char *depstr, depend_t *depend);
 
+char* needbackup(char *file, PMList *backup);
+
+int parseargs(int op, int argc, char **argv);
+int parseconfig(char *configfile);
+void usage(int op, char *myname);
+void version(void);
+
+int vprint(char *fmt, ...);
 int lckmk(char *file, int retries, unsigned int sleep_secs);
 int lckrm(char *lckfile);
 void cleanup(int signum);

@@ -1,4 +1,4 @@
-.TH makepkg 8 "April 19, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "May 27, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -34,6 +34,7 @@ pkgname=modutils
 pkgver=2.4.13
 pkgrel=1
 pkgdesc="Utilities for inserting and removing modules from the linux kernel"
+url="http://www.kernel.org"
 backup=(etc/modules.conf)
 depends=('glibc>=2.2.5' 'bash' 'zlib')
 source=(ftp://ftp.server.com/$pkgname-$pkgver.tar.gz modules.conf)
@@ -187,6 +188,11 @@ This is the release number specific to Arch Linux packages.
 This should be a brief description of the package and its functionality.
 
 .TP
+.B url
+This field contains an optional URL that is associated with the piece of software
+being packaged.  This is typically the project's website.
+
+.TP
 .B backup
 A space-delimited array of filenames (without a preceding slash). The
 \fIbackup\fP line will be propagated to the package meta-info file for
@@ -226,27 +232,18 @@ by wget.
 
 .SH MAKEPKG OPTIONS
 .TP
-.B "\-c, \-\-clean"
-Clean up leftover work files/directories after a successful build.
-.TP
-.B "\-C, \-\-cleancache"
-Removes all source files from the cache directory to free up diskspace.
-.TP
-.B "\-i, \-\-install"
-Install/Upgrade the package after a successful build.
-.TP
-.B "\-s, \-\-syncdeps"
-Install missing dependencies using pacman.  When makepkg finds missing
-dependencies, it will run pacman to try and resolve them.  If successful,
-pacman will download the missing packages from a package repository and
-install them for you.
-.TP
 .B "\-b, \-\-builddeps"
 Build missing dependencies from source.  When makepkg finds missing
 dependencies, it will look for the dependencies' PKGBUILD files under
 $ABSROOT (set in your /etc/makepkg.conf).  If it finds them it will
 run another copy of makepkg to build and install the missing dependencies.
 The child makepkg calls will be made with the \fB-b\fP and \fB-i\fP options.
+.TP
+.B "\-c, \-\-clean"
+Clean up leftover work files/directories after a successful build.
+.TP
+.B "\-C, \-\-cleancache"
+Removes all source files from the cache directory to free up diskspace.
 .TP
 .B "\-d, \-\-nodeps"
 Do not perform any dependency checks.  This will let you override/ignore any
@@ -258,12 +255,21 @@ process if all of the dependencies aren't installed.
 file already exists in the build directory.  You can override this behaviour with
 the \fB--force\fP switch.
 .TP
-.B "\-w <destdir>"
-Write the resulting package file to the directory \fI<destdir>\fP instead of the
-current working directory.
+.B "\-i, \-\-install"
+Install/Upgrade the package after a successful build.
 .TP
 .B "\-p <buildscript>"
 Read the package script \fI<buildscript>\fP instead of the default (\fIPKGBUILD\fP).
+.TP
+.B "\-s, \-\-syncdeps"
+Install missing dependencies using pacman.  When makepkg finds missing
+dependencies, it will run pacman to try and resolve them.  If successful,
+pacman will download the missing packages from a package repository and
+install them for you.
+.TP
+.B "\-w <destdir>"
+Write the resulting package file to the directory \fI<destdir>\fP instead of the
+current working directory.
 
 .SH CONFIGURATION
 Configuration options are stored in \fI/etc/makepkg.conf\fP.  This file is parsed

@@ -21,30 +21,20 @@
 #ifndef _PAC_UTIL_H
 #define _PAC_UTIL_H
 
-#include <libtar.h>
-#include <zlib.h>
-
 #define MALLOC(p, b) { if((b) > 0) { \
                        p = malloc(b); if (!(p)) { \
-                       fprintf(stderr, "malloc failure: could not allocate %d byets\n", b); \
+                       fprintf(stderr, "malloc failure: could not allocate %d bytes\n", b); \
                        exit(1); }} else p = NULL; }
 
 #define FREE(p)      { if (p) { free(p); (p)= NULL; }}
 
+int gzopen_frontend(char *pathname, int oflags, int mode);
 int unpack(char *archive, char *prefix);
-int parseargs(int op, int argc, char **argv);
-int parseconfig(char *configfile);
 int copyfile(char *src, char *dest);
 int makepath(char *path);
 int rmrf(char *path);
-int vprint(char *fmt, ...);
 void indentprint(char *str, int indent);
 int yesno(char* fmt, ...);
-void usage(int op, char *myname);
-void version(void);
-char* needbackup(char *file, PMList *backup);
-int is_in(char *needle, PMList *haystack);
-int is_pkgin(pkginfo_t *needle, PMList *haystack);
 char* trim(char *str);
 char* strtoupper(char *str);
 

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-myver='2.4.1'
+myver='2.5'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
 
 strip_url() {
-  echo $1 | sed 's|^.*://.*/||g'
+	echo $1 | sed 's|^.*://.*/||g'
 }
 
 msg() {
@@ -14,57 +14,57 @@ msg() {
 }
 
 checkdeps() {
-  local missdep=`pacman -T $*`
+	local missdep=`pacman -T $*`
 	local deplist=""
 
 	missdep=`pacman -T $*`
-  ret=$?
-  if [ "$ret" != "0" ]; then
-    if [ "$ret" = "127" ]; then
-      msg "==> Missing Dependencies:"
-      msg ""
-      nl=0
-      for dep in $missdep; do
-        echo -ne "$dep " >&2
-        if [ "$nl" = "1" ]; then
-          nl=0
-          echo -ne "\n" >&2
-          # add this dep to the list
-          depname=`echo $dep | sed 's|=.*$||' | sed 's|>.*$||' | sed 's|<.*$||'`
-          deplist="$deplist $depname"
-          continue
-        fi
-        nl=1
-      done
-      msg ""
-    else
-      msg "==> ERROR: pacman returned a fatal error."
-      exit 1
-    fi
-  fi
+	ret=$?
+	if [ "$ret" != "0" ]; then
+		if [ "$ret" = "127" ]; then
+			msg "==> Missing Dependencies:"
+			msg ""
+			nl=0
+			for dep in $missdep; do
+				echo -ne "$dep " >&2
+				if [ "$nl" = "1" ]; then
+					nl=0
+					echo -ne "\n" >&2
+					# add this dep to the list
+					depname=`echo $dep | sed 's|=.*$||' | sed 's|>.*$||' | sed 's|<.*$||'`
+					deplist="$deplist $depname"
+					continue
+				fi
+				nl=1
+			done
+			msg ""
+		else
+			msg "==> ERROR: pacman returned a fatal error."
+			exit 1
+		fi
+	fi
 	echo $deplist
 }
 
 
 usage() {
-  echo "makepkg version $myver"
-  echo "usage: $0 [options]"
-  echo "options:"
-  echo "  -c, --clean      Clean up work files after build"
-  echo "  -C, --cleancache Clean up source files from the cache"
-  echo "  -s, --syncdeps   Install missing dependencies with pacman"
-  echo "  -b, --builddeps  Build missing dependencies from source"
-  echo "  -d, --nodeps     Skip all dependency checks"
-  echo "  -i, --install    Install package after successful build"
-  echo "  -f, --force      Overwrite existing package"
-  echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
-  echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
-  echo "  -h, --help       This help"
-  echo
-  echo "  if build_script is not specified, makepkg will look for a PKGBUILD"
-  echo "  file in the current directory."
-  echo
-  exit 0
+	echo "makepkg version $myver"
+	echo "usage: $0 [options]"
+	echo "options:"
+	echo "  -c, --clean      Clean up work files after build"
+	echo "  -C, --cleancache Clean up source files from the cache"
+	echo "  -s, --syncdeps   Install missing dependencies with pacman"
+	echo "  -b, --builddeps  Build missing dependencies from source"
+	echo "  -d, --nodeps     Skip all dependency checks"
+	echo "  -i, --install    Install package after successful build"
+	echo "  -f, --force      Overwrite existing package"
+	echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
+	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
+	echo "  -h, --help       This help"
+	echo
+	echo "  if -p is not specified, makepkg will look for a PKGBUILD"
+	echo "  file in the current directory."
+	echo
+	exit 0
 }
 
 # Options
@@ -79,139 +79,135 @@ PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
 
 while [ "$#" -ne "0" ]; do
-  case $1 in
-    --clean)      CLEANUP=1    ;;
-    --cleancache) CLEANCACHE=1 ;;
-    --syncdeps)   DEP_BIN=1    ;;
-    --builddeps)  DEP_SRC=1    ;;
-    --nodeps)     NODEPS=1     ;;
-    --install)    INSTALL=1    ;;
-    --force)      FORCE=1      ;;
-    --*)
-      usage
-      exit 1
-      ;;
-    -*)
-      while getopts "cCsbdifp:w:-" opt; do
-        case $opt in
-        c) CLEANUP=1 ;;
-        C) CLEANCACHE=1 ;;
-        s) DEP_BIN=1 ;;
-        b) DEP_SRC=1 ;;
-        d) NODEPS=1 ;;
-        i) INSTALL=1 ;;
-        f) FORCE=1 ;;
-        w)
-          PKGDEST=$OPTARG
-          ;;
-        p)
-          BUILDSCRIPT=$OPTARG
-          ;;
-        -)
-          OPTIND=0
-          break
-          ;;
-        *)
-          usage
-          exit 1
-          ;;
-        esac
-      done
-      ;;
-    *)
-      true
-      ;;
-  esac
-  shift
+	case $1 in
+		--clean)      CLEANUP=1    ;;
+		--cleancache) CLEANCACHE=1 ;;
+		--syncdeps)   DEP_BIN=1    ;;
+		--builddeps)  DEP_SRC=1    ;;
+		--nodeps)     NODEPS=1     ;;
+		--install)    INSTALL=1    ;;
+		--force)      FORCE=1      ;;
+		--*)
+			usage
+			exit 1
+			;;
+		-*)
+			while getopts "cCsbdifp:w:-" opt; do
+				case $opt in
+					c) CLEANUP=1 ;;
+					C) CLEANCACHE=1 ;;
+					s) DEP_BIN=1 ;;
+					b) DEP_SRC=1 ;;
+					d) NODEPS=1 ;;
+					i) INSTALL=1 ;;
+					f) FORCE=1 ;;
+					w) PKGDEST=$OPTARG ;;
+					p) BUILDSCRIPT=$OPTARG ;;
+					-)
+						OPTIND=0
+						break
+						;;
+					*)
+						usage
+						exit 1
+						;;
+				esac
+			done
+			;;
+		*)
+			true
+			;;
+	esac
+	shift
 done
 
 if [ "$CLEANCACHE" = "1" ]; then
-  msg "==> Cleaning up source files from the cache"
-  rm -rf /var/cache/pacman/src/*
-  exit 0
+	msg "==> Cleaning up source files from the cache"
+	rm -rf /var/cache/pacman/src/*
+	exit 0
 fi
 
-unset pkgname pkgver pkgrel pkgdesc
+unset pkgname pkgver pkgrel pkgdesc url
 unset depends conflicts backup source install build
 umask 0022
 
 if [ ! -f $BUILDSCRIPT ]; then
-  msg "==> ERROR:  $BUILDSCRIPT does not exist."
-  exit 1
+	msg "==> ERROR:  $BUILDSCRIPT does not exist."
+	exit 1
 fi
 
 source $BUILDSCRIPT
 
 # check for no-no's
 if [ `echo $pkgver | grep '-'` ]; then
-  msg "==> ERROR:  pkgver is not allowed to contain hyphens."
-  exit 1
+	msg "==> ERROR:  pkgver is not allowed to contain hyphens."
+	exit 1
 fi
 if [ `echo $pkgrel | grep '-'` ]; then
-  msg "==> ERROR:  pkgrel is not allowed to contain hyphens."
-  exit 1
+	msg "==> ERROR:  pkgrel is not allowed to contain hyphens."
+	exit 1
 fi
 
 if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" ]; then
-  msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
-  exit 1
+	msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
+	exit 1
 fi
 
 unset deplist
 if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
-  msg "==> Checking Dependencies..."
+	msg "==> Checking Dependencies..."
 	deplist=`checkdeps ${depends[@]}`
-  if [ "$deplist" != "" ]; then
-    if [ "$DEP_BIN" = "1" ]; then
-      # install missing deps from binary packages (using pacman -S)
-      msg "==> Installing missing dependencies..."
-      pacman -D $deplist
-      if [ "$?" = "127" ]; then
-        msg "==> ERROR: Failed to install missing dependencies."
-        exit 1
-      fi
-      # TODO: check deps again to make sure they were resolved
-    elif [ "$DEP_SRC" = "1" ]; then
-      # install missing deps by building them from source.
-      # we look for each package name in $ABSROOT and build it.
-      if [ "$ABSROOT" = "" ]; then
-        msg "==> ERROR: The ABSROOT environment variable is not defined."
-        exit 1
-      fi
-      # TODO: handle version comparators (eg, glibc>=2.2.5)
-      msg "==> Building missing dependencies..."
-      for dep in $deplist; do
-        candidates=`find $ABSROOT -type d -name "$dep"`
-        if [ "$candidates" = "" ]; then
-          msg "==> ERROR: Could not find \"$dep\" under $ABSROOT"
-          exit 1
-        fi
-        success=0
-        for pkgdir in $candidates; do
-          if [ -f $pkgdir/PKGBUILD ]; then
-            cd $pkgdir
-            echo makepkg -i -c -b -w $PKGDEST
-            makepkg -i -c -b -w $PKGDEST
-            if [ $? -eq 0 ]; then
-              success=1
-              break
-            fi
-          fi
-        done
-        if [ "$success" = "0" ]; then
-          msg "==> ERROR: Failed to build \"$dep\""
-          exit 1
-        fi
-      done
-      # TODO: check deps again to make sure they were resolved
-    else
-      exit 1
-    fi
-  fi
+	if [ "$deplist" != "" ]; then
+		if [ "$DEP_BIN" = "1" ]; then
+			# install missing deps from binary packages (using pacman -S)
+			msg "==> Installing missing dependencies..."
+			pacman -D $deplist
+			if [ "$?" = "127" ]; then
+				msg "==> ERROR: Failed to install missing dependencies."
+				exit 1
+			fi
+			# TODO: check deps again to make sure they were resolved
+		elif [ "$DEP_SRC" = "1" ]; then
+			# install missing deps by building them from source.
+			# we look for each package name in $ABSROOT and build it.
+			if [ "$ABSROOT" = "" ]; then
+				msg "==> ERROR: The ABSROOT environment variable is not defined."
+				exit 1
+			fi
+			# TODO: handle version comparators (eg, glibc>=2.2.5)
+			msg "==> Building missing dependencies..."
+			for dep in $deplist; do
+				candidates=`find $ABSROOT -type d -name "$dep"`
+				if [ "$candidates" = "" ]; then
+					msg "==> ERROR: Could not find \"$dep\" under $ABSROOT"
+					exit 1
+				fi
+				success=0
+				for pkgdir in $candidates; do
+					if [ -f $pkgdir/PKGBUILD ]; then
+						cd $pkgdir
+						echo makepkg -i -c -b -w $PKGDEST
+						makepkg -i -c -b -w $PKGDEST
+						if [ $? -eq 0 ]; then
+							success=1
+							break
+						fi
+					fi
+				done
+				if [ "$success" = "0" ]; then
+					msg "==> ERROR: Failed to build \"$dep\""
+					exit 1
+				fi
+			done
+			# TODO: check deps again to make sure they were resolved
+		else
+			exit 1
+		fi
+	fi
 elif [ "$NODEPS" = "1" ]; then
-  msg "==> WARNING: skipping dependency checks."
+	msg "==> WARNING: skipping dependency checks."
 else
-  msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
+	msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
 fi
 
 d=`date`
@@ -223,69 +219,69 @@ msg "==> Acquiring/Extracting Sources..."
 mkdir -p src
 cd $startdir/src
 for netfile in ${source[@]}; do
-  file=`strip_url $netfile`
-  if [ -f ../$file ]; then
-    msg "==> Found $file in build dir"
-    cp ../$file .
-  elif [ -f /var/cache/pacman/src/$file ]; then
-    msg "==> Using local copy of $file"
-    cp /var/cache/pacman/src/$file .
-  else
-    # check for a download utility
-    if [ -z "$FTPAGENT" ]; then
-      msg "==> ERROR:  FTPAGENT is not configured. Check the /etc/makepkg.conf file."
-      msg "==> Aborting..."
-      exit 1
-    fi
-    ftpclient=`echo $FTPAGENT | awk {'print $1'}`
-    if [ ! -x $ftpclient ]; then
-      msg "==> ERROR:  ftpclient `basename $ftpclient` is not installed."
-      msg "==> Aborting..."
-      exit 1
-    fi
-    proto=`echo $netfile | sed 's|://.*||'`
-    if [ "$proto" != "ftp" -a "$proto" != "http" ]; then
-      msg "==> ERROR:  $netfile was not found in the build directory and is not a proper URL."
-      msg "==> Aborting..."
-      exit 1
-    fi
-    msg "==> Downloading $file"
-    $FTPAGENT $netfile 2>&1
-    if [ ! -f $file ]; then
-      msg "==> ERROR: Failed to download $file"
-      msg "==> Aborting..."
-      exit 1
-    fi
-    mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
-  fi
-  unset cmd
-  case $file in
-	    *.tar.gz|*.tar.Z|*.tgz)
-    cmd="tar --use-compress-program=gzip -xf $file" ;;
-	    *.tar.bz2)
-    cmd="tar --use-compress-program=bzip2 -xf $file" ;;
-	    *.tar)
-    cmd="tar -xf $file" ;;
-	    *.zip)
-    cmd="unzip -qq $file" ;;
-	    *.gz)
-    cmd="gunzip $file" ;;
-  esac
-  if [ "$cmd" != "" ]; then
-    msg "==> $cmd"
-    $cmd
-    if [ $? -ne 0 ]; then
-      msg "==> ERROR:  Failed to extract $file"
-      msg "==> Aborting..."
-      exit 1
-    fi
-  fi
+	file=`strip_url $netfile`
+	if [ -f ../$file ]; then
+		msg "==> Found $file in build dir"
+		cp ../$file .
+	elif [ -f /var/cache/pacman/src/$file ]; then
+		msg "==> Using local copy of $file"
+		cp /var/cache/pacman/src/$file .
+	else
+		# check for a download utility
+		if [ -z "$FTPAGENT" ]; then
+			msg "==> ERROR:  FTPAGENT is not configured. Check the /etc/makepkg.conf file."
+			msg "==> Aborting..."
+			exit 1
+		fi
+		ftpclient=`echo $FTPAGENT | awk {'print $1'}`
+		if [ ! -x $ftpclient ]; then
+			msg "==> ERROR:  ftpclient `basename $ftpclient` is not installed."
+			msg "==> Aborting..."
+			exit 1
+		fi
+		proto=`echo $netfile | sed 's|://.*||'`
+		if [ "$proto" != "ftp" -a "$proto" != "http" ]; then
+			msg "==> ERROR:  $netfile was not found in the build directory and is not a proper URL."
+			msg "==> Aborting..."
+			exit 1
+		fi
+		msg "==> Downloading $file"
+		$FTPAGENT $netfile 2>&1
+		if [ ! -f $file ]; then
+			msg "==> ERROR: Failed to download $file"
+			msg "==> Aborting..."
+			exit 1
+		fi
+		mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
+	fi
+	unset cmd
+	case $file in
+		*.tar.gz|*.tar.Z|*.tgz)
+			cmd="tar --use-compress-program=gzip -xf $file" ;;
+		*.tar.bz2)
+			cmd="tar --use-compress-program=bzip2 -xf $file" ;;
+		*.tar)
+			cmd="tar -xf $file" ;;
+		*.zip)
+			cmd="unzip -qq $file" ;;
+		*.gz)
+			cmd="gunzip $file" ;;
+	esac
+	if [ "$cmd" != "" ]; then
+		msg "==> $cmd"
+		$cmd
+		if [ $? -ne 0 ]; then
+			msg "==> ERROR:  Failed to extract $file"
+			msg "==> Aborting..."
+			exit 1
+		fi
+	fi
 done
 
 # check for existing pkg directory
 if [ -d $startdir/pkg ]; then
-  msg "==> Removing existing pkg directory..."
-  rm -rf $startdir/pkg
+	msg "==> Removing existing pkg directory..."
+	rm -rf $startdir/pkg
 fi
 mkdir -p $startdir/pkg
 
@@ -293,8 +289,8 @@ mkdir -p $startdir/pkg
 msg "==> Building Package..."
 build 2>&1
 if [ $? -gt 0 ]; then
-  msg "==> Build Failed.  Aborting..."
-  exit 2
+	msg "==> Build Failed.  Aborting..."
+	exit 2
 fi
 
 # remove info/doc files
@@ -304,29 +300,35 @@ rm -rf pkg/usr/doc pkg/usr/share/doc
 
 # move /usr/share/man files to /usr/man
 if [ -d pkg/usr/share/man ]; then
-  mkdir -p pkg/usr/man 
-  cp -a pkg/usr/share/man/* pkg/usr/man/
-  rm -rf pkg/usr/share/man
+	mkdir -p pkg/usr/man 
+	cp -a pkg/usr/share/man/* pkg/usr/man/
+	rm -rf pkg/usr/share/man
+fi
+
+# remove /usr/share directory if empty
+if [ -d pkg/usr/share ]; then
+	if [ -z "`ls -1 pkg/usr/share`" ]; then
+		rm -r pkg/usr/share
+	fi
 fi
 
 # compress man pages
 if [ -d pkg/usr/man ]; then
-  msg "==> Compressing man pages..."
-  for i in `find pkg/usr/man -type f`; do
-    ext=`echo $i | sed 's|.*\.||g'`
-    fn=`echo $i | sed 's|.*/||g'`
-    if [ "$ext" != "gz" ]; then
-      # update symlinks to this manpage
-      for ln in `find pkg/usr/man -lname "$fn"`; do
-        rm -f $ln
-        ln -sf ${fn}.gz ${ln}.gz
-      done
-      # compress the original
-      gzip -9 $i
-    fi
-  done
+	msg "==> Compressing man pages..."
+	for i in `find pkg/usr/man -type f`; do
+		ext=`echo $i | sed 's|.*\.||g'`
+		fn=`echo $i | sed 's|.*/||g'`
+		if [ "$ext" != "gz" ]; then
+			# update symlinks to this manpage
+			for ln in `find pkg/usr/man -lname "$fn"`; do
+				rm -f $ln
+				ln -sf ${fn}.gz ${ln}.gz
+			done
+			# compress the original
+			gzip -9 $i
+		fi
+	done
 fi
-
 
 # strip binaries
 cd $startdir
@@ -338,9 +340,9 @@ find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' ';'
 # get some package meta info
 builddate=`date -u "+%a %b %d %k:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
-  packager="$PACKAGER"
+	packager="$PACKAGER"
 else
-  packager="Arch Linux (http://www.archlinux.org)"
+	packager="Arch Linux (http://www.archlinux.org)"
 fi
 size=`du -cb $startdir/pkg | tail -1 | awk '{print $1}'`
 
@@ -353,47 +355,53 @@ date >>.PKGINFO
 echo "pkgname = $pkgname" >>.PKGINFO
 echo "pkgver = $pkgver-$pkgrel" >>.PKGINFO
 echo "pkgdesc = $pkgdesc" >>.PKGINFO
+echo "url = $url" >>.PKGINFO
 echo "builddate = $builddate" >>.PKGINFO
 echo "packager = $packager" >>.PKGINFO
 echo "size = $size" >>.PKGINFO
 
 for depend in "${depends[@]}"; do
-  echo "depend = $depend" >>.PKGINFO
+	echo "depend = $depend" >>.PKGINFO
 done
 for conflict in "${conflicts[@]}"; do
-  echo "conflict = $conflict" >>.PKGINFO
+	echo "conflict = $conflict" >>.PKGINFO
 done
 for bakfile in "${backup[@]}"; do
-  echo "backup = $bakfile" >>.PKGINFO
+	echo "backup = $bakfile" >>.PKGINFO
 done
 
 # check for an install script
 if [ "$install" != "" ]; then
-  msg "==> Copying install script..."
-  cp $startdir/$install $startdir/pkg/._install
+	msg "==> Copying install script..."
+	cp $startdir/$install $startdir/pkg/.INSTALL
 fi
+
+# build a filelist
+msg "==> Building filelist..."
+cd $startdir/pkg
+tar cv * >/dev/null 2>.FILELIST
 
 # tar it up
 msg "==> Compressing package..."
 cd $startdir/pkg
-if [ -f $startdir/pkg/._install ]; then
-  tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO ._install * >../filelist
+if [ -f $startdir/pkg/.INSTALL ]; then
+	cmd="tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO .FILELIST .INSTALL *"
 else
-  tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO * >../filelist
+	cmd="tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO .FILELIST *"
 fi
+$cmd >../filelist
 
 cd $startdir
 if [ "$CLEANUP" = "1" ]; then
-  msg "==> Cleaning up"
-  rm -rf src pkg filelist
+	msg "==> Cleaning up"
+	rm -rf src pkg filelist
 fi
 
-d=`date`
-msg "==> Finished making $pkgname  ($d)"
+msg "==> Finished making $pkgname  (`date`)"
 
 if [ "$INSTALL" = "1" ]; then
-  msg "==> Running pacman --upgrade"
-  pacman --upgrade $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz
+	msg "==> Running pacman --upgrade"
+	pacman --upgrade $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz
 fi
 
 exit 0
