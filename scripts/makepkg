@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.5'
+myver='2.5.1'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf

@@ -1,5 +1,8 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+2.5.1         - Added retries to the downloader to get around some
+                transient network errors.  (this will likely be an option
+                in pacman.conf for later versions)
 2.5           - Added an URL tag to package info
               - Sped up package load times by about 500% by introducing
                 a .FILELIST into the package

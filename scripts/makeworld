@@ -1,7 +1,7 @@
 #!/bin/bash
 
 toplevel=`pwd`
-version="2.5"
+version="2.5.1"
 
 usage() {
   echo "makeworld version $version"
@@ -42,12 +42,12 @@ for arg in $*; do
     -*)
       while getopts "cisbdf-" opt; do
         case $opt in
-        c) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -c" ;;
-        i) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -i" ;;
-        s) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -s" ;;
-        b) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -b" ;;
-        d) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -d" ;;
-        f) MAKEPKGS_OPTS="$MAKEPKGS_OPTS -f" ;;
+        c) MAKEPKG_OPTS="$MAKEPKG_OPTS -c" ;;
+        i) MAKEPKG_OPTS="$MAKEPKG_OPTS -i" ;;
+        s) MAKEPKG_OPTS="$MAKEPKG_OPTS -s" ;;
+        b) MAKEPKG_OPTS="$MAKEPKG_OPTS -b" ;;
+        d) MAKEPKG_OPTS="$MAKEPKG_OPTS -d" ;;
+        f) MAKEPKG_OPTS="$MAKEPKG_OPTS -f" ;;
         -)
           OPTIND=0
           break

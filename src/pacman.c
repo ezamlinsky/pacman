@@ -1226,7 +1226,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, PKGDIR, db->treename, info->name, info->version);
 			if(!stat(pm_install, &buf)) {
 				vprint("Executing pre-remove script...\n");
-				snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, PKGDIR, db->treename, info->name, info->version);
+				snprintf(pm_install, PATH_MAX, "%s/%s/%s-%s/install", PKGDIR, db->treename, info->name, info->version);
 				snprintf(line, PATH_MAX, "chroot %s /bin/sh %s pre_remove %s", pmo_root, pm_install, info->version);
 
 				system(line);

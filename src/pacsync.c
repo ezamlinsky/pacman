@@ -155,41 +155,47 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			sync_fnm[24] = '\0';
 
 			if(!server->islocal) {
-				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
-					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
-				}
-				offset = 0;
-				if(!stat(output, &st)) {
-					offset = (int)st.st_size;
-				}
-				if(offset) {
-					if(!FtpRestart(offset, control)) {
-						fprintf(stderr, "warning: failed to resume download -- restarting\n");
-						/* can't resume: */
-						/* unlink the file in order to restart download from scratch */
-						unlink(output);
+				int tries = 2;
+				while(tries) {
+					if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
+						fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
 					}
-				}
-				/* set up our progress bar's callback */
-				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+					offset = 0;
+					if(!stat(output, &st)) {
+						offset = (int)st.st_size;
+					}
+					if(offset) {
+						if(!FtpRestart(offset, control)) {
+							fprintf(stderr, "warning: failed to resume download -- restarting\n");
+							/* can't resume: */
+							/* unlink the file in order to restart download from scratch */
+							unlink(output);
+						}
+					}
+					/* set up our progress bar's callback */
+					FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+					FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+					FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+					FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
 
-				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
-					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
-						fn, server->server, FtpLastResponse(control));
-					/* we leave the partially downloaded file in place so it can be resumed later */
-				} else {
-					char completefile[PATH_MAX];
-					log_progress(control, fsz-offset, &fsz);
-					complete = list_add(complete, fn);
-					/* rename "output.part" file to "output" file */
-					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
-					rename(output, completefile);
+					if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
+						fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+							fn, server->server, FtpLastResponse(control));
+						/* we leave the partially downloaded file in place so it can be resumed later */
+						/* try each file twice in case it was just one of those transient network errors */
+						tries--;
+					} else {
+						char completefile[PATH_MAX];
+						log_progress(control, fsz-offset, &fsz);
+						complete = list_add(complete, fn);
+						tries = 0;
+						/* rename "output.part" file to "output" file */
+						snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
+						rename(output, completefile);
+					}
+					printf("\n");
+					fflush(stdout);
 				}
-				printf("\n");
-				fflush(stdout);
 			} else {
 				/* local repository, just copy the file */
 				char src[PATH_MAX], dest[PATH_MAX];
