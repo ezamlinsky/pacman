@@ -17,12 +17,12 @@ into the installation root and the database will be updated.
 .B "\-R, \-\-remove"
 Remove a package from the system.  Files belonging to the
 specified package will be deleted, and the database will
-be updated.  Note that files with \fI.conf\fP extensions will
-be renamed with \fI.conf.save\fP extensions.
+be updated.  Note that most configuration files will be
+be renamed with \fI.pacsave\fP extensions.
 .TP
 .B "\-U, \-\-upgrade"
 Upgrade a package.  This is essentially a "remove-then-install"
-process.  Files with \fI.conf\fP extensions will be saved.
+process.  Most configuration files will be not be overwritten.
 .TP
 .B "\-Q, \-\-query"
 Query the package database.  This operation allows you to

@@ -73,7 +73,84 @@ this elsewhere, feel free to change it) like /usr/doc and /usr/info.  It will
 then strip debugging info from libraries and binaries and compress everything
 into a .pkg.tar.gz file in the directory you ran \fBmakepkg\fP from.
 
+At this point you should have a package file in the current directory, named
+something like name-version-release.pkg.tar.gz.  Done!
+
+.SH Install/Upgrade/Remove Scripting
+Pacman has the ability to store and execute a package-specific script when it
+installs, removes, or upgrades a package.  This allows a package to "configure
+itself" after installation and do the opposite right before it is removed.
+
+The exact time the script is run varies with each operation:
+.TP
+.B post_install
+script is run right after files are installed.
+
+.TP
+.B post_upgrade
+script is run after all files have been upgraded.
+
+.TP
+.B pre_remove
+script is run right before files are removed.
+
+.RE
+In order to use this feature, your build function should put the script in
+$startdir/pkg/var/lib/pacman/scripts and it must be named exactly the same
+as the \fI$pkgname\fP variable in the PKGBUILD script.  For example, an
+install script for grep will be $startdir/pkg/var/lib/pacman/scripts/grep.
+Note that the scripts should be 644, not 755 (we don't need execute permission).
+
+.TP
+.TP
+.SH Install scripts must follow this format:
+.RS
+.nf
+# arg 1:  the new package version
+post_install() {
+  #
+  #  do post-install stuff here
+  #
+}
+
+# arg 1:  the new package version
+# arg 2:  the old package version
+post_upgrade() {
+  #
+  #  do post-upgrade stuff here
+  #
+}
+
+# arg 1:  the old package version
+pre_remove() {
+  #
+  #  do pre-remove stuff here
+  #
+}
+
+op=$1
+shift
+
+$op $*
+.fi
+.RE
+
+This template is also available in your ABS tree (/usr/abs/install.proto).
+
 .SH PKGBUILD Directives
+.TP
+.B pkgname
+The name of the package.  This has be a unix-friendly name as it will be
+used in the package filename.
+
+.TP
+.B pkgver
+This is the version of the software as released from the author (eg, 2.7.1).
+
+.TP
+.B pkgrel
+This is the release number specific to Arch Linux packages.
+
 .TP
 .B backup
 A space-delimited array of filenames (without a preceding slash). The
@@ -88,14 +165,6 @@ package.  Source files must reside in the same directory as the PKGBUILD
 file, unless they have a fully-qualified URL.  Then if the source file
 does not already exist in /var/cache/pacman/src, the file is downloaded
 by wget.
-
-.TP
-.B install
-There is also an \fIinstall\fP directive that is not used in the example
-above.  If \fIinstall\fP is set to the name of a file in the package build
-directory, then it will be
-copied to the package meta-info file and designated as a post-install script.
-This will be run by pacman whenever it installs the package.
 
 .SH CONFIGURATION
 Configuration options are stored in /etc/makepkg.conf.  This file is parsed

@@ -79,10 +79,11 @@ static tartype_t gztype = {
  * GLOBALS
  *
  */
-FILE* dbfp    = NULL;
-char* dbpath  = PKGDB;
-char* pkgname = NULL;
-char* pkgver  = NULL;
+FILE* dbfp      = NULL;
+char* dbpath    = NULL;
+char* pkgname   = NULL;
+char* pkgver    = NULL;
+char  oldpkgver[65];
 
 char*          pmo_root     = NULL;
 unsigned short pmo_verbose  = 0;
@@ -90,6 +91,7 @@ unsigned short pmo_force    = 0;
 unsigned short pmo_upgrade  = 0;
 unsigned short pmo_nosave   = 0;
 unsigned short pmo_nofunc   = 0;
+unsigned short pmo_haveinst = 0;
 unsigned short pmo_q_isfile = 0;
 unsigned short pmo_q_info   = 0;
 unsigned short pmo_q_list   = 0;
@@ -103,9 +105,6 @@ unsigned int pm_pkgcount = 0;
 fileset_t    pm_targets  = NULL;
 unsigned int pm_targct   = 0;
 
-/* path to post-install script, if any */
-char* pm_install = NULL;
-
 int main(int argc, char* argv[])
 {
 	pm_opfunc_t op_func;
@@ -114,6 +113,10 @@ int main(int argc, char* argv[])
 	/* default root */
 	pmo_root = (char*)malloc(2);	
 	strcpy(pmo_root, "/");
+
+	/* db location */
+	dbpath = (char*)malloc(strlen(PKGDIR)+strlen(PKGDB)+1);
+	sprintf(dbpath, "%s/%s", PKGDIR, PKGDB);
 
 	if(argc < 2) {
 		usage(PM_MAIN, (char*)basename(argv[0]));
@@ -158,15 +161,14 @@ int main(int argc, char* argv[])
 	}
 
 	/* check for db existence */
-	if(pmo_root != NULL) {
+	if(pmo_root != NULL && strcmp(pmo_root, "/")) {
 		/* trim the trailing '/' if there is one */
 		if((int)rindex(pmo_root, '/') == ((int)pmo_root)+strlen(pmo_root)-1) {
 			pmo_root[strlen(pmo_root)-1] = '\0';
 		}
 		free(dbpath);
-		dbpath = (char*)malloc(strlen(pmo_root) + strlen(PKGDB) + 1);
-		strcpy(dbpath, pmo_root);
-		dbpath = (char*)strcat(dbpath, PKGDB);
+		dbpath = (char*)malloc(strlen(pmo_root)+strlen(PKGDIR)+strlen(PKGDB)+1);
+		sprintf(dbpath, "%s%s/%s", pmo_root, PKGDIR, PKGDB);
 	}
 	vprint("Using package DB:  %s\n", dbpath);
 
@@ -185,6 +187,7 @@ int main(int argc, char* argv[])
 	/* start the requested operation */
 	if(!pmo_nofunc) {
 		for(i = 0; i < pm_targct; i++) {
+			pmo_haveinst = 0;
 			if(op_func(pm_targets[i])) {
 				ret = 1;
 				/*
@@ -205,7 +208,7 @@ int main(int argc, char* argv[])
 	
 	if(op_func == pacman_remove) {
 		/* the remove function no longer updates the db itself. we do it here
-		 * instead, in an effort to save some expensive file rewrites. note that we
+		 * instead in an effort to save some expensive file rewrites. note that we
 		 * can't do this for pacman_add() yet, as he's gotta call db_find_conflicts
 		 * for each package.
 		 */
@@ -219,9 +222,11 @@ int main(int argc, char* argv[])
 int pacman_add(char* pkgfile)
 {
 	int i, ret = 0, errors = 0;
-	TAR* tar;
+	TAR* tar = NULL;
 	char* errmsg = NULL;
 	char* expath = NULL;
+	char pm_install[PATH_MAX+1];
+	char cmdline[PATH_MAX+1];
 	/*char* newpath = NULL;*/
 	fileset_t files = NULL;
 	unsigned int filecount = 0, nb = 0;
@@ -331,15 +336,19 @@ int pacman_add(char* pkgfile)
 		vprint("Done.\n");
 	}
 
-	/* run the script in pm_install  */
-	if(pm_install != NULL) {
+	/* run the post-install script if it exists  */
+	snprintf(pm_install, PATH_MAX, "%s%s/scripts/%s", pmo_root, PKGDIR, pkgname);
+	if(!stat(pm_install, &buf)) {
+		strcpy(oldpkgver, "");
+	  for(i = 0; i < pm_pkgcount; i++) {
+			if(!strcmp(pm_packages[i]->name, pkgname)) {
+				strcpy(oldpkgver, pm_packages[i]->version);
+			}
+		}
 		vprint("Executing post-install script...\n");
-		expath = (char*)malloc(256);
-		snprintf(expath, 255, "/bin/bash %s", pm_install);
-		system(expath);
-		free(expath);
-		unlink(pm_install);
-		free(pm_install);
+		snprintf(cmdline, PATH_MAX, "cd %s && /bin/sh %s post_%s %s %s", pmo_root, pm_install,
+			(pmo_upgrade ? "upgrade" : "install"), pkgver, (pmo_upgrade ? oldpkgver : ""));
+		system(cmdline);
 	}
 	
 	return(0);
@@ -350,6 +359,7 @@ int pacman_remove(char* pkgfile)
 	int found = 0, done = 0;
 	int i;
 	char line[PATH_MAX+1];
+	char pm_install[PATH_MAX+1];
 	fileset_t files = NULL;
 	unsigned int filecount = 0, nb = 0;
 	struct stat buf;
@@ -367,7 +377,7 @@ int pacman_remove(char* pkgfile)
 		strcpy(line, trim(line));
 		if(!strcmp(line, pkgfile)) {
 			/* read the version */
-			fgets(line, 63, dbfp);
+			fgets(oldpkgver, 63, dbfp);
 			found = 1;
 		}
 	}
@@ -378,6 +388,18 @@ int pacman_remove(char* pkgfile)
 		} else {
 			fprintf(stderr, "Cannot remove %s: Package was not found.\n", pkgfile);
 			return(1);
+		}
+	}
+
+	if(!pmo_upgrade) {
+		/* run the pre-remove script if it exists  */
+		snprintf(pm_install, PATH_MAX, "%s%s/scripts/%s", pmo_root, PKGDIR, pkgfile);
+		if(!stat(pm_install, &buf)) {
+			vprint("Executing pre-remove script...\n");
+			snprintf(line, PATH_MAX, "cd %s && /bin/sh %s pre_remove %s", pmo_root,
+				pm_install, oldpkgver);
+
+			system(line);
 		}
 	}
 
@@ -921,19 +943,6 @@ int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
 				strcpy(pkgver, ptr);
 			} else if(!strcmp(key, "PKGDESC")) {
 				/* Not used yet */
-			} else if(!strcmp(key, "INSTALL")) {
-				if(inst == NULL) {
-					pm_install = (char*)malloc(strlen("/tmp/pacman_XXXXXX")+1);
-					strcpy(pm_install, "/tmp/pacman_XXXXXX");	
-					mkstemp(pm_install);
-					inst = fopen(pm_install, "w");
-					if(inst == NULL) {
-						perror("fopen");
-						return(1);
-					}
-				}
-				fputs(ptr, inst);
-				fputc('\n', inst);
 			} else if(!strcmp(key, "BACKUP")) {
 				backup = (fileset_t)realloc(backup, (++count) * sizeof(char*));
 				backup[count-1] = (char*)malloc(strlen(ptr)+1);
@@ -1016,6 +1025,8 @@ int parseargs(int op, int argc, char** argv)
 				pmo_nofunc = 1;
 				return(1);
 			}
+			/* trim off the leading slash */
+			pmo_q_owns++;
 		} else if(!strcmp(argv[i], "-l") || !strcmp(argv[i], "--list")) {
 			/* PM_QUERY only */
 			pmo_q_list = 1;

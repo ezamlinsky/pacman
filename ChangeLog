@@ -1,11 +1,12 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+1.23          - Added install/upgrade/remove scripting control
 1.22          - Some manpage typo fixes
               - Added --root switch to pacsync
-							- Added --help and ability to specify a PKGBUILD to makepkg
-							- Switched default downloader to snarf
+              - Added --help and ability to specify a PKGBUILD to makepkg
+              - Switched default downloader to snarf
 1.21          - Added better backup control -- upgrade/add and remove
-	        do different things with the -n switch
+                do different things with the -n switch
 1.2           - Added wildcard handling
               - Added man pages for makepkg and pacsync
               - Added the pacsync utility for remote file fetching/sync

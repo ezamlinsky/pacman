@@ -1,11 +1,12 @@
 #!/bin/bash
 
-version="1.22"
+version="1.23"
 tanpath="/var/lib/pacman"
 tandb="pacsync.db"
 errors=0
 upgrade=0
 INSTALL_ROOT="/"
+IGNORE_PKG=
 
 message() {
 	echo "==> $1" >&2
@@ -13,7 +14,7 @@ message() {
 
 usage() {
 	echo "pacsync version $version"
-	echo "usage: $0 [--root <root>] <operation> [package]"
+	echo "usage: $0 [--root <root>] [--ignore <pkg>] <operation> [package]"
 	echo ""
 	echo "operations:"
 	echo "  sync               Download a fresh package list from the server"
@@ -22,6 +23,11 @@ usage() {
 	echo "  report             Generate a report of all packages that could be upgraded"
 	echo "  sysupgrade         Same as \"report\", but actually do the upgrades"
 	echo "  clean              Removes all files from package cache to clear up diskspace"
+	echo ""
+	echo "options:"
+	echo "  --root   <root>    Set installation root to <root>"
+	echo "  --ignore <pkg>     Ignore packages that have <pkg> in their names when doing"
+	echo "                     sysupgrades.  (--ignore can be used multiple times)"
 	echo ""
 }
 
@@ -37,6 +43,10 @@ download() {
 	shift
 	cl=
 	for file in $*; do
+		# snarf returns a nonzero error code when the file already exists, which
+		# confuses pacsync, so for now, no resume action...
+		rm -f $file
+
 		cl="$cl $SYNC_SERVER/$file"
 	done
 	message "Downloading $targ"
@@ -49,13 +59,12 @@ download() {
 }
 
 dosync() {
-	cd /tmp
 	download "package list" pacsync/$tandb
 	if [ $? -gt 0 ]; then
 		exit 1
 	fi
 	rm -f $INSTALL_ROOT/$tanpath/$tandb
-	mv /tmp/$tandb $INSTALL_ROOT/$tanpath/$tandb
+	mv $tandb $INSTALL_ROOT/$tanpath/$tandb
 	message "Done."
 }
 
@@ -167,7 +176,7 @@ doreport() {
 	headers=0
 	newkernel=0
 	pkg2up=
-	for pkgfile in `cat $INTALL_ROOT/$tanpath/$tandb | sed "s|^[a-z]*/||g"`; do
+	for pkgfile in `cat $INSTALL_ROOT/$tanpath/$tandb | sed "s|^[a-z]*/||g"`; do
 		pkgname=`echo $pkgfile | sed 's|-[a-zA-Z0-9\.]*-[0-9]*\.pkg\.tar\.gz||g'`
 		pacman=`pacman -Q -r $INSTALL_ROOT $pkgname 2>/dev/null`
 		if [ $? -gt 0 ]; then
@@ -183,8 +192,15 @@ doreport() {
 			continue
 		else
 			if  [ `echo "$locfile" | egrep '^kernel-[a-zA-Z0-9\.]+-[0-9]+$'` ]; then
+				# this is the kernel pacakge -- we handle this one specially
 				newkernel=1
 				continue
+			fi
+			if [ "$IGNORE_PKG" != "" ]; then
+				if [ `echo "$locfile" | egrep "$IGNORE_PKG"` ]; then
+					# ignore this package as per user's request
+					continue
+				fi
 			fi
 			if [ "$headers" = "0" ]; then
 				echo "+--------------------------------------+--------------------------------------+"
@@ -227,6 +243,8 @@ doreport() {
 	exit 0
 }
 
+cd /tmp
+
 if [ $# -lt 1 ]; then
 	usage
 	exit 0
@@ -237,6 +255,16 @@ if [ "$1" = "--root" ]; then
 	INSTALL_ROOT=$1
 	shift
 fi
+
+while [ "$1" = "--ignore" ]; do
+	shift
+	if [ "$IGNORE_PKG" = "" ]; then
+		IGNORE_PKG="$1"
+	else
+		IGNORE_PKG="$IGNORE_PKG|$1"
+	fi
+	shift
+done
 
 if [ -f /etc/pacsync.conf ]; then
 	. /etc/pacsync.conf

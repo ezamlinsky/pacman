@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='1.22'
+myver='1.23'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && . /etc/makepkg.conf
@@ -114,12 +114,6 @@ echo "pkgver = $pkgver-$pkgrel" >>.PKGINFO
 for bakfile in "${backup[@]}"; do
   echo "backup = $bakfile" >>.PKGINFO
 done
-if [ "$install" != "" ]; then
-  cat $startdir/$install  | egrep '^[^$]' | sed 's/^/install = /g' >>.PKGINFO
-fi
-if [ "$remove" != "" ]; then
-  cat $startdir/$remove  | egrep '^[^$]' | sed 's/^/remove = /g' >>.PKGINFO
-fi
 
 # remove info/doc files
 cd $startdir
