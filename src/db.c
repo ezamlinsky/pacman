@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  db.c
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -29,13 +29,7 @@
 #include "util.h"
 #include "db.h"
 
-/* Verify database integrity and build a list of
- * installed packages
- * 
- *   returns:  0 on success
- *             1 if db is not initialized
- *             2 if db is corrupt
- */
+/* Open a database and return a pacdb_t handle */
 pacdb_t* db_open(char *root, char *pkgdir, char *treename)
 {
 	pacdb_t *db = NULL;
@@ -111,7 +105,7 @@ PMList* db_loadpkgs(pacdb_t *db, PMList *pkgcache)
 		cache = list_add(cache, arr[i]);
 	}
 
-	free(arr);
+	FREE(arr);
 
 	return(cache);
 }
@@ -216,6 +210,11 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					return(NULL);
 				}
 				trim(info->desc);
+			} else if(!strcmp(line, "%GROUPS%")) {
+				while(fgets(line, 512, fp) && strlen(trim(line))) {
+					char *s = strdup(line);
+					info->groups = list_add(info->groups, s);
+				}
 			} else if(!strcmp(line, "%URL%")) {
 				if(fgets(info->url, sizeof(info->url), fp) == NULL) {
 					return(NULL);
@@ -243,6 +242,14 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 				}
 				trim(tmp);
 				info->size = atol(tmp);
+			} else if(!strcmp(line, "%REPLACES%")) {
+				/* the REPLACES tag is special -- it only appears in sync repositories,
+				 * not the local one.
+				 */
+				while(fgets(line, 512, fp) && strlen(trim(line))) {
+					char *s = strdup(line);
+					info->replaces = list_add(info->replaces, s);
+				}
 			}
 		}
 		fclose(fp);
@@ -303,6 +310,12 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					info->conflicts = list_add(info->conflicts, s);
 				}
 			}
+			if(!strcmp(line, "%PROVIDES%")) {
+				while(fgets(line, 512, fp) && strlen(trim(line))) {
+					char *s = strdup(line);
+					info->provides = list_add(info->provides, s);
+				}
+			}
 		}
 		fclose(fp);
 	}
@@ -347,6 +360,11 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	fprintf(fp, "%s\n\n", info->version);
 	fputs("%DESC%\n", fp);
 	fprintf(fp, "%s\n\n", info->desc);
+	fputs("%GROUPS%\n", fp);
+	for(lp = info->groups; lp; lp = lp->next) {
+		fprintf(fp, "%s\n", (char*)lp->data);
+	}
+	fprintf(fp, "\n");
 	fputs("%URL%\n", fp);
 	fprintf(fp, "%s\n\n", info->url);
 	fputs("%BUILDDATE%\n", fp);
@@ -400,6 +418,11 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 		fprintf(fp, "%s\n", (char*)lp->data);
 	}
 	fprintf(fp, "\n");
+	fputs("%PROVIDES%\n", fp);
+	for(lp = info->provides; lp; lp = lp->next) {
+		fprintf(fp, "%s\n", (char*)lp->data);
+	}
+	fprintf(fp, "\n");
 	fclose(fp);
 
 	/* INSTALL */
@@ -426,7 +449,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	 *
 	pkginfo_t *info = NULL;
 	char *dbstr   = NULL;
-	vprint("Checking database against targets...\n");
 	rewinddir(db->dir);
 	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_FILES)) != NULL) {
 		for(i = info->files; i; i = i->next) {
@@ -453,7 +475,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	}*/
 
 	/* CHECK 2: check every target against every target */
-	/* orelien - vprint("Checking targets against targets...\n"); */
 	for(i = targets; i; i = i->next) {
 		pkginfo_t *p1 = (pkginfo_t*)i->data;
 		for(j = i; j; j = j->next) {
@@ -480,7 +501,6 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	}
 
 	/* CHECK 3: check every target against the filesystem */
-	/* orelien - vprint("Checking targets against filesystem...\n"); */
 	for(i = targets; i; i = i->next) {
 		pkginfo_t *p = (pkginfo_t*)i->data;
 		pkginfo_t *dbpkg = NULL;
@@ -507,6 +527,74 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	}
 
 	return(conflicts);
+}
+
+PMList *whatprovides(pacdb_t *db, char* package)
+{
+	PMList *pkgs, *i = NULL;
+	pkginfo_t *info;
+
+	rewinddir(db->dir);
+	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_DEPENDS)) != NULL) {
+		if(is_in(package, info->provides)) {
+			i = list_add(i, strdup(info->name));
+		}
+		freepkg(info);
+	}
+	pkgs = list_sort(i);
+	list_free(i);
+
+	return(pkgs);
+}
+
+/*
+ * return a list of all groups present in *db
+ * 
+ */
+PMList *find_groups(pacdb_t *db)
+{
+	PMList *groups, *i = NULL;
+	PMList *lp = NULL;
+	pkginfo_t *info;
+
+	rewinddir(db->dir);
+	while((info = db_scan(db, NULL, INFRQ_DESC)) != NULL) {
+		for(lp = info->groups; lp; lp = lp->next) {
+			if(!is_in((char*)lp->data, i)) {
+				i = list_add(i, strdup((char*)lp->data));
+			}
+		}
+		freepkg(info);
+	}
+	groups = list_sort(i);
+	list_free(i);
+
+	return(groups);
+}
+
+/*
+ * return a list of all members of the specified group
+ *
+ */
+PMList *pkg_ingroup(pacdb_t *db, char *group)
+{
+	PMList *pkg, *i = NULL;
+	PMList *lp = NULL;
+	pkginfo_t *info;
+
+	rewinddir(db->dir);
+	while((info = db_scan(db, NULL, INFRQ_DESC)) != NULL) {
+		for(lp = info->groups; lp; lp = lp->next) {
+			if(!strcmp((char*)lp->data, group)) {
+				i = list_add(i, strdup(info->name));
+			}
+		}
+		freepkg(info);
+	}
+	pkg = list_sort(i);
+	list_free(i);
+
+	return(pkg);
 }
 
 /* vim: set ts=2 sw=2 noet: */

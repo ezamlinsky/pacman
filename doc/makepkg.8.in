@@ -8,7 +8,7 @@ makepkg \- package build utility
 a build-capable linux platform, wget, and some build scripts.  The advantage
 to a script-based build is that you only really do the work once.  Once you
 have the build script for a package, you just need to run makepkg and it
-will do the rest: download source files, check dependencies, 
+will do the rest: download and validate source files, check dependencies,
 configure the buildtime settings, build the package, install the package
 into a temporary root, make customizations, generate meta-info, and package
 the whole thing up for \fBpacman\fP to use.
@@ -31,20 +31,23 @@ the \fBabs\fP script included with pacman/makepkg.
 .RS
 .nf
 pkgname=modutils
-pkgver=2.4.13
+pkgver=2.4.25
 pkgrel=1
 pkgdesc="Utilities for inserting and removing modules from the linux kernel"
 url="http://www.kernel.org"
 backup=(etc/modules.conf)
-depends=('glibc>=2.2.5' 'bash' 'zlib')
-source=(ftp://ftp.server.com/$pkgname-$pkgver.tar.gz modules.conf)
+depends=('mawk' 'bash' 'glibc' 'zlib')
+source=(ftp://ftp.kernel.org/pub/linux/utils/kernel/$pkgname/v2.4/$pkgname-$pkgver.tar.bz2 \\
+        modules.conf)
+md5sums=('2c0cca3ef6330a187c6ef4fe41ecaa4d' \\
+        '35175bee593a7cc7d6205584a94d8625')
 
 build() {
   cd $startdir/src/$pkgname-$pkgver
-  ./configure --prefix=/usr
+  ./configure --prefix=/usr --enable-insmod-static
   make || return 1
   make prefix=$startdir/pkg/usr install
-  # copy our custom modules.conf into the package root
+  mv $startdir/pkg/usr/sbin $startdir/pkg
   mkdir -p $startdir/pkg/etc
   cp ../modules.conf $startdir/pkg/etc
 }
@@ -61,9 +64,13 @@ The line with \fIbackup=\fP specifies files that should be treated specially
 when removing or upgrading packages.  See \fBHANDLING CONFIG FILES\fP in
 the \fIpacman\fP manpage for more information on this.
 
-The sixth line lists the dependencies for this package.  In order to build/run
+The seventh line lists the dependencies for this package.  In order to build/run
 the package, all dependencies must be satisifed first.  makepkg will check this
 before attempting to build the package.
+
+The \fIsource\fP array tells makepkg which files to download/extract before compiling
+begins.  The \fImd5sums\fP array provides md5sums for each of these files.  These
+are used to validate the integrity of the source files.
 
 Once your PKGBUILD is created, you can run \fImakepkg\fP from the build directory.
 makepkg will then check dependencies and look for the source files required to
@@ -193,7 +200,28 @@ This field contains an optional URL that is associated with the piece of softwar
 being packaged.  This is typically the project's website.
 
 .TP
-.B backup
+.B install
+Specifies a special install script that is to be included in the package.
+This file should reside in the same directory as the PKGBUILD, and will be
+copied into the package by makepkg.  It does not need to be included in the
+\fIsource\fP array.  (eg, install=modutils.install)
+
+.TP
+.B source \fI(array)\fP 
+The \fIsource\fP line is an array of source files required to build the
+package.  Source files must reside in the same directory as the PKGBUILD
+file, unless they have a fully-qualified URL.  Then if the source file
+does not already exist in /var/cache/pacman/src, the file is downloaded
+by wget.
+
+.TP
+.B groups \fI(array)\fP
+This is an array of symbolic names that represent groups of packages, allowing
+you to install multiple packages by requesting a single target.  For example,
+one could install all KDE packages by installing the 'kde' group.
+
+.TP
+.B backup \fI(array)\fP 
 A space-delimited array of filenames (without a preceding slash). The
 \fIbackup\fP line will be propagated to the package meta-info file for
 pacman.  This will designate all files listed there to be backed up if this
@@ -201,14 +229,7 @@ package is ever removed from a system.  See \fBHANDLING CONFIG FILES\fP in
 the \fIpacman\fP manpage for more information.
 
 .TP
-.B install
-Specified a special install script that is to be included in the package.
-This file should reside in the same directory as the PKGBUILD, and will be
-copied into the package by makepkg.  It does not need to be included in the
-\fIsource\fP array.  (eg, install=modutils.install)
-
-.TP
-.B depends
+.B depends \fI(array)\fP 
 An array of packages that this package depends on to build and run.  Packages
 in this list should be surrounded with single quotes and contain at least the
 package name.  They can also include a version requirement of the form
@@ -217,18 +238,24 @@ package name.  They can also include a version requirement of the form
 See the PKGBUILD example above for an example of the \fIdepends\fP directive.
 
 .TP
-.B conflicts
+.B conflicts \fI(array)\fP 
 An array of packages that will conflict with this package (ie, they cannot both
 be installed at the same time).  This directive follows the same format as
 \fIdepends\fP except you cannot specify versions here, only package names.
 
 .TP
-.B source
-The \fIsource\fP line is an array of source files required to build the
-package.  Source files must reside in the same directory as the PKGBUILD
-file, unless they have a fully-qualified URL.  Then if the source file
-does not already exist in /var/cache/pacman/src, the file is downloaded
-by wget.
+.B provides \fI(array)\fP 
+An array of "virtual provisions" that this package provides.  This allows a package
+to provide dependency names other than it's own package name.  For example, the
+kernel-scsi and kernel-ide packages can each provide 'kernel' which allows packages
+to simply depend on 'kernel' rather than "kernel-scsi OR kernel-ide OR ..."
+
+.TP
+.B replaces \fI(array)\fP 
+This is an array of packages that this package should replace, and can be used to handle
+renamed/combined packages.  For example, if the kernel package gets renamed
+to kernel-ide, then subsequent 'pacman -Syu' calls will not pick up the upgrade, due
+to the differing package names.  \fIreplaces\fP handles this.
 
 .SH MAKEPKG OPTIONS
 .TP
@@ -255,8 +282,19 @@ process if all of the dependencies aren't installed.
 file already exists in the build directory.  You can override this behaviour with
 the \fB--force\fP switch.
 .TP
+.B "\-g, \-\-genmd5"
+Download all source files (if required) and use \fImd5sum\fP to generate md5 hashes
+for each of them.  You can then redirect the output into your PKGBUILD for source
+validation (makepkg -g >>PKGBUILD).
+.TP
+.B "\-h, \-\-help"
+Output syntax and commandline options.
+.TP
 .B "\-i, \-\-install"
 Install/Upgrade the package after a successful build.
+.TP
+.B "\-n, \-\-nostrip"
+Do not strip binaries and libraries.
 .TP
 .B "\-p <buildscript>"
 Read the package script \fI<buildscript>\fP instead of the default (\fIPKGBUILD\fP).

@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  package.h
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -41,11 +41,14 @@ typedef struct __pkginfo_t {
 	char packager[64];
 	unsigned long size;
 	unsigned short scriptlet;
+	PMList *replaces;
+	PMList *groups;
 	PMList *files;
 	PMList *backup;
 	PMList *depends;
 	PMList *requiredby;
 	PMList *conflicts;
+	PMList *provides;
 } pkginfo_t;
 
 typedef struct __depend_t {

@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  util.c
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -117,6 +117,7 @@ int copyfile(char *src, char *dest)
 	return(0);
 }
 
+/* does the same thing as 'mkdir -p' */
 int makepath(char *path)
 {
 	char *orig, *str, *ptr;
@@ -146,6 +147,7 @@ int makepath(char *path)
 	return(0);
 }
 
+/* does the same thing as 'rm -rf' */
 int rmrf(char *path)
 {
 	int errflag = 0;
@@ -157,13 +159,13 @@ int rmrf(char *path)
 	if(!unlink(path)) {
 		return(0);
 	} else {
-		if (errno == ENOENT) {
+		if(errno == ENOENT) {
 			return(0);
-		} else if (errno == EPERM) {
+		} else if(errno == EPERM) {
 			/* fallthrough */
-		} else if (errno == EISDIR) {
+		} else if(errno == EISDIR) {
 			/* fallthrough */
-		} else if (errno == ENOTDIR) {
+		} else if(errno == ENOTDIR) {
 			return(1);
 		} else {
 			/* not a directory */
@@ -174,7 +176,7 @@ int rmrf(char *path)
 			return(1);
 		}
 		for(dp = readdir(dirp); dp != NULL; dp = readdir(dirp)) {
-			if (dp->d_ino) {
+			if(dp->d_ino) {
 				sprintf(name, "%s/%s", path, dp->d_name);
 				if(strcmp(dp->d_name, "..") && strcmp(dp->d_name, ".")) {
 					errflag += rmrf(name);
@@ -190,6 +192,7 @@ int rmrf(char *path)
 	return(0);
 }
 
+/* presents a prompt and gets a Y/N answer */
 int yesno(char *fmt, ...)
 {
 	char response[32];

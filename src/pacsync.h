@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  pacsync.h
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -23,7 +23,7 @@
 
 /* Servers */
 typedef struct __server_t {
-	unsigned short islocal;
+	char* protocol;
 	char* server;
 	char* path;
 } server_t;
@@ -44,11 +44,12 @@ typedef struct __dbsync_t {
 typedef struct __syncpkg_t {
 	pkginfo_t *pkg;
 	dbsync_t *dbs;
+	PMList *replaces;
 } syncpkg_t;
 
 int sync_synctree();
 int downloadfiles(PMList *servers, char *localpath, PMList *files);
-int is_pkginsync(syncpkg_t *needle, PMList *haystack);
+syncpkg_t* find_pkginsync(char *needle, PMList *haystack);
 
 #endif
 

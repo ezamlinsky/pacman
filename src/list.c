@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  list.c
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -174,7 +174,9 @@ PMList *list_sort(PMList *list)
 		lp = list_add(lp, strdup(arr[i]));
 	}
 
-	free(arr);
+	if(arr) {
+		free(arr);
+	}
 
 	return(lp);
 }

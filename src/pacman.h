@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  pacman.h
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.5.1"
+#define PACVER    "2.6"
 #endif
 
 #ifndef PKGDIR
@@ -51,6 +51,7 @@ int pacman_query(pacdb_t *db, PMList *targets);
 int pacman_sync(pacdb_t *db, PMList *targets);
 int pacman_deptest(pacdb_t *db, PMList *targets);
 
+PMList* sortbydeps(PMList *targets);
 PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets);
 int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *sync, PMList *list, PMList *trail);
 int splitdep(char *depstr, depend_t *depend);
@@ -62,7 +63,9 @@ int parseconfig(char *configfile);
 void usage(int op, char *myname);
 void version(void);
 
-int vprint(char *fmt, ...);
+void vprint(char *fmt, ...);
+void logaction(char *fmt, ...);
+char* buildstring(PMList *strlist);
 int lckmk(char *file, int retries, unsigned int sleep_secs);
 int lckrm(char *lckfile);
 void cleanup(int signum);

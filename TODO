@@ -1,29 +1,15 @@
 - fix the broken pipe bug
-- add some logging mechanism (/var/log/pacman.log)
 - handle version comparators in makepkg dep resolution (eg, glibc>=2.2.5)
-- have "group" designations
 - record md5sums of all files in a package
-- add a way to clean /var/cache/pacman/src
-- duplicate dep checks occur with sync (one in sync, one in add)
-- if a package is removed with --nodeps and re-installed, the requiredby
-  fields of it's required packages are not updated
-- add an option equivalent to 'pacman -Ql pkg | grep filename'
-- add other options to config file: db location, overwrite behaviour, etc.
-- use the COLUMNS env var for the progress bar
 ? use 'set -e' in makepkg?
 x if a package fails, ask before aborting the full operation
   - can't -- further dependent packages may fail b/c of the first failure
-? ask, then remove conflicting packages with --sync
-? use a provides tag (instead of an OR operator in depends)
-- add a 'cascade' option to --remove that will remove a package and
-  all requiredby packages under it
 - check $PACCONF env var
 ? use a 'trust pacman' config option for downgrading?
 ? build-time (source) dependencies in makepkg
 ? run ldd on every executable in a newly built package to find required so's
 - add a --pretend option
 - add a consistency/sanity check operation (md5 tracking for all files)
-- add a --dbpath option
 - use package caches more for performance
 - clean up output a bit (message queue?)
 - use a files.cache db for --owns and db_find_conflicts

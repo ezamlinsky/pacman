@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  rpmvercmp.c
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 

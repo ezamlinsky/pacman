@@ -1,8 +1,27 @@
 VERSION         DESCRIPTION
-------------------------------------------------------------------
-2.5.1         - Added retries to the downloader to get around some
-                transient network errors.  (this will likely be an option
-                in pacman.conf for later versions)
+-----------------------------------------------------------------------------
+2.6           - Added group handling, so one can run 'pacman -S kde' and
+                install all files from the KDE group
+              - Fixed a duplication bug in cascade package removal
+              - Added support for virtual provisions with "provides" tags
+              - When conflicts are encountered, pacman now offers the chance
+                to remove the conflicting packages (provides or literals)
+              - Added support for renamed/combined packages with a "replaces"
+                tag
+              - Added --nostrip option to makepkg
+              - Improved --search to list all packages from all repos when
+                a search term is omitted
+              - Added logging support through syslog()
+              - Added fakeroot support to makepkg (RomanK)
+              - Added MD5sum generation/validation to makepkg (RomanK)
+              - Fixed a progress bar bug (Aurelien Foret)
+              - Sorted makepkg's .FILELISTs (Aurelien Foret)
+              - Targets are now re-ordered w.r.t. dependencies when
+                using -A/-U
+              - Modified --search to work when called as -Sys
+              - Modified abs to use ABS_ROOT from /etc/abs/abs.conf (Aurelien)
+              - Other bug fixes
+2.5.1         - Minor bug fixes
 2.5           - Added an URL tag to package info
               - Sped up package load times by about 500% by introducing
                 a .FILELIST into the package

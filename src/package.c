@@ -1,7 +1,7 @@
 /*
- *  pacman
+ *  package.c
  * 
- *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2003 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -181,6 +181,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				strncpy(info->version, ptr, sizeof(info->version));
 			} else if(!strcmp(key, "PKGDESC")) {
 				strncpy(info->desc, ptr, sizeof(info->desc));
+			} else if(!strcmp(key, "GROUP")) {
+				info->groups = list_add(info->groups, strdup(ptr));
 			} else if(!strcmp(key, "URL")) {
 				strncpy(info->url, ptr, sizeof(info->url));
 			} else if(!strcmp(key, "BUILDDATE")) {
@@ -193,15 +195,16 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				char tmp[32];
 				strncpy(tmp, ptr, sizeof(tmp));
 				info->size = atol(tmp);
-			} else if(!strcmp(key, "DEPEND")) {				
-				char *s = strdup(ptr);
-				info->depends = list_add(info->depends, s);
+			} else if(!strcmp(key, "DEPEND")) {
+				info->depends = list_add(info->depends, strdup(ptr));
 			} else if(!strcmp(key, "CONFLICT")) {
-				char *s = strdup(ptr);
-				info->conflicts = list_add(info->conflicts, s);
+				info->conflicts = list_add(info->conflicts, strdup(ptr));
+			} else if(!strcmp(key, "REPLACES")) {
+				info->replaces = list_add(info->replaces, strdup(ptr));
+			} else if(!strcmp(key, "PROVIDES")) {
+				info->provides = list_add(info->provides, strdup(ptr));
 			} else if(!strcmp(key, "BACKUP")) {
-				char *s = strdup(ptr);
-				bak = list_add(bak, s);
+				bak = list_add(bak, strdup(ptr));
 			} else {
 				fprintf(stderr, "%s: syntax error in description file line %d\n",
 					info->name[0] != '\0' ? info->name : "error", linenum);
@@ -235,6 +238,9 @@ pkginfo_t* newpkg()
 	pkg->files          = NULL;
 	pkg->backup         = NULL;
 	pkg->depends        = NULL;
+	pkg->groups         = NULL;
+	pkg->provides       = NULL;
+	pkg->replaces       = NULL;
 
 	return(pkg);
 }
@@ -250,6 +256,9 @@ void freepkg(pkginfo_t *pkg)
 	list_free(pkg->depends);
 	list_free(pkg->conflicts);
 	list_free(pkg->requiredby);
+	list_free(pkg->groups);
+	list_free(pkg->provides);
+	list_free(pkg->replaces);
 	FREE(pkg);
 	return;
 }
@@ -298,24 +307,30 @@ void dump_pkg(pkginfo_t *info)
 		return;
 	}
 
-	printf("Name          : %s\n", info->name);
-	printf("Version       : %s\n", info->version);
-	printf("Packager      : %s\n", info->packager);
-	printf("URL:          : %s\n", info->url);
-	printf("Size          : %ld\n", info->size);
-	printf("Build Date    : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");
-	printf("Install Date  : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
-	printf("Install Script: %s\n", (info->scriptlet ? "yes" : "no"));
+	printf("Name           : %s\n", info->name);
+	printf("Version        : %s\n", info->version);
+	pm = list_sort(info->groups);
+	list_display("Groups         : ", pm);
+	FREE(pm);
+	printf("Packager       : %s\n", info->packager);
+	printf("URL            : %s\n", (info->url ? info->url : "None"));
+	printf("Size           : %ld\n", info->size);
+	printf("Build Date     : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");
+	printf("Install Date   : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
+	printf("Install Script : %s\n", (info->scriptlet ? "Yes" : "No"));
+	pm = list_sort(info->provides);
+	list_display("Provides       : ", pm); 
+	FREE(pm);
 	pm = list_sort(info->depends);
-	list_display("Depends On    : ", pm); 
+	list_display("Depends On     : ", pm); 
 	FREE(pm);
 	pm = list_sort(info->requiredby);
-	list_display("Required By   : ", pm);
+	list_display("Required By    : ", pm);
 	FREE(pm);
 	pm = list_sort(info->conflicts);
-	list_display("Conflicts With: ", pm);
+	list_display("Conflicts With : ", pm);
 	FREE(pm);
-	printf("Description   : %s\n", info->desc);
+	printf("Description    : %s\n", info->desc);
 }
 
 /* vim: set ts=2 sw=2 noet: */

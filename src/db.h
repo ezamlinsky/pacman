@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  db.h
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -42,6 +42,9 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq);
 pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq);
 int db_write(pacdb_t *db, pkginfo_t *info);
 PMList* db_find_conflicts(pacdb_t *db, PMList* targets, char *root);
+PMList *whatprovides(pacdb_t *db, char* package);
+PMList *find_groups(pacdb_t *db);
+PMList *pkg_ingroup(pacdb_t *db, char *group);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

@@ -1,17 +1,68 @@
 #!/bin/bash
+# 
+#   makepkg
+#  
+#   Copyright (c) 2002-2003 by Judd Vinet <jvinet@zeroflux.org>
+#  
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+# 
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#  
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, 
+#   USA.
+#
 
-myver='2.5.1'
+myver='2.6'
 startdir=`pwd`
 
+msg() {
+	echo "$1" >&2
+}
+
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
+
+INFAKEROOT=
+if [ "$1" = "-F" ]; then
+	INFAKEROOT=1
+	shift
+fi
+
+if [ "`id -u`" != "0" ]; then
+	if [ "$USE_FAKEROOT" = "y" -o "$USE_FAKEROOT" = "Y" ]; then
+		if [ `type -p fakeroot` ]; then
+			msg "==> Entering fakeroot environment"
+			fakeroot -- $0 -F $@
+			exit $?
+		else
+			msg "==> WARNING: Fakeroot is not installed.  Building as an unprivileged user"
+			msg "==>          will result in non-root ownership of the packaged files."
+			msg "==>          Install the fakeroot package to correctly build as a non-root"
+			msg "==>          user."
+			msg ""
+			sleep 1
+		fi
+	else
+		msg "==> WARNING: Running makepkg as an unprivileged user will result in non-root"		
+		msg "==>          ownership of the packaged files.  Try using the fakeroot"
+		msg "==>          environment.  (USE_FAKEROOT=y in makepkg.conf)"
+		msg ""
+		sleep 1
+	fi
+fi
+
 
 strip_url() {
 	echo $1 | sed 's|^.*://.*/||g'
 }
 
-msg() {
-	echo $* >&2
-}
 
 checkdeps() {
 	local missdep=`pacman -T $*`
@@ -50,31 +101,34 @@ usage() {
 	echo "makepkg version $myver"
 	echo "usage: $0 [options]"
 	echo "options:"
+	echo "  -b, --builddeps  Build missing dependencies from source"
 	echo "  -c, --clean      Clean up work files after build"
 	echo "  -C, --cleancache Clean up source files from the cache"
-	echo "  -s, --syncdeps   Install missing dependencies with pacman"
-	echo "  -b, --builddeps  Build missing dependencies from source"
 	echo "  -d, --nodeps     Skip all dependency checks"
-	echo "  -i, --install    Install package after successful build"
 	echo "  -f, --force      Overwrite existing package"
-	echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
-	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
+	echo "  -g, --genmd5     Generate MD5sums for source files"
 	echo "  -h, --help       This help"
+	echo "  -i, --install    Install package after successful build"
+	echo "  -n, --nostrip    Do not strip binaries/libraries"
+	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
+	echo "  -s, --syncdeps   Install missing dependencies with pacman"
+	echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
 	echo
 	echo "  if -p is not specified, makepkg will look for a PKGBUILD"
 	echo "  file in the current directory."
 	echo
-	exit 0
 }
 
 # Options
 CLEANUP=0
 CLEANCACHE=0
 INSTALL=0
+GENMD5=0
 DEP_BIN=0
 DEP_SRC=0
 NODEPS=0
 FORCE=0
+NOSTRIP=0
 PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
 
@@ -87,12 +141,18 @@ while [ "$#" -ne "0" ]; do
 		--nodeps)     NODEPS=1     ;;
 		--install)    INSTALL=1    ;;
 		--force)      FORCE=1      ;;
+		--nostrip)    NOSTRIP=1    ;;
+		--genmd5)     GENMD5=1     ;;
+		--help)
+			usage
+			exit 0
+			;;
 		--*)
 			usage
 			exit 1
 			;;
 		-*)
-			while getopts "cCsbdifp:w:-" opt; do
+			while getopts "cCsbdhifgnp:w:-" opt; do
 				case $opt in
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
@@ -100,9 +160,15 @@ while [ "$#" -ne "0" ]; do
 					b) DEP_SRC=1 ;;
 					d) NODEPS=1 ;;
 					i) INSTALL=1 ;;
+					g) GENMD5=1 ;;
 					f) FORCE=1 ;;
+					n) NOSTRIP=1 ;;
 					w) PKGDEST=$OPTARG ;;
 					p) BUILDSCRIPT=$OPTARG ;;
+					h)
+						usage
+						exit 0
+						;;
 					-)
 						OPTIND=0
 						break
@@ -122,13 +188,18 @@ while [ "$#" -ne "0" ]; do
 done
 
 if [ "$CLEANCACHE" = "1" ]; then
-	msg "==> Cleaning up source files from the cache"
-	rm -rf /var/cache/pacman/src/*
-	exit 0
+	if [ "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+		msg "==> Cleaning up source files from the cache."
+		rm -rf /var/cache/pacman/src/*
+		exit 0
+	else
+		msg "==> You must be root to clean the cache."
+		exit 1
+	fi
 fi
 
-unset pkgname pkgver pkgrel pkgdesc url
-unset depends conflicts backup source install build
+unset pkgname pkgver pkgrel pkgdesc url groups provides md5sums
+unset replaces depends conflicts backup source install build
 umask 0022
 
 if [ ! -f $BUILDSCRIPT ]; then
@@ -148,10 +219,12 @@ if [ `echo $pkgrel | grep '-'` ]; then
 	exit 1
 fi
 
-if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" ]; then
+if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" -a "$GENMD5" = "0" ]; then
 	msg "==> ERROR:  a package has already been built.  (use -f to overwrite)"
 	exit 1
 fi
+
+msg "==> Making package: $pkgname  (`date`)"
 
 unset deplist
 if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
@@ -210,21 +283,19 @@ else
 	msg "==> WARNING: pacman was not found in PATH. skipping dependency checks."
 fi
 
-d=`date`
 cd $startdir
-msg "==> Making package $pkgname  ($d)"
 
 # extract source
-msg "==> Acquiring/Extracting Sources..."
+msg "==> Retrieving Sources..."
 mkdir -p src
 cd $startdir/src
 for netfile in ${source[@]}; do
 	file=`strip_url $netfile`
 	if [ -f ../$file ]; then
-		msg "==> Found $file in build dir"
+		msg "  |=> Found $file in build dir"
 		cp ../$file .
 	elif [ -f /var/cache/pacman/src/$file ]; then
-		msg "==> Using local copy of $file"
+		msg "  |=> Using local copy of $file"
 		cp /var/cache/pacman/src/$file .
 	else
 		# check for a download utility
@@ -245,38 +316,107 @@ for netfile in ${source[@]}; do
 			msg "==> Aborting..."
 			exit 1
 		fi
-		msg "==> Downloading $file"
+		msg "  |=> Downloading $file"
 		$FTPAGENT $netfile 2>&1
 		if [ ! -f $file ]; then
 			msg "==> ERROR: Failed to download $file"
 			msg "==> Aborting..."
 			exit 1
 		fi
-		mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
+		if [ "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+			mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
+		else
+			cp $file ..
+		fi
 	fi
-	unset cmd
-	case $file in
-		*.tar.gz|*.tar.Z|*.tgz)
-			cmd="tar --use-compress-program=gzip -xf $file" ;;
-		*.tar.bz2)
-			cmd="tar --use-compress-program=bzip2 -xf $file" ;;
-		*.tar)
-			cmd="tar -xf $file" ;;
-		*.zip)
-			cmd="unzip -qq $file" ;;
-		*.gz)
-			cmd="gunzip $file" ;;
-	esac
-	if [ "$cmd" != "" ]; then
-		msg "==> $cmd"
-		$cmd
-		if [ $? -ne 0 ]; then
-			msg "==> ERROR:  Failed to extract $file"
-			msg "==> Aborting..."
-			exit 1
+	if [ "$GENMD5" = "0" ]; then
+		unset cmd
+		case $file in
+			*.tar.gz|*.tar.Z|*.tgz)
+				cmd="tar --use-compress-program=gzip -xf $file" ;;
+			*.tar.bz2)
+				cmd="tar --use-compress-program=bzip2 -xf $file" ;;
+			*.tar)
+				cmd="tar -xf $file" ;;
+			*.zip)
+				cmd="unzip -qq $file" ;;
+			*.gz)
+				cmd="gunzip $file" ;;
+		esac
+		if [ "$cmd" != "" ]; then
+			msg "  |=> $cmd"
+			$cmd
+			if [ $? -ne 0 ]; then
+				msg "==> ERROR:  Failed to extract $file"
+				msg "==> Aborting..."
+				exit 1
+			fi
 		fi
 	fi
 done
+
+if [ "$GENMD5" = "1" ]; then
+	if [ ! `type -p md5sum` ]; then
+		msg "==> ERROR: Cannot find the md5sum program."
+		exit 1
+  fi
+	msg "==> Generating MD5sums for source files"
+	msg ""
+	ct=0
+	numsrc=${#source[@]}
+	for netfile in ${source[@]}; do
+		file=`strip_url $netfile`
+		sum=`md5sum $file | cut -d' ' -f 1`
+		if [ $ct -eq 0 ]; then
+			echo -n "md5sums=("
+		else
+			echo -ne "\t"
+		fi
+		echo -n "'$sum'"
+		ct=$(($ct+1))
+		if [ $ct -eq $numsrc ]; then
+			echo ')'
+		else
+			echo ' \'
+		fi
+	done
+	msg ""
+	exit 0
+fi
+
+# MD5 Validation
+if [ ${#md5sums[@]} -ne ${#source[@]} ]; then
+	msg "==> WARNING: MD5sums are missing or incomplete.  Cannot verify source integrity."
+#	sleep 1
+elif [ `type -p md5sum` ]; then
+	msg "==> Validating source files with MD5sums"
+	errors=0
+	idx=0
+	for netfile in ${source[@]}; do
+		file=`strip_url $netfile`
+		echo -n "  |=> $file ... " >&2
+		echo "${md5sums[$idx]}  $file" | md5sum -c - >/dev/null 2>&1
+		if [ $? -ne 0 ]; then
+			echo "FAILED" >&2
+			errors=1
+		else
+			echo "Passed" >&2
+		fi	
+		idx=$(($idx+1))
+	done
+	if [ $errors -gt 0 ]; then
+		msg "==> ERROR: One or more files did not pass the validity check!"
+		exit 1
+	fi
+else
+	msg "==> WARNING: The md5sum program is missing.  Cannot verify source files!"
+	sleep 1
+fi
+
+if [ "`id -u`" = "0" ]; then
+	# chown all source files to root.root
+	chown -R root.root $startdir/src
+fi
 
 # check for existing pkg directory
 if [ -d $startdir/pkg ]; then
@@ -286,7 +426,7 @@ fi
 mkdir -p $startdir/pkg
 
 # build
-msg "==> Building Package..."
+msg "==> Starting build()..."
 build 2>&1
 if [ $? -gt 0 ]; then
 	msg "==> Build Failed.  Aborting..."
@@ -330,15 +470,18 @@ if [ -d pkg/usr/man ]; then
 	done
 fi
 
-# strip binaries
 cd $startdir
-msg "==> Stripping debugging symbols from libraries..."
-find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' ';' 2>&1
-msg "==> Stripping symbols from binaries..."
-find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' ';' 2>&1
+
+# strip binaries
+if [ "$NOSTRIP" = "0" ]; then
+	msg "==> Stripping debugging symbols from libraries..."
+	find pkg/{,usr,usr/local,opt/*}/lib -type f -exec /usr/bin/strip --strip-debug '{}' \; 2>&1
+	msg "==> Stripping symbols from binaries..."
+	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -exec /usr/bin/strip '{}' \; 2>&1
+fi
 
 # get some package meta info
-builddate=`date -u "+%a %b %d %k:%M:%S %Y"`
+builddate=`LC_ALL= ; date -u "+%a %b %d %k:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
 	packager="$PACKAGER"
 else
@@ -360,14 +503,23 @@ echo "builddate = $builddate" >>.PKGINFO
 echo "packager = $packager" >>.PKGINFO
 echo "size = $size" >>.PKGINFO
 
-for depend in "${depends[@]}"; do
-	echo "depend = $depend" >>.PKGINFO
+for it in "${replaces[@]}"; do
+	echo "replaces = $it" >>.PKGINFO
 done
-for conflict in "${conflicts[@]}"; do
-	echo "conflict = $conflict" >>.PKGINFO
+for it in "${groups[@]}"; do
+	echo "group = $it" >>.PKGINFO
 done
-for bakfile in "${backup[@]}"; do
-	echo "backup = $bakfile" >>.PKGINFO
+for it in "${depends[@]}"; do
+	echo "depend = $it" >>.PKGINFO
+done
+for it in "${conflicts[@]}"; do
+	echo "conflict = $it" >>.PKGINFO
+done
+for it in "${provides[@]}"; do
+	echo "provides = $it" >>.PKGINFO
+done
+for it in "${backup[@]}"; do
+	echo "backup = $it" >>.PKGINFO
 done
 
 # check for an install script
@@ -377,9 +529,11 @@ if [ "$install" != "" ]; then
 fi
 
 # build a filelist
-msg "==> Building filelist..."
+msg "==> Generating .FILELIST file..."
 cd $startdir/pkg
-tar cv * >/dev/null 2>.FILELIST
+tar cv * >/dev/null 2>.FILELIST.tmp
+cat .FILELIST.tmp | sort >.FILELIST
+rm -f .FILELIST.tmp
 
 # tar it up
 msg "==> Compressing package..."
@@ -389,7 +543,7 @@ if [ -f $startdir/pkg/.INSTALL ]; then
 else
 	cmd="tar czvf $PKGDEST/$pkgname-$pkgver-$pkgrel.pkg.tar.gz .PKGINFO .FILELIST *"
 fi
-$cmd >../filelist
+$cmd | sort >../filelist
 
 cd $startdir
 if [ "$CLEANUP" = "1" ]; then
@@ -397,7 +551,7 @@ if [ "$CLEANUP" = "1" ]; then
 	rm -rf src pkg filelist
 fi
 
-msg "==> Finished making $pkgname  (`date`)"
+msg "==> Finished making: $pkgname  (`date`)"
 
 if [ "$INSTALL" = "1" ]; then
 	msg "==> Running pacman --upgrade"

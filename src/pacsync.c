@@ -1,5 +1,5 @@
 /*
- *  pacman
+ *  pacsync.c
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
  * 
@@ -21,6 +21,7 @@
 
 #include "config.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -39,10 +40,12 @@ static int offset;
 
 /* pacman options */
 extern char *pmo_root;
+extern char *pmo_dbpath;
 extern unsigned short pmo_nopassiveftp;
 
 /* sync servers */
 extern PMList *pmc_syncs;
+extern int maxcols;
 
 int sync_synctree()
 {
@@ -52,10 +55,10 @@ int sync_synctree()
 	PMList *files = NULL;
 	PMList *i;
 	int success = 0;
-	
+
 	for(i = pmc_syncs; i; i = i->next) {
 		sync_t *sync = (sync_t*)i->data;		
-		snprintf(ldir, PATH_MAX, "%s%s", pmo_root, PKGDIR);
+		snprintf(ldir, PATH_MAX, "%s%s", pmo_root, pmo_dbpath);
 
 		/* build a one-element list */
 		snprintf(path, PATH_MAX, "%s.db.tar.gz", sync->treename);
@@ -66,13 +69,12 @@ int sync_synctree()
 			fprintf(stderr, "failed to synchronize %s\n", sync->treename);
 			success = 0;
 		}
-		/*printf("\n");*/
 		list_free(files);
 		files = NULL;
 		snprintf(path, PATH_MAX, "%s/%s.db.tar.gz", ldir, sync->treename);
 
 		if(success) {
-			snprintf(ldir, PATH_MAX, "%s%s/%s", pmo_root, PKGDIR, sync->treename);
+			snprintf(ldir, PATH_MAX, "%s%s/%s", pmo_root, pmo_dbpath, sync->treename);
 			/* remove the old dir */
 			vprint("removing %s (if it exists)\n", ldir);
 			rmrf(ldir);
@@ -111,7 +113,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 	for(i = servers; i && !done; i = i->next) {
 		server_t *server = (server_t*)i->data;
 
-		if(!server->islocal) {
+		if(!strcmp(server->protocol, "ftp")) {
 			FtpInit();
 			if(!FtpConnect(server->server, &control)) {
 				fprintf(stderr, "error: cannot connect to %s\n", server->server);
@@ -153,50 +155,42 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 				sync_fnm[j] = ' ';
 			}
 			sync_fnm[24] = '\0';
+			offset = 0;
 
-			if(!server->islocal) {
-				int tries = 2;
-				while(tries) {
-					if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
-						fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
-					}
-					offset = 0;
-					if(!stat(output, &st)) {
-						offset = (int)st.st_size;
-					}
-					if(offset) {
-						if(!FtpRestart(offset, control)) {
-							fprintf(stderr, "warning: failed to resume download -- restarting\n");
-							/* can't resume: */
-							/* unlink the file in order to restart download from scratch */
-							unlink(output);
-						}
-					}
-					/* set up our progress bar's callback */
-					FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-					FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-					FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-					FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
-
-					if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
-						fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
-							fn, server->server, FtpLastResponse(control));
-						/* we leave the partially downloaded file in place so it can be resumed later */
-						/* try each file twice in case it was just one of those transient network errors */
-						tries--;
-					} else {
-						char completefile[PATH_MAX];
-						log_progress(control, fsz-offset, &fsz);
-						complete = list_add(complete, fn);
-						tries = 0;
-						/* rename "output.part" file to "output" file */
-						snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
-						rename(output, completefile);
-					}
-					printf("\n");
-					fflush(stdout);
+			if(!strcmp(server->protocol, "ftp")) {
+				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
+					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
 				}
-			} else {
+				if(!stat(output, &st)) {
+					offset = (int)st.st_size;
+					if(!FtpRestart(offset, control)) {
+						fprintf(stderr, "warning: failed to resume download -- restarting\n");
+						/* can't resume: */
+						/* unlink the file in order to restart download from scratch */
+						unlink(output);
+					}
+				}
+				/* set up our progress bar's callback */
+				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+
+				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
+					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+						fn, server->server, FtpLastResponse(control));
+					/* we leave the partially downloaded file in place so it can be resumed later */
+				} else {
+					char completefile[PATH_MAX];
+					log_progress(control, fsz-offset, &fsz);
+					complete = list_add(complete, fn);
+					/* rename "output.part" file to "output" file */
+					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
+					rename(output, completefile);
+				}
+				printf("\n");
+				fflush(stdout);
+			} else if(!strcmp(server->protocol, "file")) {
 				/* local repository, just copy the file */
 				char src[PATH_MAX], dest[PATH_MAX];
 				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
@@ -206,10 +200,10 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 					fprintf(stderr, "failed copying %s\n", src);
 				} else {
 					char out[56];
-					printf("%s [", sync_fnm);
+					printf(" %s [", sync_fnm);
 					strncpy(out, server->path, 33);
 					printf("%s", out);
-					for(j = strlen(out); j < 33; j++) {
+					for(j = strlen(out); j < maxcols-44; j++) {
 						printf(" ");
 					}
 					fputs("] 100% |   LOCAL\n", stdout);
@@ -223,7 +217,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			done = 1;
 		}
 
-		if(!server->islocal) {
+		if(!strcmp(server->protocol, "ftp")) {
 			FtpQuit(control);
 		}
 	}
@@ -235,37 +229,44 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 {
 	int fsz = *(int*)arg;
 	int pct = ((float)(xfered+offset) / fsz) * 100;
-	int i;
+	int i, cur;
+	char *cenv = NULL;
 
-	printf("%s [", sync_fnm);
-	for(i = 0; i < (int)(pct/3); i++) {
-		printf("#");
+	cenv = getenv("COLUMNS");
+	if(cenv) {
+		maxcols = atoi(cenv);
 	}
-	for(i = (int)(pct/3); i < (int)(100/3); i++) {
-		printf(" ");
+
+	printf(" %s [", sync_fnm);
+	cur = (int)((maxcols-44)*pct/100);
+	for(i = 0; i < maxcols-44; i++) {
+		(i < cur) ? printf("#") : printf(" ");
 	}
-	printf("] %3d%% | %6dK\r ", pct, ((xfered+offset)/1024));
+	printf("] %3d%% | %6dK\r", pct, ((xfered+offset)/1024));
 	fflush(stdout);
 	return(1);
 }
 
-/* Test for existence of a package in a PMList*
- * of syncpkg_t*
+/* Test for existance of a package in a PMList* of syncpkg_t*
+ * If found, return a pointer to the respective syncpkg_t*
  */
-int is_pkginsync(syncpkg_t *needle, PMList *haystack)
+syncpkg_t* find_pkginsync(char *needle, PMList *haystack)
 {
-	PMList *lp;
+	PMList *i;
 	syncpkg_t *sync;
 	int found = 0;
 
-	for(lp = haystack; lp && !found; lp = lp->next) {
-		sync = (syncpkg_t*)lp->data;
-		if(sync && !strcmp(sync->pkg->name, needle->pkg->name)) {
+	for(i = haystack; i && !found; i = i->next) {
+		sync = (syncpkg_t*)i->data;
+		if(sync && !strcmp(sync->pkg->name, needle)) {
 			found = 1;
 		}
 	}
+	if(!found) {
+		sync = NULL;
+	}
 
-	return found;
+	return sync;
 }
 
 /* vim: set ts=2 sw=2 noet: */
