@@ -72,6 +72,7 @@ unsigned short pmo_r_cascade  = 0;
 unsigned short pmo_r_recurse  = 0;
 unsigned short pmo_s_upgrade  = 0;
 unsigned short pmo_s_downloadonly = 0;
+unsigned short pmo_s_printuris    = 0;
 unsigned short pmo_s_sync     = 0;
 unsigned short pmo_s_search   = 0;
 unsigned short pmo_s_clean    = 0;
@@ -80,7 +81,7 @@ unsigned short pmo_group      = 0;
 char          *pmo_dbpath       = NULL;
 char          *pmo_logfile      = NULL;
 char          *pmo_proxyhost    = NULL;
-unsigned short pmo_proxyport    = 80;
+unsigned short pmo_proxyport    = 0;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 unsigned short pmo_usesyslog    = 0;
@@ -942,7 +943,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		final = k;
 
 		/* list targets */
-		if(final && final->data && allgood) {
+		if(final && final->data && allgood && !pmo_s_printuris) {
 			PMList *list = NULL;
 			char *str;
 			for(i = rmtargs; i; i = i->next) {
@@ -987,7 +988,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				confirm = yesno("\nProceed with download? [Y/n] ");
 			} else {
 				/* don't get any confirmation if we're called from makepkg */
-				if(pmo_d_resolve) {
+				if(pmo_d_resolve || pmo_s_printuris) {
 					confirm = 1;
 				} else {
 					confirm = yesno("\nProceed with upgrade? [Y/n] ");
@@ -1025,46 +1026,64 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					struct stat buf;
 					char path[PATH_MAX];
 
-					snprintf(path, PATH_MAX, "%s/%s-%s.pkg.tar.gz",
-						ldir, sync->pkg->name, sync->pkg->version);
-					if(stat(path, &buf)) {
-						/* file is not in the cache dir, so add it to the list */
+					if(pmo_s_printuris) {
 						snprintf(path, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);					
 						files = list_add(files, strdup(path));
 					} else {
-						vprint(" %s-%s.pkg.tar.gz is already in the cache\n", sync->pkg->name, sync->pkg->version);
-						count++;
+						snprintf(path, PATH_MAX, "%s/%s-%s.pkg.tar.gz",
+							ldir, sync->pkg->name, sync->pkg->version);
+						if(stat(path, &buf)) {
+							/* file is not in the cache dir, so add it to the list */
+							snprintf(path, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);					
+							files = list_add(files, strdup(path));
+						} else {
+							vprint(" %s-%s.pkg.tar.gz is already in the cache\n", sync->pkg->name, sync->pkg->version);
+							count++;
+						}
 					}
 				}
 			}
 
 			if(files) {
-				struct stat buf;
-
-				printf("\n:: Retrieving packages from %s...\n", current->treename);
-				fflush(stdout);
-				if(stat(ldir, &buf)) {
-					mode_t oldmask;
-					char parent[PATH_MAX];
-
-					/* no cache directory.... try creating it */
-					snprintf(parent, PATH_MAX, "%svar/cache/pacman", pmo_root);
-					logaction(stderr, "warning: no %s cache exists.  creating...", ldir);
-					oldmask = umask(0000);
-					mkdir(parent, 0755);
-					if(mkdir(ldir, 0755)) {				
-						/* couldn't mkdir the cache directory, so fall back to /tmp and unlink
-						 * the package afterwards.
-						 */
-						logaction(stderr, "warning: couldn't create package cache, using /tmp instead");
-						snprintf(ldir, PATH_MAX, "/tmp");
-						varcache = 0;
+				if(pmo_s_printuris) {
+					server_t *server = (server_t*)current->servers->data;
+					for(j = files; j; j = j->next) {
+						if(!strcmp(server->protocol, "file")) {
+							printf("%s://%s%s\n", server->protocol, server->path,
+								(char*)j->data);
+						} else {
+							printf("%s://%s%s%s\n", server->protocol,
+								server->server, server->path, (char*)j->data);
+						}
 					}
-					umask(oldmask);
-				}
-				if(downloadfiles(current->servers, ldir, files)) {
-					fprintf(stderr, "error: failed to retrieve some files from %s\n", current->treename);
-					allgood = 0;
+				} else {
+					struct stat buf;
+
+					printf("\n:: Retrieving packages from %s...\n", current->treename);
+					fflush(stdout);
+					if(stat(ldir, &buf)) {
+						mode_t oldmask;
+						char parent[PATH_MAX];
+
+						/* no cache directory.... try creating it */
+						snprintf(parent, PATH_MAX, "%svar/cache/pacman", pmo_root);
+						logaction(stderr, "warning: no %s cache exists.  creating...", ldir);
+						oldmask = umask(0000);
+						mkdir(parent, 0755);
+						if(mkdir(ldir, 0755)) {				
+							/* couldn't mkdir the cache directory, so fall back to /tmp and unlink
+							 * the package afterwards.
+							 */
+							logaction(stderr, "warning: couldn't create package cache, using /tmp instead");
+							snprintf(ldir, PATH_MAX, "/tmp");
+							varcache = 0;
+						}
+						umask(oldmask);
+					}
+					if(downloadfiles(current->servers, ldir, files)) {
+						fprintf(stderr, "error: failed to retrieve some files from %s\n", current->treename);
+						allgood = 0;
+					}
 				}
 				count += list_count(files);
 				FREELIST(files);
@@ -1077,6 +1096,10 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 		/* double-check */
 		FREELIST(files);
+		if(pmo_s_printuris) {
+			/* we're done */
+			goto sync_cleanup;
+		}
 
 		if(allgood) {
 			/* Check integrity of files */
@@ -1128,14 +1151,19 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 		}
 
-		if(allgood) {
+		if(allgood && rmtargs) {
 			/* Check dependencies of packages in rmtargs and make sure
 			 * we won't be breaking anything by removing them.
 			 * If a broken dep is detected, make sure it's not from a
 			 * package that's in our final (upgrade) list.
 			 */
-			vprint("checking dependencies...\n");
-			i = checkdeps(db, PM_REMOVE, rmtargs);
+			PMList *rmtargs_p = NULL;
+			for(i = rmtargs; i; i = i->next) {
+				pkginfo_t *p = db_scan(db, i->data, INFRQ_DESC | INFRQ_DEPENDS);
+				rmtargs_p = list_add(rmtargs_p, p);
+			}
+			vprint("checking dependencies of packages designated for removal...\n");
+			i = checkdeps(db, PM_REMOVE, rmtargs_p);
 			for(j = i; j; j = j->next) {
 				depmissing_t* miss = (depmissing_t*)j->data;
 				syncpkg_t *s = find_pkginsync(miss->depend.name, final);
@@ -1148,16 +1176,18 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				}
 			}
 			FREELIST(i);
+			FREELISTPKGS(rmtargs_p);
 		}
 
 		if(!pmo_s_downloadonly && allgood) {
 			/* remove any conflicting packages (WITHOUT dep checks) */
 			if(rmtargs) {
 				int retcode;
-				int oldupg = pmo_upgrade;
-				pmo_upgrade = 1;
-				retcode	= pacman_remove(db, rmtargs);
-				pmo_upgrade = oldupg;
+				int oldval = pmo_nodeps;
+				/* we make pacman_remove() skip dependency checks by setting pmo_nodeps high */
+				pmo_nodeps = 1;
+				retcode = pacman_remove(db, rmtargs);
+				pmo_nodeps = oldval;
 				FREELIST(rmtargs);
 				if(retcode == 1) {
 					fprintf(stderr, "\nupgrade aborted.\n");
@@ -1239,6 +1269,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	}
 
 	/* cleanup */
+sync_cleanup:
 	for(i = final; i; i = i->next) {
 		syncpkg_t *sync = (syncpkg_t*)i->data;
 		if(sync) {
@@ -2900,6 +2931,7 @@ int parseargs(int op, int argc, char **argv)
 		{"info",       no_argument,       0, 'i'},
 		{"sysupgrade", no_argument,       0, 'u'},
 		{"downloadonly", no_argument,     0, 'w'},
+		{"print-uris", no_argument,       0, 'p'},
 		{"refresh",    no_argument,       0, 'y'},
 		{"cascade",    no_argument,       0, 'c'},
 		{"recursive",  no_argument,       0, 's'},
@@ -2933,7 +2965,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'i': pmo_q_info++; break;
 			case 'l': pmo_q_list = 1; break;
 			case 'n': pmo_nosave = 1; break;
-			case 'p': pmo_q_isfile = 1; break;
+			case 'p': pmo_q_isfile = 1; pmo_s_printuris = 1; break;
 			case 'o': pmo_q_owns = 1; break;
 			case 'r': if(realpath(optarg, pmo_root) == NULL) {
 									perror("bad root path");
@@ -3230,6 +3262,7 @@ void usage(int op, char *myname)
 			printf("  -g, --groups        view all members of a package group\n");
 			printf("  -i, --info          view package information\n");
 			printf("  -l, --list          list all packages belonging to the specified repository\n");
+			printf("  -p, --print-uris    print out download URIs for each package to be installed\n");
 			printf("  -s, --search        search sync database for matching strings\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
 			printf("  -w, --downloadonly  download packages, but do not install/upgrade anything\n");

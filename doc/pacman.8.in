@@ -1,4 +1,4 @@
-.TH pacman 8 "February 6, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "April 3, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -115,6 +115,11 @@ dependencies, conflicts, etc.
 List all files in the specified repositories.  Multiple repositories can
 be specified on the command line.
 .TP
+.B "\-p, \-\-print-uris"
+Print out URIs for each specified package and its dependencies.  These
+can be piped to a file and downloaded at a later time, using a program
+like wget.
+.TP
 .B "\-s, \-\-search <string>"
 This will search each package in the package list for names or descriptions
 that contains <string>.
@@ -217,11 +222,8 @@ Overrides the default location of the toplevel database directory.  The default 
 Instructs pacman to ignore any upgrades for this package when performing a
 \fB--sysupgrade\fP.
 .TP
-.B "ProxyServer = <host | ip>"
+.B "ProxyServer = <host|ip>[:port]"
 If set, pacman will use this proxy server for all ftp/http transfers.
-.TP
-.B "ProxyPort = <port>"
-Use this to set a different port for your proxy server (default is 80).
 .TP
 .B "NoPassiveFtp"
 Disables passive ftp connections when downloading packages. (aka Active Mode)

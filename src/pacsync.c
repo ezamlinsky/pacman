@@ -145,13 +145,16 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			} else {
 				vprint("FTP passive mode not set\n");
 			}
-		/*} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && !strcmp(server->protocol, "ftp"))) {*/
-		} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
+		} else if(pmo_proxyhost) {
 			char *host;
 			unsigned port;
 			host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
 			port = (pmo_proxyhost) ? pmo_proxyport : 80;
-			vprint("Connecting to %s:%u\n", host, port);
+			if(strchr(host, ':')) {
+				vprint("Connecting to %s\n", host);
+			} else {
+				vprint("Connecting to %s:%u\n", host, port);
+			}
 			if(!HttpConnect(host, port, &control)) {
 				fprintf(stderr, "error: cannot connect to %s\n", host);
 				continue;
@@ -159,7 +162,7 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 		}
 
 		/* set up our progress bar's callback (and idle timeout) */
-		if(strcmp(server->protocol, "file")) {
+		if(strcmp(server->protocol, "file") && control) {
 			FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
 			FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
 			FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
@@ -224,9 +227,34 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 				} else {
 					filedone = 1;
 				}
-			/*} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && !strcmp(server->protocol, "ftp"))) {*/
 			} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
 				char src[PATH_MAX];
+				char *host;
+				unsigned port;
+				if(!strcmp(server->protocol, "http") && !pmo_proxyhost) {
+					/* HTTP servers hang up after each request (but not proxies), so
+					 * we have to re-connect for each files.
+					 */
+					host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
+					port = (pmo_proxyhost) ? pmo_proxyport : 80;
+					if(strchr(host, ':')) {
+						vprint("Connecting to %s\n", host);
+					} else {
+						vprint("Connecting to %s:%u\n", host, port);
+					}
+					if(!HttpConnect(host, port, &control)) {
+						fprintf(stderr, "error: cannot connect to %s\n", host);
+						continue;
+					}
+					/* set up our progress bar's callback (and idle timeout) */
+					if(strcmp(server->protocol, "file") && control) {
+						FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+						FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+						FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+						FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+					}
+				}
+
 				if(!stat(output, &st)) {
 					offset = (int)st.st_size;
 				}

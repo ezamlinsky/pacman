@@ -1414,8 +1414,8 @@ static int HttpSendCmd(const char *cmd, char expresp, netbuf *nControl)
 {
 	int ret = 0;
 	char *buf = nControl->response;
-	if (nControl->dir != FTPLIB_CONTROL)
-		return 0;
+	//if (nControl->dir != FTPLIB_CONTROL)
+		//return 0;
 	if (ftplib_debug > 2)
 		fprintf(stderr,"%s\n",cmd);
 	if (net_write(nControl->handle,cmd,strlen(cmd)) <= 0)
@@ -1426,8 +1426,9 @@ static int HttpSendCmd(const char *cmd, char expresp, netbuf *nControl)
 	while (ret < 256) {
 		if (socket_wait(nControl) != 1)
 			return 0;
-		if (net_read(nControl->handle,buf,1) != 1)
+		if (net_read(nControl->handle,buf,1) != 1) {
 			break;
+		}
 		ret++;
 		if (*buf == '\r') continue;
 		if (*buf == '\n') break;

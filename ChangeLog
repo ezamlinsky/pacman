@@ -1,5 +1,8 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.6         - added --print-uris option
+              - fixed an http download bug (bug #667)
+              - fixed a segfault related to replaces/conflicts handling
 2.7.5         - "replaces" packages were ignoring IgnorePkg in pacman.conf
               - fixed another bug in conflict handling
               - found an out-dated reference to /usr/abs, fixed
