@@ -667,7 +667,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 			/* compare versions and see if we need to upgrade */
 			cmp = rpmvercmp(local->version, sync->pkg->version);
-			if(cmp > 0) {
+			if(cmp > 0 && !sync->pkg->force) {
 				/* local version is newer */
 				fprintf(stderr, ":: %s-%s: local version is newer\n",
 					local->name, local->version);

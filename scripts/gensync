@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.8'
+myver='2.7.9'
 
 usage() {
   echo "gensync $myver"
@@ -63,7 +63,7 @@ get_md5checksum()
 
 db_write_entry()
 {
-	unset pkgname pkgver pkgrel pkgdesc
+	unset pkgname pkgver pkgrel pkgdesc force
 	unset groups replaces provides depends conflicts
 	source $1 || return 1
 	cd $gstmpdir
@@ -97,6 +97,10 @@ db_write_entry()
 		for it in "${replaces[@]}"; do
 			echo "$it" >>desc
 		done
+		echo "" >>desc
+	fi
+	if [ "$force" = "y" -o "$force" = "Y" ]; then
+		echo "%FORCE%" >>desc
 		echo "" >>desc
 	fi
 	# depends

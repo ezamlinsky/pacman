@@ -1,5 +1,7 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.9         - added the "force" option to packages, so --sysupgrade can
+                downgrade packages when it needs to
 2.7.8         - added post_remove scriptlet support
               - added -Qs option (bug #854)
               - a provisio does not imply conflict, to make a provisio target

@@ -1,4 +1,4 @@
-.TH makepkg 8 "April 27, 2004" "makepkg #VERSION#" ""
+.TH makepkg 8 "April 29, 2004" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -209,6 +209,11 @@ This is the release number specific to Arch Linux packages.
 .TP
 .B pkgdesc
 This should be a brief description of the package and its functionality.
+
+.TP
+.B force
+This is used to force the package to be upgraded by \fB--sysupgrade\fP, even
+if its an older version.
 
 .TP
 .B url

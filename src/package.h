@@ -53,6 +53,7 @@ typedef struct __pkginfo_t {
 	char md5sum[33];
 	unsigned long size;
 	unsigned short scriptlet;
+	unsigned short force;
 	PMList *replaces;
 	PMList *groups;
 	PMList *files;

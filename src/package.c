@@ -241,6 +241,7 @@ pkginfo_t* newpkg()
 	pkg->md5sum[0]      = '\0';
 	pkg->size           = 0;
 	pkg->scriptlet      = 0;
+	pkg->force          = 0;
 	pkg->requiredby     = NULL;
 	pkg->conflicts      = NULL;
 	pkg->files          = NULL;

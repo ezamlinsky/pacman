@@ -250,20 +250,22 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 				info->size = atol(tmp);
 			} else if(!strcmp(line, "%REPLACES%")) {
 				/* the REPLACES tag is special -- it only appears in sync repositories,
-				 * not the local one.
-				 */
+				 * not the local one.  */
 				while(fgets(line, 512, fp) && strlen(trim(line))) {
 					char *s = strdup(line);
 					info->replaces = list_add(info->replaces, s);
 				}
 			} else if(!strcmp(line, "%MD5SUM%")) {
 				/* MD5SUM tag only appears in sync repositories,
-				 * not the local one.
-				 */
+				 * not the local one.  */
 				if(fgets(info->md5sum, sizeof(info->md5sum), fp) == NULL) {
 					FREEPKG(info);
 					return(NULL);
 				}
+			} else if(!strcmp(line, "%FORCE%")) {
+				/* FORCE tag only appears in sync repositories,
+				 * not the local one.  */
+				info->force = 1;
 			}
 		}
 		fclose(fp);

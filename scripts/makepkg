@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.7.8'
+myver='2.7.9'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -294,7 +294,7 @@ if [ "$CLEANCACHE" = "1" ]; then
 	fi
 fi
 
-unset pkgname pkgver pkgrel pkgdesc url license groups provides md5sums
+unset pkgname pkgver pkgrel pkgdesc url license groups provides md5sums force
 unset replaces depends conflicts backup source install build makedepends
 umask 0022
 
