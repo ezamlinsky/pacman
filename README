@@ -51,7 +51,7 @@ it helps.
 
 COPYRIGHT:
 ----------
-pacman is Copyright (c) 2002-2003 Judd Vinet <jvinet@zeroflux.org> and is
+pacman is Copyright (c) 2002-2004 Judd Vinet <jvinet@zeroflux.org> and is
 licensed through the GNU General Public License (see COPYING).
 
 pacman uses "libtar", a library for reading/writing tar-files. This 

@@ -45,7 +45,8 @@ typedef struct __pkginfo_t {
 	char name[256];
 	char version[64];
 	char desc[512];
-	char url[255];
+	char url[256];
+	char license[128];
 	char builddate[32];
 	char installdate[32];
 	char packager[64];

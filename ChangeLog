@@ -1,5 +1,11 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.7         - added an XferCommand directive that will make pacman use an
+                external download utility like wget
+              - added a license field to package meta-data
+              - add url support to -A and -U operations (download packages)
+              - -Ss now searches thru provides fields
+              - added --dbonly option to -R
 2.7.6         - added --print-uris option
               - fixed an http download bug (bug #667)
               - fixed a segfault related to replaces/conflicts handling

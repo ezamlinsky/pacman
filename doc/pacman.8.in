@@ -1,4 +1,4 @@
-.TH pacman 8 "April 3, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "April 14, 2004" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -69,6 +69,9 @@ Bypass file conflict checks,, overwriting conflicting files.  If the
 package that is about to be installed contains files that are already
 installed, this option will cause all those files to be overwritten.
 This option should be used with care, ideally not at all.
+.TP
+.B "\-k, \-\-keep"
+Removes the database entry only.  Leaves all files in place.
 .TP
 .B "\-n, \-\-nosave"
 (only used with \fB--remove\fP)
@@ -224,6 +227,13 @@ Instructs pacman to ignore any upgrades for this package when performing a
 .TP
 .B "ProxyServer = <host|ip>[:port]"
 If set, pacman will use this proxy server for all ftp/http transfers.
+.TP
+.B "XferCommand = /path/to/command %u"
+If set, pacman will use this external program to download all remote files.
+All instances of \fB%u\fP will be replaced with the URL to be downloaded.
+This is useful for users who experience problems with pacman's built-in http/ftp
+support, or need the more advanced proxy support that comes with utilities like
+wget.
 .TP
 .B "NoPassiveFtp"
 Disables passive ftp connections when downloading packages. (aka Active Mode)

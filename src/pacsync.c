@@ -48,6 +48,7 @@ static struct timeval t0, t;
 extern char *pmo_root;
 extern char *pmo_dbpath;
 extern char *pmo_proxyhost;
+extern char *pmo_xfercommand;
 
 extern unsigned short pmo_proxyport;
 extern unsigned short pmo_nopassiveftp;
@@ -105,7 +106,7 @@ int sync_synctree()
 	return(!success);
 }
 
-int downloadfiles(PMList *servers, char *localpath, PMList *files)
+int downloadfiles(PMList *servers, const char *localpath, PMList *files)
 {
 	int fsz;
 	netbuf *control = NULL;
@@ -121,197 +122,244 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 	for(i = servers; i && !done; i = i->next) {
 		server_t *server = (server_t*)i->data;
 
-		if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
-			FtpInit();
-			vprint("Connecting to %s:21\n", server->server);
-			if(!FtpConnect(server->server, &control)) {
-				fprintf(stderr, "error: cannot connect to %s\n", server->server);
-				continue;
-			}
-			if(!FtpLogin("anonymous", "arch@guest", control)) {
-				fprintf(stderr, "error: anonymous login failed\n");
-				FtpQuit(control);
-				continue;
-			}	
-			if(!FtpChdir(server->path, control)) {
-				fprintf(stderr, "error: could not cwd to %s: %s\n", server->path,
-					FtpLastResponse(control));
-				continue;
-			}
-			if(!pmo_nopassiveftp) {
-				if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
-					fprintf(stderr, "warning: failed to set passive mode\n");
+		if(!pmo_xfercommand) {
+			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
+				FtpInit();
+				vprint("Connecting to %s:21\n", server->server);
+				if(!FtpConnect(server->server, &control)) {
+					fprintf(stderr, "error: cannot connect to %s\n", server->server);
+					continue;
 				}
-			} else {
-				vprint("FTP passive mode not set\n");
+				if(!FtpLogin("anonymous", "arch@guest", control)) {
+					fprintf(stderr, "error: anonymous login failed\n");
+					FtpQuit(control);
+					continue;
+				}	
+				if(!FtpChdir(server->path, control)) {
+					fprintf(stderr, "error: could not cwd to %s: %s\n", server->path,
+							FtpLastResponse(control));
+					continue;
+				}
+				if(!pmo_nopassiveftp) {
+					if(!FtpOptions(FTPLIB_CONNMODE, FTPLIB_PASSIVE, control)) {
+						fprintf(stderr, "warning: failed to set passive mode\n");
+					}
+				} else {
+					vprint("FTP passive mode not set\n");
+				}
+			} else if(pmo_proxyhost) {
+				char *host;
+				unsigned port;
+				host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
+				port = (pmo_proxyhost) ? pmo_proxyport : 80;
+				if(strchr(host, ':')) {
+					vprint("Connecting to %s\n", host);
+				} else {
+					vprint("Connecting to %s:%u\n", host, port);
+				}
+				if(!HttpConnect(host, port, &control)) {
+					fprintf(stderr, "error: cannot connect to %s\n", host);
+					continue;
+				}
 			}
-		} else if(pmo_proxyhost) {
-			char *host;
-			unsigned port;
-			host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
-			port = (pmo_proxyhost) ? pmo_proxyport : 80;
-			if(strchr(host, ':')) {
-				vprint("Connecting to %s\n", host);
-			} else {
-				vprint("Connecting to %s:%u\n", host, port);
-			}
-			if(!HttpConnect(host, port, &control)) {
-				fprintf(stderr, "error: cannot connect to %s\n", host);
-				continue;
-			}
-		}
 
-		/* set up our progress bar's callback (and idle timeout) */
-		if(strcmp(server->protocol, "file") && control) {
-			FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-			FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-			FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-			FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+			/* set up our progress bar's callback (and idle timeout) */
+			if(strcmp(server->protocol, "file") && control) {
+				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+			}
 		}
 
 		/* get each file in the list */
 		for(lp = files; lp; lp = lp->next) {
-			char output[PATH_MAX];
-			int j, filedone = 0;
 			char *fn = (char*)lp->data;
-			char *ptr;
-			struct stat st;
 
 			if(is_in(fn, complete)) {
 				continue;
 			}
 
-			snprintf(output, PATH_MAX, "%s/%s.part", localpath, fn);
-			strncpy(sync_fnm, fn, 24);
-			/* drop filename extension */
-			ptr = strstr(fn, ".db.tar.gz");
-			if(ptr && (ptr-fn) < 24) {
-				sync_fnm[ptr-fn] = '\0';
-			}
-			ptr = strstr(fn, ".pkg.tar.gz");
-			if(ptr && (ptr-fn) < 24) {
-				sync_fnm[ptr-fn] = '\0';
-			}
-			for(j = strlen(sync_fnm); j < 24; j++) {
-				sync_fnm[j] = ' ';
-			}
-			sync_fnm[24] = '\0';
-			offset = 0;
-
-			/* ETA setup */
-			gettimeofday(&t0, NULL);
-			t = t0;
-			rate = 0;
-			xfered1 = 0;
-			eta_h = 0;
-			eta_m = 0;
-			eta_s = 0;
-
-			if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
-				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
-					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
+			if(pmo_xfercommand) {
+				int ret;
+				char *ptr1, *ptr2;
+				char origCmd[PATH_MAX];
+				char parsedCmd[PATH_MAX] = "";
+				char url[PATH_MAX];
+				char cwd[PATH_MAX];
+				/* build the full download url */
+				snprintf(url, PATH_MAX, "%s://%s%s%s", server->protocol, server->server,
+						server->path, fn);
+				/* replace all occurrences of %u with the download URL */
+				strncpy(origCmd, pmo_xfercommand, sizeof(origCmd));
+				ptr1 = origCmd;
+				while((ptr2 = strstr(ptr1, "%u"))) {
+					ptr2[0] = '\0';
+					strcat(parsedCmd, ptr1);
+					strcat(parsedCmd, url);
+					ptr1 = ptr2 + 2;
 				}
-				if(!stat(output, &st)) {
-					offset = (int)st.st_size;
-					if(!FtpRestart(offset, control)) {
-						fprintf(stderr, "warning: failed to resume download -- restarting\n");
-						/* can't resume: */
-						/* unlink the file in order to restart download from scratch */
-						unlink(output);
-					}
+				strcat(parsedCmd, ptr1);
+				/* cwd to the download directory */
+				getcwd(cwd, PATH_MAX);
+				if(chdir(localpath)) {
+					fprintf(stderr, "error: could not chdir to %s\n", localpath);
+					return(1);
 				}
-				if(!FtpGet(output, fn, FTPLIB_IMAGE, control)) {
-					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
-						fn, server->server, FtpLastResponse(control));
-					/* we leave the partially downloaded file in place so it can be resumed later */
+				/* execute the parsed command via /bin/sh -c */
+				vprint("running command: %s\n", parsedCmd);
+				ret = system(parsedCmd);
+				if(ret == -1) {
+					fprintf(stderr, "error running XferCommand: fork failed!\n");
+					return(1);
+				} else if(ret != 0) {
+					/* download failed */
+					vprint("XferCommand command returned non-zero status code (%d)\n",
+							WEXITSTATUS(ret));
 				} else {
-					filedone = 1;
+					/* download was successful */
+					complete = list_add(complete, fn);
 				}
-			} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
-				char src[PATH_MAX];
-				char *host;
-				unsigned port;
-				if(!strcmp(server->protocol, "http") && !pmo_proxyhost) {
-					/* HTTP servers hang up after each request (but not proxies), so
-					 * we have to re-connect for each files.
-					 */
-					host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
-					port = (pmo_proxyhost) ? pmo_proxyport : 80;
-					if(strchr(host, ':')) {
-						vprint("Connecting to %s\n", host);
+				chdir(cwd);
+			} else {
+				char output[PATH_MAX];
+				int j, filedone = 0;
+				char *ptr;
+				struct stat st;
+				snprintf(output, PATH_MAX, "%s/%s.part", localpath, fn);
+				strncpy(sync_fnm, fn, 24);
+				/* drop filename extension */
+				ptr = strstr(fn, ".db.tar.gz");
+				if(ptr && (ptr-fn) < 24) {
+					sync_fnm[ptr-fn] = '\0';
+				}
+				ptr = strstr(fn, ".pkg.tar.gz");
+				if(ptr && (ptr-fn) < 24) {
+					sync_fnm[ptr-fn] = '\0';
+				}
+				for(j = strlen(sync_fnm); j < 24; j++) {
+					sync_fnm[j] = ' ';
+				}
+				sync_fnm[24] = '\0';
+				offset = 0;
+
+				/* ETA setup */
+				gettimeofday(&t0, NULL);
+				t = t0;
+				rate = 0;
+				xfered1 = 0;
+				eta_h = 0;
+				eta_m = 0;
+				eta_s = 0;
+
+				if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
+					if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
+						fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
+					}
+					if(!stat(output, &st)) {
+						offset = (int)st.st_size;
+						if(!FtpRestart(offset, control)) {
+							fprintf(stderr, "warning: failed to resume download -- restarting\n");
+							/* can't resume: */
+							/* unlink the file in order to restart download from scratch */
+							unlink(output);
+						}
+					}
+					if(!FtpGet(output, fn, FTPLIB_IMAGE, control)) {
+						fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+								fn, server->server, FtpLastResponse(control));
+						/* we leave the partially downloaded file in place so it can be resumed later */
 					} else {
-						vprint("Connecting to %s:%u\n", host, port);
+						filedone = 1;
 					}
-					if(!HttpConnect(host, port, &control)) {
-						fprintf(stderr, "error: cannot connect to %s\n", host);
-						continue;
+				} else if(!strcmp(server->protocol, "http") || pmo_proxyhost) {
+					char src[PATH_MAX];
+					char *host;
+					unsigned port;
+					if(!strcmp(server->protocol, "http") && !pmo_proxyhost) {
+						/* HTTP servers hang up after each request (but not proxies), so
+						 * we have to re-connect for each file.
+						 */
+						host = (pmo_proxyhost) ? pmo_proxyhost : server->server;
+						port = (pmo_proxyhost) ? pmo_proxyport : 80;
+						if(strchr(host, ':')) {
+							vprint("Connecting to %s\n", host);
+						} else {
+							vprint("Connecting to %s:%u\n", host, port);
+						}
+						if(!HttpConnect(host, port, &control)) {
+							fprintf(stderr, "error: cannot connect to %s\n", host);
+							continue;
+						}
+						/* set up our progress bar's callback (and idle timeout) */
+						if(strcmp(server->protocol, "file") && control) {
+							FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
+							FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
+							FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
+							FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
+						}
 					}
-					/* set up our progress bar's callback (and idle timeout) */
-					if(strcmp(server->protocol, "file") && control) {
-						FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
-						FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
-						FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
-						FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
-					}
-				}
 
-				if(!stat(output, &st)) {
-					offset = (int)st.st_size;
-				}
-				if(!pmo_proxyhost) {
+					if(!stat(output, &st)) {
+						offset = (int)st.st_size;
+					}
+					if(!pmo_proxyhost) {
+						snprintf(src, PATH_MAX, "%s%s", server->path, fn);
+					} else {
+						snprintf(src, PATH_MAX, "%s://%s%s%s", server->protocol, server->server, server->path, fn);
+					}
+					if(!HttpGet(server->server, output, src, &fsz, control, offset)) {
+						fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
+								fn, server->server, FtpLastResponse(control));
+						/* we leave the partially downloaded file in place so it can be resumed later */
+					} else {
+						filedone = 1;
+					}
+				} else if(!strcmp(server->protocol, "file")) {
+					char src[PATH_MAX];
 					snprintf(src, PATH_MAX, "%s%s", server->path, fn);
-				} else {
-					snprintf(src, PATH_MAX, "%s://%s%s%s", server->protocol, server->server, server->path, fn);
-				}
-				if(!HttpGet(server->server, output, src, &fsz, control, offset)) {
-					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
-						fn, server->server, FtpLastResponse(control));
-					/* we leave the partially downloaded file in place so it can be resumed later */
-				} else {
-					filedone = 1;
-				}
-			} else if(!strcmp(server->protocol, "file")) {
-				char src[PATH_MAX];
-				snprintf(src, PATH_MAX, "%s%s", server->path, fn);
-				vprint("copying %s to %s/%s\n", src, localpath, fn);
-				/* local repository, just copy the file */
-				if(copyfile(src, output)) {
-					fprintf(stderr, "failed copying %s\n", src);
-				} else {
-					filedone = 1;
-				}
-			}
-
-			if(filedone) {
-				char completefile[PATH_MAX];
-				if(!strcmp(server->protocol, "file")) {
-					char out[56];
-					printf(" %s [", sync_fnm);
-					strncpy(out, server->path, 33);
-					printf("%s", out);
-					for(j = strlen(out); j < maxcols-64; j++) {
-						printf(" ");
+					vprint("copying %s to %s/%s\n", src, localpath, fn);
+					/* local repository, just copy the file */
+					if(copyfile(src, output)) {
+						fprintf(stderr, "failed copying %s\n", src);
+					} else {
+						filedone = 1;
 					}
-					fputs("] 100% |   LOCAL |", stdout);
-				} else {
-					log_progress(control, fsz-offset, &fsz);
 				}
-				complete = list_add(complete, fn);
-				/* rename "output.part" file to "output" file */
-				snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
-				rename(output, completefile);
+
+				if(filedone) {
+					char completefile[PATH_MAX];
+					if(!strcmp(server->protocol, "file")) {
+						char out[56];
+						printf(" %s [", sync_fnm);
+						strncpy(out, server->path, 33);
+						printf("%s", out);
+						for(j = strlen(out); j < maxcols-64; j++) {
+							printf(" ");
+						}
+						fputs("] 100% |   LOCAL |", stdout);
+					} else {
+						log_progress(control, fsz-offset, &fsz);
+					}
+					complete = list_add(complete, fn);
+					/* rename "output.part" file to "output" file */
+					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
+					rename(output, completefile);
+				}
+				printf("\n");
+				fflush(stdout);
 			}
-			printf("\n");
-			fflush(stdout);
 		}
+		if(!pmo_xfercommand) {
+			if(!strcmp(server->protocol, "ftp")) {
+				FtpQuit(control);
+			} else if(!strcmp(server->protocol, "http")) {
+				HttpQuit(control);
+			}
+		}
+
 		if(list_count(complete) == list_count(files)) {
 			done = 1;
-		}
-
-		if(!strcmp(server->protocol, "ftp")) {
-			FtpQuit(control);
-		} else if(!strcmp(server->protocol, "http")) {
-			HttpQuit(control);
 		}
 	}
 

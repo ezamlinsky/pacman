@@ -69,6 +69,7 @@ unsigned short pmo_q_list     = 0;
 unsigned short pmo_q_orphans  = 0;
 unsigned short pmo_q_owns     = 0;
 unsigned short pmo_r_cascade  = 0;
+unsigned short pmo_r_dbonly   = 0;
 unsigned short pmo_r_recurse  = 0;
 unsigned short pmo_s_upgrade  = 0;
 unsigned short pmo_s_downloadonly = 0;
@@ -82,6 +83,7 @@ char          *pmo_dbpath       = NULL;
 char          *pmo_logfile      = NULL;
 char          *pmo_proxyhost    = NULL;
 unsigned short pmo_proxyport    = 0;
+char          *pmo_xfercommand  = NULL;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 unsigned short pmo_usesyslog    = 0;
@@ -255,12 +257,11 @@ int pacman_deptest(pacdb_t *db, PMList *targets)
 	sprintf(dummy->version, "1.0-1");
 	for(lp = targets; lp; lp = lp->next) {
 		if(lp->data == NULL) continue;
-		dummy->depends = list_add(dummy->depends, lp->data);
+		dummy->depends = list_add(dummy->depends, strdup(lp->data));
 	}
 	list = list_add(list, dummy);
 	deps = checkdeps(db, PM_ADD, list);
-	FREELIST(list);
-	FREEPKG(dummy);
+	FREELISTPKGS(list);
 
 	if(deps) {
 		/* return 126 = deps were missing, but successfully resolved
@@ -381,25 +382,42 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					for(k = dbs->pkgcache; k; k = k->next) {
 						pkginfo_t *pkg = (pkginfo_t*)k->data;
 						char *haystack;
+						PMList *m;
+						int match = 0;
 						/* check name */
 						haystack = strdup(pkg->name);
 						strtoupper(haystack);
 						if(strstr(haystack, targ)) {
+							match = 1;
+						}
+						FREE(haystack);
+
+						/* check description */
+						haystack = strdup(pkg->desc);
+						strtoupper(haystack);
+						if(strstr(haystack, targ)) {
+							match = 1;
+						}
+						FREE(haystack);
+
+						if(!match) {
+							pkg = db_scan(dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
+							/* check provides */
+							for(m = pkg->provides; m; m = m->next) {
+								haystack = strdup(m->data);
+								strtoupper(haystack);
+								if(strstr(haystack, targ)) {
+									match = 1;
+								}
+								FREE(haystack);
+							}
+						}
+
+						if(match) {
 							printf("%s/%s %s\n    ", dbs->sync->treename, pkg->name, pkg->version);
 							indentprint(pkg->desc, 4);
 							printf("\n");
-						} else {
-							/* check description */
-							FREE(haystack);
-							haystack = strdup(pkg->desc);
-							strtoupper(haystack);
-							if(strstr(haystack, targ)) {
-								printf("%s/%s %s\n    ", dbs->sync->treename, pkg->name, pkg->version);
-								indentprint(pkg->desc, 4);
-								printf("\n");
-							}
 						}
-						FREE(haystack);
 					}
 				}
 				FREE(targ);
@@ -1320,6 +1338,43 @@ int pacman_add(pacdb_t *db, PMList *targets)
 	if(targets == NULL) {
 		return(0);
 	}
+	for(targ = targets; targ; targ = targ->next) {
+		if(strstr(targ->data, "://")) {
+			/* this target looks like an URL.  download it and then
+			 * strip the URL portion from the target.
+			 */
+			char url[PATH_MAX];
+			server_t server;
+			PMList *servers = NULL;
+			PMList *files = NULL;
+			char *host, *path, *fn;
+			strncpy(url, targ->data, PATH_MAX);
+			host = strstr(url, "://");
+			*host = '\0';
+			host += 3;
+			path = strchr(host, '/');
+			*path = '\0';
+			path++;
+			fn = strrchr(path, '/');
+			*fn = '\0';
+			fn++;
+			server.protocol = url;
+			server.server = host;
+			server.path = path;
+			servers = list_add(servers, &server);
+			files = list_add(files, fn);
+			if(downloadfiles(servers, ".", files)) {
+				fprintf(stderr, "error: failed to download %s\n", (char*)targ->data);
+				return(1);
+			}
+			FREELIST(servers);
+			files->data = NULL;
+			FREELIST(files);
+			/* replace this target with the raw filename, no URL */
+			free(targ->data);
+			targ->data = strndup(fn, PATH_MAX);
+		}
+	}
 
 	printf("loading package data... ");
 	fflush(stdout);
@@ -1942,50 +1997,52 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 			}
 		}
 
-		/* iterate through the list backwards, unlinking files */
-		for(lp = list_last(info->files); lp; lp = lp->prev) {
-			int nb = 0;
-			if(needbackup((char*)lp->data, info->backup)) {
-				nb = 1;
-			}
-			if(!nb && pmo_upgrade) {
-				/* check pmo_noupgrade */
-				if(is_in((char*)lp->data, pmo_noupgrade)) {
+		if(!pmo_r_dbonly) {
+			/* iterate through the list backwards, unlinking files */
+			for(lp = list_last(info->files); lp; lp = lp->prev) {
+				int nb = 0;
+				if(needbackup((char*)lp->data, info->backup)) {
 					nb = 1;
 				}
-			}
-			snprintf(line, PATH_MAX, "%s%s", pmo_root, (char*)lp->data);
-			if(lstat(line, &buf)) {
-				vprint("file %s does not exist\n", line);
-				continue;
-			}
-			if(S_ISDIR(buf.st_mode)) {
-				/*vprint("  removing directory %s\n", line);*/
-				if(rmdir(line)) {
-					/* this is okay, other packages are probably using it. */
+				if(!nb && pmo_upgrade) {
+					/* check pmo_noupgrade */
+					if(is_in((char*)lp->data, pmo_noupgrade)) {
+						nb = 1;
+					}
 				}
-			} else {
-				/* if the file is flagged, back it up to .pacsave */
-				if(nb) {
-					if(pmo_upgrade) {
-						/* we're upgrading so just leave the file as is.  pacman_add() will handle it */
-					} else {
-						if(!pmo_nosave) {
-							newpath = (char*)realloc(newpath, strlen(line)+strlen(".pacsave")+1);
-							sprintf(newpath, "%s.pacsave", line);
-							rename(line, newpath);
-							logaction(stderr, "warning: %s saved as %s", line, newpath);
-						} else {
-							/*vprint("  unlinking %s\n", line);*/
-							if(unlink(line)) {
-								perror("cannot remove file");
-							}
-						}
+				snprintf(line, PATH_MAX, "%s%s", pmo_root, (char*)lp->data);
+				if(lstat(line, &buf)) {
+					vprint("file %s does not exist\n", line);
+					continue;
+				}
+				if(S_ISDIR(buf.st_mode)) {
+					/*vprint("  removing directory %s\n", line);*/
+					if(rmdir(line)) {
+						/* this is okay, other packages are probably using it. */
 					}
 				} else {
-					/*vprint("  unlinking %s\n", line);*/
-					if(unlink(line)) {
-						perror("cannot remove file");
+					/* if the file is flagged, back it up to .pacsave */
+					if(nb) {
+						if(pmo_upgrade) {
+							/* we're upgrading so just leave the file as is.  pacman_add() will handle it */
+						} else {
+							if(!pmo_nosave) {
+								newpath = (char*)realloc(newpath, strlen(line)+strlen(".pacsave")+1);
+								sprintf(newpath, "%s.pacsave", line);
+								rename(line, newpath);
+								logaction(stderr, "warning: %s saved as %s", line, newpath);
+							} else {
+								/*vprint("  unlinking %s\n", line);*/
+								if(unlink(line)) {
+									perror("cannot remove file");
+								}
+							}
+						}
+					} else {
+						/*vprint("  unlinking %s\n", line);*/
+						if(unlink(line)) {
+							perror("cannot remove file");
+						}
 					}
 				}
 			}
@@ -2933,13 +2990,14 @@ int parseargs(int op, int argc, char **argv)
 		{"downloadonly", no_argument,     0, 'w'},
 		{"print-uris", no_argument,       0, 'p'},
 		{"refresh",    no_argument,       0, 'y'},
+		{"dbonly",     no_argument,       0, 'k'},
 		{"cascade",    no_argument,       0, 'c'},
 		{"recursive",  no_argument,       0, 's'},
 		{"groups",     no_argument,       0, 'g'},
 		{0, 0, 0, 0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vhscVfnoldepiuwyg", opts, &option_index))) {
+	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vkhscVfnoldepiuwyg", opts, &option_index))) {
 		if(opt < 0) {
 			break;
 		}
@@ -2963,6 +3021,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'f': pmo_force = 1; break;
 			case 'g': pmo_group = 1; break;
 			case 'i': pmo_q_info++; break;
+			case 'k': pmo_r_dbonly = 1; break;
 			case 'l': pmo_q_list = 1; break;
 			case 'n': pmo_nosave = 1; break;
 			case 'p': pmo_q_isfile = 1; pmo_s_printuris = 1; break;
@@ -3114,6 +3173,10 @@ int parseconfig(char *configfile)
 						}
 						pmo_logfile = strndup(ptr, PATH_MAX);
 						vprint("config: log file: %s\n", pmo_logfile);
+					} else if (!strcmp(key, "XFERCOMMAND")) {
+						FREE(pmo_xfercommand);
+						pmo_xfercommand = strndup(ptr, PATH_MAX);
+						vprint("config: xfercommand: %s\n", pmo_xfercommand);
 					} else if (!strcmp(key, "PROXYSERVER")) {
 						char *p;
 						if(pmo_proxyhost) {
@@ -3233,6 +3296,7 @@ void usage(int op, char *myname)
 			printf("options:\n");
 			printf("  -c, --cascade       remove packages and all packages that depend on them\n");
 			printf("  -d, --nodeps        skip dependency checks\n");
+			printf("  -k, --dbonly        only remove database entry, do not remove files\n");
 			printf("  -n, --nosave        remove configuration files as well\n");
 			printf("  -s, --recursive     remove dependencies also (that won't break packages)\n");
 		} else if(op == PM_UPGRADE) {
@@ -3247,7 +3311,7 @@ void usage(int op, char *myname)
 		} else if(op == PM_QUERY) {
 			printf("usage:  %s {-Q --query} [options] [package]\n", myname);
 			printf("options:\n");
-			printf("  -i, --info          view package information\n");
+			printf("  -i, --info          view package information (use -ii for more)\n");
 			printf("  -g, --groups        view all members of a package group\n");
 			printf("  -l, --list          list the contents of the queried package\n");
 			printf("  -o, --owns <file>   query the package that owns <file>\n");
@@ -3412,6 +3476,7 @@ void cleanup(int signum)
 	FREE(pmo_dbpath);
 	FREE(pmo_logfile);
 	FREE(pmo_proxyhost);
+	FREE(pmo_xfercommand);
 
 	FREELIST(pm_targets);
 

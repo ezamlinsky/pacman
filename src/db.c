@@ -216,6 +216,12 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					return(NULL);
 				}
 				trim(info->url);
+			} else if(!strcmp(line, "%LICENSE%")) {
+				if(fgets(info->license, sizeof(info->license), fp) == NULL) {
+					FREEPKG(info);
+					return(NULL);
+				}
+				trim(info->license);
 			} else if(!strcmp(line, "%BUILDDATE%")) {
 				if(fgets(info->builddate, sizeof(info->builddate), fp) == NULL) {
 					FREEPKG(info);
@@ -379,6 +385,8 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	fprintf(fp, "\n");
 	fputs("%URL%\n", fp);
 	fprintf(fp, "%s\n\n", info->url);
+	fputs("%LICENSE%\n", fp);
+	fprintf(fp, "%s\n\n", info->license);
 	fputs("%BUILDDATE%\n", fp);
 	fprintf(fp, "%s\n\n", info->builddate);
 	fputs("%INSTALLDATE%\n", fp);

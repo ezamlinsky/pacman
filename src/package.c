@@ -189,6 +189,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				info->groups = list_add(info->groups, strdup(ptr));
 			} else if(!strcmp(key, "URL")) {
 				strncpy(info->url, ptr, sizeof(info->url));
+			} else if(!strcmp(key, "LICENSE")) {
+				strncpy(info->license, ptr, sizeof(info->license));
 			} else if(!strcmp(key, "BUILDDATE")) {
 				strncpy(info->builddate, ptr, sizeof(info->builddate));
 			} else if(!strcmp(key, "INSTALLDATE")) {
@@ -232,6 +234,7 @@ pkginfo_t* newpkg()
 	pkg->version[0]     = '\0';
 	pkg->desc[0]        = '\0';
 	pkg->url[0]         = '\0';
+	pkg->license[0]     = '\0';
 	pkg->builddate[0]   = '\0';
 	pkg->installdate[0] = '\0';
 	pkg->packager[0]    = '\0';
@@ -321,7 +324,8 @@ void dump_pkg_full(pkginfo_t *info)
 	list_display("Groups         :", pm);
 	FREELIST(pm);
 	printf("Packager       : %s\n", info->packager);
-	printf("URL            : %s\n", (info->url ? info->url : "None"));
+	printf("URL            : %s\n", info->url);
+	printf("License        : %s\n", info->license);
 	printf("Size           : %ld\n", info->size);
 	printf("Build Date     : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");
 	printf("Install Date   : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
