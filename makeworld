@@ -1,13 +1,13 @@
 #!/bin/bash
 
 toplevel=`pwd`
-version="1.2"
+version="1.21"
 
 if [ $# -lt 2 ]; then
 	echo "makepkg version $version"
   echo "usage: $0 <destdir> <category> [category] ..."
-  echo "  where <category> is base, opt, etc."
-  echo "  eg: makeworld /packages base opt extra"
+  echo "  where <category> is one or more of base, opt, contrib"
+  echo "  eg: makeworld /packages base opt"
   echo
   echo "  this should be run from the toplevel directory of ABS (usually /usr/abs)"
   exit 1

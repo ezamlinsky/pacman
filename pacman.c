@@ -174,12 +174,11 @@ int main(int argc, char* argv[])
 	if(ret == 1) {
 		fprintf(stderr, "error:  Could not open package database file!\n");
 		fprintf(stderr, "        Check to see that %s exists.\n", dbpath);
-		fprintf(stderr, "        If not, you may simply create it by \"touch\"-ing it.\n");
+		fprintf(stderr, "        If not, you can create it by \"touch\"-ing it.\n");
 		return(1);
 	}
 	if(ret == 2) {
 		fprintf(stderr, "error:  Database is corrupt!  You may need to use the backup database.\n");
-		fprintf(stderr, "        I hope you like tweaking...  ;-)\n");
 		return(1);
 	}
 
@@ -188,6 +187,15 @@ int main(int argc, char* argv[])
 		for(i = 0; i < pm_targct; i++) {
 			if(op_func(pm_targets[i])) {
 				ret = 1;
+				/*
+				if(op_func == pacman_add) {
+					printf("Failed to add %s\n", pkgname != NULL ? pkgname : pm_targets[i]);
+				} else if(op_func == pacman_remove) {
+					printf("Failed to remove %s\n", pkgname != NULL ? pkgname : pm_targets[i]);
+				} else if(op_func == pacman_upgrade) {
+					printf("Failed to upgrade %s\n", pkgname != NULL ? pkgname : pm_targets[i]);
+				}
+				*/
 			}
 		}
 		if(op_func == pacman_query && pm_targct == 0) {
@@ -210,11 +218,11 @@ int main(int argc, char* argv[])
 
 int pacman_add(char* pkgfile)
 {
-	int i, errors = 0;
+	int i, ret = 0, errors = 0;
 	TAR* tar;
 	char* errmsg = NULL;
 	char* expath = NULL;
-	char* newpath = NULL;
+	/*char* newpath = NULL;*/
 	fileset_t files = NULL;
 	unsigned int filecount = 0, nb = 0;
 	struct stat buf;
@@ -248,9 +256,18 @@ int pacman_add(char* pkgfile)
 	/* see if this is an upgrade.  if so, remove the old package first */
 	if(pmo_upgrade) {
 		vprint("Removing old package first...\n");
-		if(pacman_remove(pkgname)) {
+		/* save the old nosave option and disable it for the package remove */
+		i = pmo_nosave;
+		pmo_nosave = 0;
+		ret = pacman_remove(pkgname);
+		/* restore nosave */
+		pmo_nosave = i;
+		if(ret == 1) {
 			fprintf(stderr, "\nUpgrade aborted.\n");
 			return(1);
+		} else if(ret == 2) {
+			fprintf(stderr, "%s is not installed.  skipping...\n", pkgname);
+			return(0);
 		}
 		if(db_update(NULL, 0)) {
 			fprintf(stderr, "\nError updating database. Upgrade aborted.\n");
@@ -281,11 +298,16 @@ int pacman_add(char* pkgfile)
 		vprint("  %s\n", expath);
 		if(!pmo_nosave && nb && !stat(expath, &buf)) {
 			/* backup this file */
-			newpath = (char*)realloc(newpath, strlen(expath)+6);
+			/*newpath = (char*)realloc(newpath, strlen(expath)+6);
 			strcpy(newpath, expath);
 			strcat(newpath, ".save");
 			rename(expath, newpath);
-			fprintf(stderr, "%s renamed to %s\n", expath, newpath);
+			fprintf(stderr, "%s renamed to %s\n", expath, newpath);*/
+
+			/* keep the old file and write the new one to a .pacnew extension */
+			fprintf(stderr, "%s already exists, extracting to %s.pacnew\n", expath, expath);
+			expath = (char*)realloc(expath, strlen(expath)+strlen(".pacnew")+1);
+			strcat(expath, ".pacnew");
 		}
 	  if(tar_extract_file(tar, expath)) {
 			errmsg = strerror(errno);
@@ -350,8 +372,13 @@ int pacman_remove(char* pkgfile)
 		}
 	}
 	if(!found) {
-		fprintf(stderr, "Cannot remove %s: Package was not found.\n", pkgfile);
-		return(1);
+		if(pmo_upgrade) {
+			/* special handling */
+			return(2);
+		} else {
+			fprintf(stderr, "Cannot remove %s: Package was not found.\n", pkgfile);
+			return(1);
+		}
 	}
 
 	while(!done) {
@@ -388,13 +415,22 @@ int pacman_remove(char* pkgfile)
 				/* perror("cannot remove directory"); */
 			}
 		} else {
-			/* if the file is flagged, back it up to .save */
-			if(!pmo_nosave && nb) {
-				newpath = (char*)realloc(newpath, strlen(file)+6);
-				strcpy(newpath, file);
-				strcat(newpath, ".save");
-				rename(file, newpath);
-				fprintf(stderr, "%s renamed to %s\n", file, newpath);
+			/* if the file is flagged, back it up to .pacsave */
+			if(nb) {
+				if(!pmo_upgrade && !pmo_nosave) {
+					newpath = (char*)realloc(newpath, strlen(file)+strlen(".pacsave")+1);
+					strcpy(newpath, file);
+					strcat(newpath, ".pacsave");
+					rename(file, newpath);
+					fprintf(stderr, "%s renamed to %s\n", file, newpath);
+				} else if(!pmo_upgrade && pmo_nosave) {
+					vprint("  unlinking %s\n", file);
+					if(unlink(file)) {
+						perror("cannot remove file");
+					}
+				} else {
+					/* skip */
+				}
 			} else {
 				vprint("  unlinking %s\n", file);
 				if(unlink(file)) {
@@ -1025,31 +1061,32 @@ void usage(int op, char* myname)
 	  printf("usage:  %s {-A --add} [options] <file>\n", myname);
 		printf("options:\n");
 		printf("  -f, --force        force install, overwrite conflicting files\n");
-		printf("  -n, --nosave       do not save configuration files\n");
+		printf("  -n, --nosave       overwrite configuration files as well\n");
 		printf("  -v, --verbose      be verbose\n");
-		printf("  -r, --root <path>  set an alternative installation root\n");
+		printf("  -r, --root <path>  set an alternate installation root\n");
 	} else if(op == PM_REMOVE) {
 		printf("usage:  %s {-R --remove} [options] <package>\n", myname);
 		printf("options:\n");
-		printf("  -n, --nosave       do not save configuration files\n");
+		printf("  -n, --nosave       do not save configuration files as .pacsave\n");
 		printf("  -v, --verbose      be verbose\n");
-		printf("  -r, --root <path>  set an alternative installation root\n");
+		printf("  -r, --root <path>  set an alternate installation root\n");
 	} else if(op == PM_UPGRADE) {
 		printf("usage:  %s {-U --upgrade} [options] <file>\n", myname);
 		printf("options:\n");
 		printf("  -f, --force        force install, overwrite conflicting files\n");
-		printf("  -n, --nosave       do not save configuration files\n");
+		printf("  -n, --nosave       upgrade configuration files as well (old one is deleted)\n");
 		printf("  -v, --verbose      be verbose\n");
-		printf("  -r, --root <path>  set an alternative installation root\n");
+		printf("  -r, --root <path>  set an alternate installation root\n");
 	} else if(op == PM_QUERY) {
 		printf("usage:  %s {-Q --query} [options] [package]\n", myname);
 		printf("options:\n");
-		printf("  -r, --root <path>  set an alternative installation root\n");
 		printf("  -o, --owns <file>  query the package that owns <file>\n");
 		printf("  -l, --list         list the contents of the queried package\n");
-		printf("  -i, --info         output the .PKGINFO file (only used with -p)\n");
+		printf("  -i, --info         view the package info file (only used with -p)\n");
 		printf("  -p, --file         if used, then [package] will be the path\n");
-		printf("                     to an (uninstalled) package to query\n");
+		printf("                     to a .tar.gz package file to query\n");
+		printf("  -v, --verbose      be verbose\n");
+		printf("  -r, --root <path>  set an alternate installation root\n");
 	}
 }
 

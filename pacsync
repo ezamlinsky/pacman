@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="1.2"
+version="1.21"
 tanpath="/var/lib/pacman"
 tandb="pacsync.db"
 errors=0
@@ -49,7 +49,7 @@ download() {
 
 dosync() {
 	cd /tmp
-	download "package list" $tandb
+	download "package list" pacsync/$tandb
 	if [ $? -gt 0 ]; then
 		exit 1
 	fi
@@ -62,7 +62,7 @@ doinstall() {
 	pkg2dl=
 	pkg2inst=
 	for pkgname in $*; do
-		line=`egrep "^[a-z]+/$pkgname-[a-z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
+		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
 		if [ $? -gt 0 ]; then
 			message "package $pkgname not found"
 			exit 1
@@ -75,7 +75,7 @@ doinstall() {
 		filename=`echo $line | sed 's|^[a-z]*/||g'`
 		pkg2inst="$pkg2inst $filename"
 		if [ ! -f /var/cache/pacman/pkg/$filename ]; then
-			pkg2dl="$pkg2dl arch/$filename"
+			pkg2dl="$pkg2dl $filename"
 		fi
 	done
 
@@ -88,7 +88,7 @@ doinstall() {
 		if [ `pwd` != "/var/cache/pacman/pkg" ]; then
 			# move downloaded files into cache
 			mkdir -p /var/cache/pacman/pkg
-			mv `echo $pkg2dl | sed 's|arch/||g'` /var/cache/pacman/pkg/
+			mv $pkg2dl /var/cache/pacman/pkg/
 		fi
 	fi
 
@@ -109,7 +109,7 @@ doupgrade() {
 	pkg2dl=
 	pkg2up=
 	for pkgname in $*; do
-		line=`egrep "^[a-z]+/$pkgname-[a-z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
+		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
 		if [ $? -gt 0 ]; then
 			message "package $pkgname not found"
 			exit 1
@@ -129,7 +129,7 @@ doupgrade() {
 		else
 			pkg2up="$pkg2up $filename"
 			if [ ! -f /var/cache/pacman/pkg/$filename ]; then
-				pkg2dl="$pkg2dl arch/$filename"
+				pkg2dl="$pkg2dl $filename"
 			fi
 		fi
 	done
@@ -143,7 +143,7 @@ doupgrade() {
 		if [ `pwd` != "/var/cache/pacman/pkg" ]; then
 			# move downloaded files into cache
 			mkdir -p /var/cache/pacman/pkg
-			mv `echo $pkg2dl | sed 's|arch/||g'` /var/cache/pacman/pkg/
+			mv $pkg2dl /var/cache/pacman/pkg/
 		fi
 	fi
 
@@ -166,7 +166,7 @@ doreport() {
 	headers=0
 	pkg2up=
 	for pkgfile in `cat $tanpath/$tandb | sed "s|^[a-z]*/||g"`; do
-		pkgname=`echo $pkgfile | sed 's|-[a-z0-9\.]*-[0-9]*\.pkg\.tar\.gz||g'`
+		pkgname=`echo $pkgfile | sed 's|-[a-zA-Z0-9\.]*-[0-9]*\.pkg\.tar\.gz||g'`
 		pacman=`pacman -Q $pkgname 2>/dev/null`
 		if [ $? -gt 0 ]; then
 			# skip this one, it's not installed
@@ -174,7 +174,7 @@ doreport() {
 		fi
 		pkgver=`echo $pacman | awk '{print $2}'`
 		locfile="$pkgname-$pkgver"
-		remfile=`echo $pkgfile | sed 's|^[a-z]*/||g' | sed 's|\.pkg\.tar\.gz||g'`
+		remfile=`echo $pkgfile | sed 's|^[a-zA-Z]*/||g' | sed 's|\.pkg\.tar\.gz||g'`
 		# compare locfile and remfile
 		if [ "$locfile" = "$remfile" ]; then
 			# this package is up to date

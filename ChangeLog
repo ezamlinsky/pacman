@@ -1,10 +1,14 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
-              - 
+1.21          - Added better backup control -- upgrade/add and remove
+	        do different things with the -n switch
+1.2           - Added wildcard handling
+              - Added man pages for makepkg and pacsync
+              - Added the pacsync utility for remote file fetching/sync
 1.1           - Fixed some string-handling bugs
               - Added better handling of configuration files and the like.
                 If "file" is about to be removed, but it is designated to
-								be backed up, then it will be copied to "file.save"
+                backed up, then it will be copied to "file.save"
               - Changed db_find_conflicts() to ignore directories
 1.0           - Initial Release
 

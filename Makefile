@@ -27,7 +27,7 @@ BINDIR = /usr/bin
 MANDIR = /usr/man
 ETCDIR = /etc
 
-VERSION = 1.2
+VERSION = 1.21
 LIBTAR_VERSION = 1.2.4
 
 CXX = gcc

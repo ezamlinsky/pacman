@@ -70,12 +70,13 @@ Notice that the "/usr" portion should be present with "prefix", but not "DESTDIR
 Once the package is successfully installed into the package root, \fImakepkg\fP
 will remove some directories (as per Arch Linux package guidelines; if you use
 this elsewhere, feel free to change it) like /usr/doc and /usr/info.  It will
-then strip debugging info from libraries and binaries and compress
+then strip debugging info from libraries and binaries and compress everything
+into a .pkg.tar.gz file in the directory you ran \fBmakepkg\fP from.
 
 .SH PKGBUILD Directives
 .TP
 .B backup
-A space-delimited array of filenames (without a preceiding slash). The
+A space-delimited array of filenames (without a preceding slash). The
 \fIbackup\fP line will be propagated to the package meta-info file for
 pacman.  This will designate all files listed there to be backed up if this
 package is ever removed from a system.
@@ -92,7 +93,7 @@ by wget.
 .B install
 There is also an \fIinstall\fP directive that is not used in the example
 above.  If \fIinstall\fP is set to the name of a file in the package build
-directory (but \fBnot\fP listed in the source line), then it will be
+directory, then it will be
 copied to the package meta-info file and designated as a post-install script.
 This will be run by pacman whenever it installs the package.
 

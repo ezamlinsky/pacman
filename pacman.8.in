@@ -65,10 +65,13 @@ This option should be used with care, preferably not at all.
 .TP
 .B "\-n, \-\-nosave"
 Instructs pacman to ignore file backup designations.  Normally, when
-a file is about to be removed from the system, the database is first
-checked to see if the file should be renamed to a .save extension
+a file is about to be \fIremoved\fP from the system the database is first
+checked to see if the file should be renamed to a .pacsave extension
 (indicated by a '\fB*\fP' prefix in the pacman database).  The \fB--nosave\fP
-will turn off all file backups.
+will turn off these file backups.  Normally, when a file is about to be \fIadded\fP
+or \fIupgraded\fP and a starred file already exists, pacman will write
+the new file to a .pacnew extension and keep the old one in place.  In this
+case, \fB--nosave\fP instructs pacman to overwrite the existing file.
 .TP
 .B "\-r, \-\-root <path>"
 Specify alternative installation root (default is "/"). This
