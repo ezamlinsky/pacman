@@ -2,7 +2,7 @@
 .SH NAME
 pacsync \- package update frontend for pacman
 .SH SYNOPSIS
-\fBpacsync  <operation> [package] [package] ...\fP
+\fBpacsync  [--root <root>] <operation> [package] [package] ...\fP
 .SH DESCRIPTION
 \fBpacsync\fP is a \fIpackage update\fP frontend for the
 \fIpacman\fP package manager.  It keeps track of the versions

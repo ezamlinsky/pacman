@@ -1,19 +1,11 @@
-Some of these items kinda belong on more of a wishlist than a todo list.  ;)
-
-> make sure program consistently returns a non-zero return code on
-  error, so scripts can rely on it
 - add a [sibling] option to .PKGINFO -- used when only one of
   the siblings can be installed at a time (eg, bsdinit,sysvinit)
-> handle wildcards on the command line
 - sort packages by package name in pacman.db
 ? manage conditional file installs (ie, 'info' pages)
 - maybe add a 'confirm every action' option for doing paranoid installs
 - add a consistency check operation
-- change char[xxx] to char[PATH_MAX]
 - add file locking to db
 - add a --dbpath option
 + dependency checking
-+ fetch files via ftp
-  - need to manage foreign package lists like apt
 - upgrade currently does a double db backup; not really desirable
 

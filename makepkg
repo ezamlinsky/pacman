@@ -1,7 +1,6 @@
 #!/bin/bash
 
-me=`basename $0`
-myver='1.21'
+myver='1.22'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && . /etc/makepkg.conf
@@ -10,12 +9,34 @@ strip_url() {
   echo $1 | sed 's|^.*://.*/||g'
 }
 
-if [ ! -f $startdir/PKGBUILD ]; then
-  echo "error:  $startdir/PKGBUILD does not exist!" >&2
+if [ "$1" = "--help" -o "$1" = "-h" ]; then
+  shift
+  echo "makepkg version $myver"
+  echo "usage: $0 [build_script]"
+  echo
+  echo "  if build_script is not specified, makepkg will look for a PKGBUILD"
+  echo "  file in the current directory."
+  echo
   exit 1
 fi
 
-. $startdir/PKGBUILD
+BUILDSCRIPT="`pwd`/PKGBUILD"
+if [ "$1" != "" ]; then
+  BUILDSCRIPT=$1
+fi
+
+if [ ! -f $BUILDSCRIPT ]; then
+  echo "==> ERROR:  $BUILDSCRIPT does not exist!" >&2
+  exit 1
+fi
+
+. $BUILDSCRIPT
+
+# check for no-no's
+if [ `echo $pkgver | grep '-'` ]; then
+	echo "==> ERROR:  pkgver is not allowed to contain hyphens." >&2
+	exit 1
+fi
 
 echo
 d=`date`
@@ -34,8 +55,25 @@ for netfile in ${source[@]}; do
     echo "==> Using local copy of $file" >&2
     cp /var/cache/pacman/src/$file .
   else
+    proto=`echo $netfile | sed 's|://.*||'`
+    if [ "$proto" != "ftp" -a "$proto" != "http" ]; then
+      echo "==> ERROR:  $netfile was not found in the build directory and is not a proper URL."
+      echo "==> Aborting..." >&2
+      exit 1
+    fi
+    # check for a download utility
+    if [ -x /usr/bin/snarf ]; then
+    	ftpagent="/usr/bin/snarf"
+    elif [ -x /usr/bin/lftpget -a "$proto" = "ftp" ]; then
+    	ftpagent="/usr/bin/lftpget"
+    elif [ -x /usr/bin/wget ]; then
+    	ftpagent="/usr/bin/wget --passive-ftp --tries=3 --waitretry=3"
+    else
+    	echo "==> ERROR:  You need an ftp client installed (snarf/lftp/wget) in /usr/bin" >&2
+    	exit 1
+    fi
     echo "==> Downloading $file" >&2
-    wget --passive-ftp --no-directories --tries=3 --waitretry=3 $netfile 2>&1
+    $ftpagent $netfile 2>&1
     if [ ! -f $file ]; then
       echo "==> ERROR: Failed to download $file" >&2
       echo "==> Aborting..." >&2

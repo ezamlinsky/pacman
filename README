@@ -13,15 +13,15 @@ DESCRIPTION:
    upgrade packages in the system, and it will allow you to query the
    package database for installed packages, files and owners.
 
-	 Although the package manager itself is quite simple, the pacman tarball
-	 also comes with scripts that help automate building and installing
-	 packages.  These are used extensively in the Arch Build System (ABS),
-	 used in Arch Linux <http://www.archlinux.org>.  See ABS.txt for more
-	 information.
+   Although the package manager itself is quite simple, the pacman tarball
+   also comes with scripts that help automate building and installing
+   packages.  These are used extensively in the Arch Build System (ABS),
+   used in Arch Linux <http://www.archlinux.org>.  See ABS.txt for more
+   information.
 
-	 As of version 1.2, pacsync is included as well.  This performs an apt-like
-	 function, keeping your system's packages in sync with the packages on
-	 a remote server.
+   As of version 1.2, pacsync is included as well.  This performs an
+   apt-like function, keeping your system's packages in sync with the
+   packages on a remote server.
 
    Plans exist for dependency checking as I approach version 2.0.
    See TODO for more info.

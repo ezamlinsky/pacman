@@ -1,5 +1,9 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+1.22          - Some manpage typo fixes
+              - Added --root switch to pacsync
+							- Added --help and ability to specify a PKGBUILD to makepkg
+							- Switched default downloader to snarf
 1.21          - Added better backup control -- upgrade/add and remove
 	        do different things with the -n switch
 1.2           - Added wildcard handling

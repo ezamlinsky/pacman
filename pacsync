@@ -1,10 +1,11 @@
 #!/bin/bash
 
-version="1.21"
+version="1.22"
 tanpath="/var/lib/pacman"
 tandb="pacsync.db"
 errors=0
 upgrade=0
+INSTALL_ROOT="/"
 
 message() {
 	echo "==> $1" >&2
@@ -12,7 +13,7 @@ message() {
 
 usage() {
 	echo "pacsync version $version"
-	echo "usage: $0 <operation> [package]"
+	echo "usage: $0 [--root <root>] <operation> [package]"
 	echo ""
 	echo "operations:"
 	echo "  sync               Download a fresh package list from the server"
@@ -25,7 +26,7 @@ usage() {
 }
 
 checkdb() {
-	if [ ! -f $tanpath/$tandb ]; then
+	if [ ! -f $INSTALL_ROOT/$tanpath/$tandb ]; then
 		message "missing package list.  (use \"sync\" first)"
 		exit 1
 	fi
@@ -39,9 +40,9 @@ download() {
 		cl="$cl $SYNC_SERVER/$file"
 	done
 	message "Downloading $targ"
-	$ftpagent $cl
+	$ftpagent $cl 2>&1
 	if [ $? -gt 0 ]; then
-		message "ERROR: could not download $targ"
+		message "error: could not download $targ"
 		return 1
 	fi
 	return 0
@@ -53,8 +54,8 @@ dosync() {
 	if [ $? -gt 0 ]; then
 		exit 1
 	fi
-	rm -f $tanpath/$tandb
-	mv /tmp/$tandb $tanpath/$tandb
+	rm -f $INSTALL_ROOT/$tanpath/$tandb
+	mv /tmp/$tandb $INSTALL_ROOT/$tanpath/$tandb
 	message "Done."
 }
 
@@ -62,19 +63,19 @@ doinstall() {
 	pkg2dl=
 	pkg2inst=
 	for pkgname in $*; do
-		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
+		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $INSTALL_ROOT/$tanpath/$tandb`
 		if [ $? -gt 0 ]; then
 			message "package $pkgname not found"
 			exit 1
 		fi
-		pacman=`pacman -Q $pkgname 2>/dev/null`
+		pacman=`pacman -Q -r $INSTALL_ROOT $pkgname 2>/dev/null`
 		if [ $? -eq 0 ]; then
 			message "$pkgname is already installed (try using \"upgrade\")"
 			exit 1
 		fi
 		filename=`echo $line | sed 's|^[a-z]*/||g'`
 		pkg2inst="$pkg2inst $filename"
-		if [ ! -f /var/cache/pacman/pkg/$filename ]; then
+		if [ ! -f $INSTALL_ROOT/var/cache/pacman/pkg/$filename ]; then
 			pkg2dl="$pkg2dl $filename"
 		fi
 	done
@@ -85,19 +86,19 @@ doinstall() {
 		if [ $? -gt 0 ]; then
 			exit 1
 		fi
-		if [ `pwd` != "/var/cache/pacman/pkg" ]; then
+		if [ `pwd` != "$INSTALL_ROOT/var/cache/pacman/pkg" ]; then
 			# move downloaded files into cache
-			mkdir -p /var/cache/pacman/pkg
-			mv $pkg2dl /var/cache/pacman/pkg/
+			mkdir -p $INSTALL_ROOT/var/cache/pacman/pkg
+			mv $pkg2dl $INSTALL_ROOT/var/cache/pacman/pkg/
 		fi
 	fi
 
 	# install packages
 	message "Installing packages"
-	cd /var/cache/pacman/pkg
-	pacman -A $pkg2inst
+	cd $INSTALL_ROOT/var/cache/pacman/pkg
+	pacman -A -r $INSTALL_ROOT $pkg2inst
 	if [ $? -gt 0 ]; then
-		echo "ERROR: some packages failed to install"
+		message "error: some packages failed to install"
 		exit 1
 	fi
 
@@ -109,12 +110,12 @@ doupgrade() {
 	pkg2dl=
 	pkg2up=
 	for pkgname in $*; do
-		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $tanpath/$tandb`
+		line=`egrep "^[a-z]+/$pkgname-[a-zA-Z0-9\.]+-[0-9]+\.pkg\.tar\.gz$" $INSTALL_ROOT/$tanpath/$tandb`
 		if [ $? -gt 0 ]; then
 			message "package $pkgname not found"
 			exit 1
 		fi
-		pacman=`pacman -Q $pkgname 2>/dev/null`
+		pacman=`pacman -Q -r $INSTALL_ROOT $pkgname 2>/dev/null`
 		if [ $? -gt 0 ]; then
 						message "$pkgname is not installed (use \"install\" first)"
 			exit 1
@@ -128,7 +129,7 @@ doupgrade() {
 			message "$pkgname is already up to date (skipping)"
 		else
 			pkg2up="$pkg2up $filename"
-			if [ ! -f /var/cache/pacman/pkg/$filename ]; then
+			if [ ! -f $INSTALL_ROOT/var/cache/pacman/pkg/$filename ]; then
 				pkg2dl="$pkg2dl $filename"
 			fi
 		fi
@@ -140,20 +141,20 @@ doupgrade() {
 		if [ $? -gt 0 ]; then
 			exit 1
 		fi
-		if [ `pwd` != "/var/cache/pacman/pkg" ]; then
+		if [ `pwd` != "$INSTALL_ROOT/var/cache/pacman/pkg" ]; then
 			# move downloaded files into cache
-			mkdir -p /var/cache/pacman/pkg
-			mv $pkg2dl /var/cache/pacman/pkg/
+			mkdir -p $INSTALL_ROOT/var/cache/pacman/pkg
+			mv $pkg2dl $INSTALL_ROOT/var/cache/pacman/pkg/
 		fi
 	fi
 
 	# install packages
 	if [ "$pkg2up" != "" ]; then
 		message "Upgrading packages"
-		cd /var/cache/pacman/pkg
-		pacman -U $pkg2up
+		cd $INSTALL_ROOT/var/cache/pacman/pkg
+		pacman -U -r $INSTALL_ROOT $pkg2up
 		if [ $? -gt 0 ]; then
-			echo "ERROR: some packages failed to upgrade"
+			message "error: some packages failed to upgrade"
 			exit 1
 		fi
 		message "Done"
@@ -164,10 +165,11 @@ doupgrade() {
 
 doreport() {
 	headers=0
+	newkernel=0
 	pkg2up=
-	for pkgfile in `cat $tanpath/$tandb | sed "s|^[a-z]*/||g"`; do
+	for pkgfile in `cat $INTALL_ROOT/$tanpath/$tandb | sed "s|^[a-z]*/||g"`; do
 		pkgname=`echo $pkgfile | sed 's|-[a-zA-Z0-9\.]*-[0-9]*\.pkg\.tar\.gz||g'`
-		pacman=`pacman -Q $pkgname 2>/dev/null`
+		pacman=`pacman -Q -r $INSTALL_ROOT $pkgname 2>/dev/null`
 		if [ $? -gt 0 ]; then
 			# skip this one, it's not installed
 			continue
@@ -180,6 +182,10 @@ doreport() {
 			# this package is up to date
 			continue
 		else
+			if  [ `echo "$locfile" | egrep '^kernel-[a-zA-Z0-9\.]+-[0-9]+$'` ]; then
+				newkernel=1
+				continue
+			fi
 			if [ "$headers" = "0" ]; then
 				echo "+--------------------------------------+--------------------------------------+"
 				echo "|               LOCAL                  |                 REMOTE               |"
@@ -196,6 +202,15 @@ doreport() {
 	done
 	if [ "$headers" = "1" ]; then
 		echo "+--------------------------------------+--------------------------------------+"
+	fi
+
+	if [ "$newkernel" = "1" ]; then
+		echo
+		echo "NOTICE: A new kernel is available for upgrade, but this process will not"
+		echo "        upgrade it for you.  If you wish to upgrade, you must explicitly"
+		echo "        request it by running 'pacsync upgrade kernel'.  If you choose to"
+		echo "        upgrade, make sure you re-run 'lilo' as well!"
+		echo
 	fi
 
 	# do we upgrade?
@@ -217,21 +232,29 @@ if [ $# -lt 1 ]; then
 	exit 0
 fi
 
+if [ "$1" = "--root" ]; then
+	shift
+	INSTALL_ROOT=$1
+	shift
+fi
+
 if [ -f /etc/pacsync.conf ]; then
 	. /etc/pacsync.conf
 else
-	message "error: missing configuration file!"
+	message "error: Missing /etc/pacsync.conf configuration file!"
 	exit 1
 fi
 
 proto=`echo $SYNC_SERVER | sed 's|://.*||'`
 # check for a download utility
-if [ -x /usr/bin/lftpget -a "$proto" = "ftp" ]; then
+if [ -x /usr/bin/snarf ]; then
+	ftpagent="/usr/bin/snarf"
+elif [ -x /usr/bin/lftpget -a "$proto" = "ftp" ]; then
 	ftpagent="/usr/bin/lftpget"
 elif [ -x /usr/bin/wget ]; then
 	ftpagent="/usr/bin/wget --passive-ftp --tries=3 --waitretry=3"
 else
-	message "error: you need an ftp client installed (lftp or wget) in /usr/bin"
+	message "error: you need an ftp client installed (snarf/lftp/wget) in /usr/bin"
 	exit 1
 fi
 
@@ -272,7 +295,7 @@ case $op in
 	;;
 	clean)
 		message "Removing packages from cache"
-		rm -f /var/cache/pacman/pkg/*
+		rm -f $INSTALL_ROOT/var/cache/pacman/pkg/*
 	;;
 	*)
 		message "error: invalid operation"

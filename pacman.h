@@ -21,7 +21,7 @@
 #ifndef PACMAN_H
 #define PACMAN_H
 
-#define VERSION   "1.21"
+#define VERSION   "1.22"
 
 #define PKGEXT		".tar.gz"
 #define PKGDB			"/var/lib/pacman/pacman.db"
