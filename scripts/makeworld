@@ -21,7 +21,7 @@
 #
 
 toplevel=`pwd`
-version="2.6.1"
+version="2.6.2"
 
 usage() {
 	echo "makeworld version $version"
@@ -38,7 +38,7 @@ usage() {
 	echo "  where <category> is one or more directory names under the ABS root"
 	echo "  eg: makeworld -c /packages base lib editors"
 	echo
-	echo "  this should be run from the toplevel directory of ABS (usually /usr/abs)"
+	echo "  this should be run from the toplevel directory of ABS (usually /var/abs)"
 }
 
 if [ $# -lt 2 ]; then

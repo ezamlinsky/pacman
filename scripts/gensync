@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.6.1'
+myver='2.6.2'
 
 usage() {
   echo "gensync $myver"
@@ -36,7 +36,7 @@ usage() {
 	echo "      generated database must reside in the same directory as your"
 	echo "      custom packages (also configured in /etc/pacman.conf)"
 	echo
-	echo "example:  gensync /usr/abs/local /home/mypkgs/custom.db.tar.gz"
+	echo "example:  gensync /var/abs/local /home/mypkgs/custom.db.tar.gz"
 	echo
   echo
   exit 0

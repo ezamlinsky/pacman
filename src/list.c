@@ -115,21 +115,28 @@ int is_in(char *needle, PMList *haystack)
 }
 
 /* List one is extended and returned
- * List two is freed (but not its data)
  */
 PMList* list_merge(PMList *one, PMList *two)
 {
-	PMList *lp;
+	PMList *lp, *ptr;
+
+	if(two == NULL) {
+		return one;
+	}
+
+	ptr = one;
+	if(ptr == NULL) {
+		ptr = list_new();
+	}
 
 	for(lp = two; lp; lp = lp->next) {
 		if(lp->data) {
-			list_add(one, lp->data);
+			ptr = list_add(ptr, lp->data);
 			lp->data = NULL;
 		}
 	}
-	list_free(two);
 
-	return(one);
+	return(ptr);
 }
 
 PMList* list_last(PMList *list)
@@ -193,7 +200,7 @@ void list_display(const char *title, PMList *list)
 	}
 
 	len = strlen(title);
-	printf("%s", title);
+	printf("%s ", title);
 
 	if(list) {
 		for(lp = list, cols = len; lp; lp = lp->next) {
@@ -202,7 +209,7 @@ void list_display(const char *title, PMList *list)
 				int i;
 				cols = len;
 				printf("\n");
-				for (i = 0; i < len; i++) {
+				for (i = 0; i < len+1; i++) {
 					printf(" ");
 				}
 			}

@@ -21,6 +21,8 @@
 #ifndef _PAC_LIST_H
 #define _PAC_LIST_H
 
+#define FREELIST(p) { list_free(p); p = NULL; }
+
 /* your average linked list */
 typedef struct __pmlist_t {
 	void*   data;

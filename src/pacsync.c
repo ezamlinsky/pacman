@@ -69,8 +69,7 @@ int sync_synctree()
 			fprintf(stderr, "failed to synchronize %s\n", sync->treename);
 			success = 0;
 		}
-		list_free(files);
-		files = NULL;
+		FREELIST(files);
 		snprintf(path, PATH_MAX, "%s/%s.db.tar.gz", ldir, sync->treename);
 
 		if(success) {

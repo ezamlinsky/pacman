@@ -23,6 +23,8 @@
 
 #include "list.h"
 
+#define FREEPKG(p) { freepkg(p); p = NULL; }
+
 /* mods for depend_t.mod */
 #define DEP_ANY 0
 #define DEP_EQ	1

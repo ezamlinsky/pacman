@@ -1,5 +1,15 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.6.2         - Fixed a memory cleanup bug
+              - Aurelien's patch:
+                - bug #159 implemented (for -S and -R)
+                - fixed a bug with pacman -Sg (pacman was browsing only one
+                  db to get groups)
+                - fixed a bug with list_merge()
+                - fixed some MLK (in dumppkg() and with "-Qi --orphans")
+                - now "pacman -Sg" only displays groups (without content)
+                  whereas "pacman -Sg target1 target2" displays groups
+                  target1 and target2 with content
 2.6.1         - Added http download support (Aurelien Foret)
               - Improved makepkg's --builddeps behaviour when called via
                 makeworld

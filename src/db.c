@@ -73,10 +73,7 @@ PMList* db_loadpkgs(pacdb_t *db, PMList *pkgcache)
 
 	/* if pm_packages already contains data, free it first */
 	for(lp = pkgcache; lp; lp = lp->next) {
-		if(lp->data) {
-			freepkg(lp->data);
-			lp->data = NULL;
-		}
+		FREEPKG(lp->data);
 	}
 	list_free(pkgcache);
 	
@@ -522,8 +519,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 				}
 			}
 		}
-		freepkg(dbpkg);
-		dbpkg = NULL;
+		FREEPKG(dbpkg);
 	}
 
 	return(conflicts);
@@ -540,10 +536,10 @@ PMList *whatprovides(pacdb_t *db, char* package)
 		if(is_in(package, info->provides)) {
 			i = list_add(i, strdup(info->name));
 		}
-		freepkg(info);
+		FREEPKG(info);
 	}
 	pkgs = list_sort(i);
-	list_free(i);
+	FREELIST(i);
 
 	return(pkgs);
 }
@@ -565,10 +561,10 @@ PMList *find_groups(pacdb_t *db)
 				i = list_add(i, strdup((char*)lp->data));
 			}
 		}
-		freepkg(info);
+		FREEPKG(info);
 	}
 	groups = list_sort(i);
-	list_free(i);
+	FREELIST(i);
 
 	return(groups);
 }
@@ -590,10 +586,10 @@ PMList *pkg_ingroup(pacdb_t *db, char *group)
 				i = list_add(i, strdup(info->name));
 			}
 		}
-		freepkg(info);
+		FREEPKG(info);
 	}
 	pkg = list_sort(i);
-	list_free(i);
+	FREELIST(i);
 
 	return(pkg);
 }

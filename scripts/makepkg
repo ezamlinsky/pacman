@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.6.1'
+myver='2.6.2'
 startdir=`pwd`
 
 # source Arch's abs.conf if it's present

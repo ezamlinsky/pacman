@@ -251,14 +251,14 @@ void freepkg(pkginfo_t *pkg)
 		return;
 	}
 
-	list_free(pkg->files);
-	list_free(pkg->backup);
-	list_free(pkg->depends);
-	list_free(pkg->conflicts);
-	list_free(pkg->requiredby);
-	list_free(pkg->groups);
-	list_free(pkg->provides);
-	list_free(pkg->replaces);
+	FREELIST(pkg->files);
+	FREELIST(pkg->backup);
+	FREELIST(pkg->depends);
+	FREELIST(pkg->conflicts);
+	FREELIST(pkg->requiredby);
+	FREELIST(pkg->groups);
+	FREELIST(pkg->provides);
+	FREELIST(pkg->replaces);
 	FREE(pkg);
 	return;
 }
@@ -310,8 +310,8 @@ void dump_pkg(pkginfo_t *info)
 	printf("Name           : %s\n", info->name);
 	printf("Version        : %s\n", info->version);
 	pm = list_sort(info->groups);
-	list_display("Groups         : ", pm);
-	FREE(pm);
+	list_display("Groups         :", pm);
+	FREELIST(pm);
 	printf("Packager       : %s\n", info->packager);
 	printf("URL            : %s\n", (info->url ? info->url : "None"));
 	printf("Size           : %ld\n", info->size);
@@ -319,17 +319,17 @@ void dump_pkg(pkginfo_t *info)
 	printf("Install Date   : %s %s\n", info->installdate, strlen(info->installdate) ? "UTC" : "");
 	printf("Install Script : %s\n", (info->scriptlet ? "Yes" : "No"));
 	pm = list_sort(info->provides);
-	list_display("Provides       : ", pm); 
-	FREE(pm);
+	list_display("Provides       :", pm); 
+	FREELIST(pm);
 	pm = list_sort(info->depends);
-	list_display("Depends On     : ", pm); 
-	FREE(pm);
+	list_display("Depends On     :", pm); 
+	FREELIST(pm);
 	pm = list_sort(info->requiredby);
-	list_display("Required By    : ", pm);
-	FREE(pm);
+	list_display("Required By    :", pm);
+	FREELIST(pm);
 	pm = list_sort(info->conflicts);
-	list_display("Conflicts With : ", pm);
-	FREE(pm);
+	list_display("Conflicts With :", pm);
+	FREELIST(pm);
 	printf("Description    : %s\n", info->desc);
 }
 
