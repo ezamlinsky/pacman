@@ -211,6 +211,9 @@ install/upgrade.  \fINote:\fP do not include the leading slash when specifying f
 .B "UseSyslog"
 Log action messages through syslog().  This will insert pacman log entries into your
 /var/log/messages or equivalent.
+.TP
+.B "LogFile = /path/to/file"
+Log actions directly to a file, usually /var/log/pacman.log.
 
 .SH CONFIG: REPOSITORIES
 Each repository section defines a section name and at least one location where the packages

@@ -1,4 +1,4 @@
-.TH makepkg 8 "September 01, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "November 22, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -36,7 +36,8 @@ pkgrel=1
 pkgdesc="Utilities for inserting and removing modules from the linux kernel"
 url="http://www.kernel.org"
 backup=(etc/modules.conf)
-depends=('mawk' 'bash' 'glibc' 'zlib')
+makedepends=('bash' 'mawk')
+depends=('glibc' 'zlib')
 source=(ftp://ftp.kernel.org/pub/linux/utils/kernel/$pkgname/v2.4/$pkgname-$pkgver.tar.bz2 \\
         modules.conf)
 md5sums=('2c0cca3ef6330a187c6ef4fe41ecaa4d' \\
@@ -64,9 +65,11 @@ The line with \fIbackup=\fP specifies files that should be treated specially
 when removing or upgrading packages.  See \fBHANDLING CONFIG FILES\fP in
 the \fIpacman\fP manpage for more information on this.
 
-The seventh line lists the dependencies for this package.  In order to build/run
-the package, all dependencies must be satisifed first.  makepkg will check this
-before attempting to build the package.
+Lines 7 and 8 list the dependencies for this package.  The \fIdepends\fP array
+specifies the run-time dependencies and \fImakedepends\fP specifies the build-time
+dependencies.  In order to run the package, \fIdepends\fP must be satisfied.  To
+build the package, \fBall\fP dependencies must be satisifed first.  makepkg
+will check this before attempting to build the package.
 
 The \fIsource\fP array tells makepkg which files to download/extract before compiling
 begins.  The \fImd5sums\fP array provides md5sums for each of these files.  These
@@ -97,6 +100,8 @@ make prefix=$startdir/pkg/usr install
 .fi
 .RE
 Notice that the "/usr" portion should be present with "prefix", but not "DESTDIR".
+"DESTDIR" is the favorable option to use, but not all Makefiles support it.  Use
+"prefix" only when "DESTDIR" is unavailable.
 
 Once the package is successfully installed into the package root, \fImakepkg\fP
 will remove some directories (as per Arch Linux package guidelines; if you use
@@ -215,6 +220,15 @@ does not already exist in /var/cache/pacman/src, the file is downloaded
 by wget.
 
 .TP
+.B md5sums \fI(array)\fP
+If this field is present, it should contain an MD5 hash for every source file
+specified in the \fIsource\fP array (in the same order).  makepkg will use
+this to verify source file integrity during subsequent builds.  To easily
+generate md5sums, first build using the PKGBUILD then run
+\fBmakepkg -g >>PKGBILD\fP.  Then you can edit the PKGBUILD and move the
+\fImd5sums\fP line from the bottom to an appropriate location.
+
+.TP
 .B groups \fI(array)\fP
 This is an array of symbolic names that represent groups of packages, allowing
 you to install multiple packages by requesting a single target.  For example,
@@ -236,6 +250,11 @@ package name.  They can also include a version requirement of the form
 \fBname<>version\fP, where <> is one of these three comparisons: \fB>=\fP
 (greater than equal to), \fB<=\fP (less than or equal to), or \fB=\fP (equal to).
 See the PKGBUILD example above for an example of the \fIdepends\fP directive.
+
+.TP
+.B makedepends \fI(array)\fP
+An array of packages that this package depends on to build (ie, not required
+to run).  Packages in this list should follow the same format as \fIdepends\fP.
 
 .TP
 .B conflicts \fI(array)\fP 
@@ -260,8 +279,8 @@ to the differing package names.  \fIreplaces\fP handles this.
 .SH MAKEPKG OPTIONS
 .TP
 .B "\-b, \-\-builddeps"
-Build missing dependencies from source.  When makepkg finds missing
-dependencies, it will look for the dependencies' PKGBUILD files under
+Build missing dependencies from source.  When makepkg finds missing build-time or
+run-time dependencies, it will look for the dependencies' PKGBUILD files under
 $ABSROOT (set in your /etc/makepkg.conf).  If it finds them it will
 run another copy of makepkg to build and install the missing dependencies.
 The child makepkg calls will be made with the \fB-b\fP and \fB-i\fP options.
@@ -299,9 +318,13 @@ Do not strip binaries and libraries.
 .B "\-p <buildscript>"
 Read the package script \fI<buildscript>\fP instead of the default (\fIPKGBUILD\fP).
 .TP
+.B "\-r, \-\-rmdeps"
+Upon successful build, remove any dependencies installed by makepkg/pacman during
+dependency auto-resolution (using \fB-b\fP or \fB-s\fP).
+.TP
 .B "\-s, \-\-syncdeps"
-Install missing dependencies using pacman.  When makepkg finds missing
-dependencies, it will run pacman to try and resolve them.  If successful,
+Install missing dependencies using pacman.  When makepkg finds missing build-time
+or run-time dependencies, it will run pacman to try and resolve them.  If successful,
 pacman will download the missing packages from a package repository and
 install them for you.
 .TP

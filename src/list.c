@@ -183,6 +183,7 @@ PMList *list_sort(PMList *list)
 
 	if(arr) {
 		free(arr);
+		arr = NULL;
 	}
 
 	return(lp);

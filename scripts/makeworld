@@ -21,7 +21,7 @@
 #
 
 toplevel=`pwd`
-version="2.6.4"
+version="2.7"
 
 usage() {
 	echo "makeworld version $version"
@@ -33,6 +33,7 @@ usage() {
 	echo "  -f, --force      Overwrite existing packages"
 	echo "  -i, --install    Install package after successful build"
 	echo "  -h, --help       This help"
+	echo "  -r, --rmdeps     Remove installed dependencies after a successful build"
 	echo "  -s, --syncdeps   Install missing dependencies with pacman"
 	echo
 	echo "  where <category> is one or more directory names under the ABS root"
@@ -55,6 +56,7 @@ for arg in $*; do
 		--builddeps) MAKEPKG_OPTS="$MAKEPKG_OPTS -b" ;;
 		--nodeps)    MAKEPKG_OPTS="$MAKEPKG_OPTS -d" ;;
 		--force)     MAKEPKG_OPTS="$MAKEPKG_OPTS -f" ;;
+		--rmdeps)    MAKEPKG_OPTS="$MAKEPKG_OPTS -r" ;;
 		--help)
 			usage
 			exit 0
@@ -64,7 +66,7 @@ for arg in $*; do
 			exit 1
 			;;
 		-*)
-			while getopts "chisbdf-" opt; do
+			while getopts "chisbdfr-" opt; do
 				case $opt in
 					c) MAKEPKG_OPTS="$MAKEPKG_OPTS -c" ;;
 					i) MAKEPKG_OPTS="$MAKEPKG_OPTS -i" ;;
@@ -72,6 +74,7 @@ for arg in $*; do
 					b) MAKEPKG_OPTS="$MAKEPKG_OPTS -b" ;;
 					d) MAKEPKG_OPTS="$MAKEPKG_OPTS -d" ;;
 					f) MAKEPKG_OPTS="$MAKEPKG_OPTS -f" ;;
+					r) MAKEPKG_OPTS="$MAKEPKG_OPTS -r" ;;
 					h)
 						usage
 						exit 0
@@ -99,6 +102,11 @@ if [ "$dest" = "" ]; then
 	usage
 	exit 1
 fi
+
+# convert a (possibly) relative path to absolute
+cd $dest
+dest=`pwd`
+cd -
 
 sd=`date +"[%b %d %H:%M]"`
 

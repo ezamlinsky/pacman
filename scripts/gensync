@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.6.4'
+myver='2.7'
 
 usage() {
   echo "gensync $myver"
@@ -42,6 +42,22 @@ usage() {
   exit 0
 }
 
+get_md5checksum()
+{
+	source $1 || return 1
+	if [ "$pkgdir" != "" ]; then
+		pkgfile="$pkgdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
+	else
+		pkgfile="$destdir/$pkgname-$pkgver-$pkgrel.pkg.tar.gz"
+	fi
+	if [ -f $pkgfile ]; then
+		md5line=`md5sum $pkgfile`
+		[ ! -z "$md5line" ] && pkgmd5sum=${md5line%  *}
+		echo $pkgmd5sum
+	fi
+	return 0
+}
+
 db_write_entry()
 {
 	unset pkgname pkgver pkgrel pkgdesc
@@ -61,6 +77,11 @@ db_write_entry()
 	echo "%DESC%" >>desc
 	echo "$pkgdesc" >>desc
 	echo "" >>desc
+	if [ ! -z $pkgmd5sum ]; then
+		echo "%MD5SUM%" >>desc
+		echo "$pkgmd5sum" >>desc
+		echo "" >>desc
+	fi
 	if [ ${#groups[*]} -gt 0 ]; then
 		echo "%GROUPS%" >>desc
 		for it in "${groups[@]}"; do
@@ -111,11 +132,14 @@ if [ "$1" = "-h" -o "$1" = "--help" ]; then
 fi
 
 d=`dirname $1`
-rootdir=`cd $d && pwd`
-rootdir="$rootdir/`basename $1`"
+rootdir=`cd $d && pwd`/`basename $1`
 d=`dirname $2`
-destfile=`cd $d && pwd`
-destfile="$destfile/`basename $2`"
+destdir=`cd $d && pwd`
+destfile="$destdir/`basename $2`"
+pkgdir=
+if [ "$3" != "" ]; then
+	pkgdir=$3
+fi
 
 rm -rf /tmp/.gensync || exit 1
 mkdir -p /tmp/.gensync || exit 1
@@ -126,9 +150,16 @@ if [ ! -d $rootdir ]; then
 	exit 1
 fi
 
-echo "gensync: building database entries..." >&2
+echo "gensync: building database entries, generating md5sums..." >&2
+cd `dirname $2`
 #for category in `find $rootdir/* -type d -maxdepth 0`; do
 for file in `find $rootdir/* -name PKGBUILD`; do
+	pkgmd5sum=`get_md5checksum $file $pkgdir`
+	if [ -z $pkgmd5sum ]; then
+		echo "gensync: error generating checksum for $file" >&2
+		rm -rf /tmp/.gensync
+		exit 1
+	fi
 	db_write_entry $file
 	if [ $? -gt 0 ]; then
 		echo "gensync: error writing entry for $file" >&2

@@ -62,21 +62,14 @@ void db_close(pacdb_t* db)
 /* frees pkgcache if necessary and returns a new package
  * cache from db 
  */
-PMList* db_loadpkgs(pacdb_t *db, PMList *pkgcache)
+PMList* db_loadpkgs(pacdb_t *db)
 {
 	pkginfo_t *info;
-	PMList *lp;
 	pkginfo_t **arr = NULL;
 	unsigned int arrct = 0;
 	int i;
 	PMList *cache = NULL;
 
-	/* if pm_packages already contains data, free it first */
-	for(lp = pkgcache; lp; lp = lp->next) {
-		FREEPKG(lp->data);
-	}
-	list_free(pkgcache);
-	
 	rewinddir(db->dir);
 	while((info = db_scan(db, NULL, INFRQ_DESC)) != NULL) {
 		/* add to the collective */
@@ -168,7 +161,6 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 	if(ent == NULL) {
 		return(NULL);
 	}
-	info = newpkg();
 
 	/* we always load DESC */
 	inforeq |= INFRQ_DESC;
@@ -179,12 +171,15 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 		return(NULL);
 	}
 
+	info = newpkg();
+
 	/* DESC */
 	if(inforeq & INFRQ_DESC) {
 		snprintf(path, PATH_MAX, "%s/%s/desc", db->path, ent->d_name);
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "error: %s: %s\n", path, strerror(errno));
+			FREEPKG(info);
 			return(NULL);
 		}
 		while(!feof(fp)) {
@@ -194,16 +189,19 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 			trim(line);
 			if(!strcmp(line, "%NAME%")) {
 				if(fgets(info->name, sizeof(info->name), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->name);
 			} else if(!strcmp(line, "%VERSION%")) {
 				if(fgets(info->version, sizeof(info->version), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->version);
 			} else if(!strcmp(line, "%DESC%")) {
 				if(fgets(info->desc, sizeof(info->desc), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->desc);
@@ -214,27 +212,32 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 				}
 			} else if(!strcmp(line, "%URL%")) {
 				if(fgets(info->url, sizeof(info->url), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->url);
 			} else if(!strcmp(line, "%BUILDDATE%")) {
 				if(fgets(info->builddate, sizeof(info->builddate), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->builddate);
 			} else if(!strcmp(line, "%INSTALLDATE%")) {
 				if(fgets(info->installdate, sizeof(info->installdate), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->installdate);
 			} else if(!strcmp(line, "%PACKAGER%")) {
 				if(fgets(info->packager, sizeof(info->packager), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(info->packager);
 			} else if(!strcmp(line, "%SIZE%")) {
 				char tmp[32];
 				if(fgets(tmp, sizeof(tmp), fp) == NULL) {
+					FREEPKG(info);
 					return(NULL);
 				}
 				trim(tmp);
@@ -247,6 +250,14 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					char *s = strdup(line);
 					info->replaces = list_add(info->replaces, s);
 				}
+			} else if(!strcmp(line, "%MD5SUM%")) {
+				/* MD5SUM tag only appears in sync repositories,
+				 * not the local one.
+				 */
+				if(fgets(info->md5sum, sizeof(info->md5sum), fp) == NULL) {
+					FREEPKG(info);
+					return(NULL);
+				}
 			}
 		}
 		fclose(fp);
@@ -258,6 +269,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "error: %s: %s\n", path, strerror(errno));
+			FREEPKG(info);
 			return(NULL);
 		}
 		while(fgets(line, 256, fp)) {
@@ -284,6 +296,7 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 		fp = fopen(path, "r");
 		if(fp == NULL) {
 			fprintf(stderr, "db_read: error: %s: %s\n", path, strerror(errno));
+			FREEPKG(info);
 			return(NULL);
 		}
 		while(!feof(fp)) {

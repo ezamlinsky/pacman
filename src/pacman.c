@@ -77,6 +77,7 @@ unsigned short pmo_s_clean    = 0;
 unsigned short pmo_group      = 0;
 /* configuration file options */
 char          *pmo_dbpath       = NULL;
+char          *pmo_logfile      = NULL;
 PMList        *pmo_noupgrade    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 unsigned short pmo_usesyslog    = 0;
@@ -90,6 +91,7 @@ PMList *pm_packages = NULL;
 /* list of targets specified on command line */
 PMList *pm_targets  = NULL;
 
+FILE *logfd    = NULL;
 char *lckfile  = "/tmp/pacman.lck";
 char *workfile = NULL;
 enum {READ_ONLY, READ_WRITE} pm_access;
@@ -108,6 +110,11 @@ int main(int argc, char *argv[])
 		maxcols = atoi(cenv);
 	}
 
+	if(argc < 2) {
+		usage(PM_MAIN, (char*)basename(argv[0]));
+		return(0);
+	}
+
 	/* default root */
 	MALLOC(pmo_root, PATH_MAX);
 	strcpy(pmo_root, "/");
@@ -115,14 +122,11 @@ int main(int argc, char *argv[])
 	MALLOC(pmo_dbpath, PATH_MAX);
 	strcpy(pmo_dbpath, PKGDIR);
 
-	if(argc < 2) {
-		usage(PM_MAIN, (char*)basename(argv[0]));
-		return(0);
-	}
-
 	/* parse the command line */
 	ret = parseargs(PM_ADD, argc, argv);
 	if(ret) {
+		FREE(pmo_root);
+		FREE(pmo_dbpath);
 		return(ret);
 	}
 
@@ -159,6 +163,13 @@ int main(int argc, char *argv[])
 
 	if(pmo_usesyslog) {
 		openlog("pacman", 0, LOG_USER);
+	}
+	if(pmo_logfile && geteuid() == 0) {
+		/* open the log file */
+		logfd = fopen(pmo_logfile, "a");
+		if(logfd == NULL) {
+			perror("warning: cannot open logfile");
+		}
 	}
 
 	/* check for db existence */
@@ -198,7 +209,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* load pm_packages cache */
-	pm_packages = db_loadpkgs(db_local, pm_packages);
+	pm_packages = db_loadpkgs(db_local);
 
 	/* start the requested operation */
 	switch(pmo_op) {
@@ -213,9 +224,6 @@ int main(int argc, char *argv[])
 						 ret = 1;
 	}
 	db_close(db_local);
-	FREELIST(pm_packages);
-	FREE(pmo_root);
-	FREE(pmo_dbpath);
 	cleanup(ret);
 	/* not reached */
 	return(0);
@@ -316,7 +324,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		}
 
 		oldmask = umask(0000);
-  	if(makepath("/var/cache/pacman/pkg")) {
+		if(makepath("/var/cache/pacman/pkg")) {
 			fprintf(stderr, "error: could not create new cache directory: %s\n", strerror(errno));
 			return(1);
 		}
@@ -329,9 +337,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	if(pmo_s_sync) {
 		/* grab a fresh package list */
 		printf(":: Synchronizing package databases... \n");
-		if(pmo_usesyslog) {
-			syslog(LOG_INFO, "synchronizing package lists");
-		}
+		logaction(NULL, "synchronizing package lists");
 		sync_synctree();
 	}
 
@@ -351,8 +357,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		dbs->sync = sync;
 		dbs->db = db_sync;
 		/* cache packages */
-		dbs->pkgcache = NULL;
-		dbs->pkgcache = db_loadpkgs(db_sync, dbs->pkgcache);
+		dbs->pkgcache = db_loadpkgs(db_sync);
 		databases = list_add(databases, dbs);
 	}
 
@@ -454,9 +459,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	} else if(pmo_s_upgrade) {
 		int newer = 0;
 		int ignore = 0;
-		if(pmo_usesyslog) {
-			syslog(LOG_INFO, "starting full system upgrade");
-		}
+		logaction(NULL, "starting full system upgrade");
 		/* check for "recommended" package replacements */
 		for(i = databases; i && allgood; i = i->next) {
 			dbsync_t *dbs = (dbsync_t*)i->data;
@@ -571,58 +574,81 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		for(i = targets; i && allgood; i = i->next) {
 			if(i->data) {
 				int cmp, found = 0;
+				char *treename;
+				char *targ;
+				char *targline;
 				pkginfo_t *local;
 				syncpkg_t *sync = NULL;
 				MALLOC(sync, sizeof(syncpkg_t));
 				sync->replaces = NULL;
 
+				targline = strdup((char*)i->data);
+				targ = index(targline, '/');
+				if(targ) {
+					*targ = '\0';
+					targ++;
+					treename = targline;
+				} else {
+					targ = targline;
+					treename = NULL;
+				}
+
 				for(j = databases; !found && j; j = j->next) {
 					dbsync_t *dbs = (dbsync_t*)j->data;
 					for(k = dbs->pkgcache; !found && k; k = k->next) {
 						pkginfo_t *pkg = (pkginfo_t*)k->data;
-						if(!strcmp((char*)i->data, pkg->name)) {
-							found = 1;
-							sync->dbs = dbs;
-							/* re-fetch the package record with dependency info */
-							sync->pkg = db_scan(sync->dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
-							if(sync->pkg == NULL) {
-								found = 0;
+						if(!strcmp(targ, pkg->name)) {
+							if(treename == NULL || 
+									(treename && !strcmp(treename, dbs->sync->treename))) {
+								found = 1;
+								sync->dbs = dbs;
+								/* re-fetch the package record with dependency info */
+								sync->pkg = db_scan(sync->dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
+								if(sync->pkg == NULL) {
+									found = 0;
+								}
 							}
 						}
 					}
 				}
 				if(!found) {
-					/* target not found: check if it's a group */
-					k = NULL;
-					for(j = databases; j; j = j->next) {
-						dbsync_t *dbs = (dbsync_t*)j->data;
-						PMList *l = pkg_ingroup(dbs->db, (char *)i->data);
-						k = list_merge(k, l);
-						FREELIST(l);
-					}
-					if(k != NULL) {
-						printf(":: group %s:\n", (char*)i->data);
-						list_display("   ", k);
-						if(yesno("    Install whole content? [Y/n] ")) {
-							targets = list_merge(targets, k);
-							FREELIST(k);
-						} else {
-							PMList *l;
-							for(l = k; l; l = l->next) {
-								if(yesno(":: install %s from group %s? [Y/n] ", (char*)l->data, (char*)i->data)) {
-									targets = list_add(targets, strdup((char*)l->data));
+					if(treename == NULL) {
+						/* target not found: check if it's a group */
+						k = NULL;
+						for(j = databases; j; j = j->next) {
+							dbsync_t *dbs = (dbsync_t*)j->data;
+							PMList *l = pkg_ingroup(dbs->db, targ);
+							k = list_merge(k, l);
+							FREELIST(l);
+						}
+						if(k != NULL) {
+							printf(":: group %s:\n", targ);
+							list_display("   ", k);
+							if(yesno("    Install whole content? [Y/n] ")) {
+								targets = list_merge(targets, k);
+								FREELIST(k);
+							} else {
+								PMList *l;
+								for(l = k; l; l = l->next) {
+									if(yesno(":: install %s from group %s? [Y/n] ", (char*)l->data, targ)) {
+										targets = list_add(targets, strdup((char*)l->data));
+									}
 								}
 							}
+							FREELIST(k);
+						} else {
+							fprintf(stderr, "%s: not found in sync db\n", targ);
+							allgood = 0;
 						}
-						FREELIST(k);
 					} else {
-						fprintf(stderr, "%s: not found in sync db\n", (char*)i->data);
+						fprintf(stderr, "%s: not present in \"%s\" repository\n", targ, treename);
 						allgood = 0;
 					}
 					FREE(sync);
+					FREE(targline);
 					continue;
 				}
-				local = db_scan(db, (char*)i->data, INFRQ_DESC);
+				local = db_scan(db, targ, INFRQ_DESC);
 				if(local && !pmo_s_downloadonly) {
 					/* this is an upgrade, compare versions and determine if it is necessary */
 					cmp = rpmvercmp(local->version, sync->pkg->version);
@@ -632,6 +658,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							FREEPKG(local);
 							FREEPKG(sync->pkg);
 							FREE(sync);
+							FREE(targline);
 							continue;
 						}
 					} else if(cmp == 0) {
@@ -640,6 +667,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							FREEPKG(local);
 							FREEPKG(sync->pkg);
 							FREE(sync);
+							FREE(targline);
 							continue;
 						}
 					}
@@ -659,7 +687,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		}
 	}
 
-	if(allgood) {
+	if(allgood && !pmo_s_search) {
 		/* check for inter-conflicts and whatnot */
 		if(!pmo_nodeps && !pmo_s_downloadonly) {
 			int errorout = 0;
@@ -757,7 +785,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 		/* any packages in rmtargs need to be removed from final. */
 		/* rather than ripping out nodes from final, we just copy over */
-	  /* our "good" nodes to a new list and reassign. */
+		/* our "good" nodes to a new list and reassign. */
 		k = NULL;
 		for(i = final; i; i = i->next) {
 			syncpkg_t *s = (syncpkg_t*)i->data;
@@ -779,6 +807,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		/* list targets */
 		if(final && final->data && allgood) {
 			PMList *list = NULL;
+			char *str;
 			for(i = rmtargs; i; i = i->next) {
 				list = list_add(list, strdup(i->data));
 			}
@@ -791,9 +820,11 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 			if(list) {
 				printf("\nRemove:  ");
-				indentprint(buildstring(list), 9);
+				str = buildstring(list);
+				indentprint(str, 9);
 				printf("\n");
 				FREELIST(list);
+				FREE(str);
 			}
 			for(i = final; i; i = i->next) {
 				syncpkg_t *s = (syncpkg_t*)i->data;
@@ -805,9 +836,11 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				}
 			}
 			printf("\nTargets: ");
-			indentprint(buildstring(list), 9);
+			str = buildstring(list);
+			indentprint(str, 9);
 			printf("\n");
 			FREELIST(list);
+			FREE(str);
 		}
 
 		/* get confirmation */
@@ -835,6 +868,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		PMList *processed = NULL;
 		PMList *files = NULL;
 
+		snprintf(ldir, PATH_MAX, "%svar/cache/pacman/pkg", pmo_root);
+
 		/* group sync records by repository and download */
 		while(!done) {
 			if(current) {
@@ -853,8 +888,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					struct stat buf;
 					char path[PATH_MAX];
 
-					snprintf(path, PATH_MAX, "%svar/cache/pacman/pkg/%s-%s.pkg.tar.gz",
-						pmo_root, sync->pkg->name, sync->pkg->version);
+					snprintf(path, PATH_MAX, "%s/%s-%s.pkg.tar.gz",
+						ldir, sync->pkg->name, sync->pkg->version);
 					if(stat(path, &buf)) {
 						/* file is not in the cache dir, so add it to the list */
 						snprintf(path, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);					
@@ -865,7 +900,6 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					}
 				}
 			}
-			snprintf(ldir, PATH_MAX, "%svar/cache/pacman/pkg", pmo_root);
 
 			if(files) {
 				struct stat buf;
@@ -878,14 +912,14 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 
 					/* no cache directory.... try creating it */
 					snprintf(parent, PATH_MAX, "%svar/cache/pacman", pmo_root);
-					logaction("warning: no %s cache exists.  creating...\n", ldir);
+					logaction(stderr, "warning: no %s cache exists.  creating...\n", ldir);
 					oldmask = umask(0000);
 					mkdir(parent, 0755);
 					if(mkdir(ldir, 0755)) {				
 						/* couldn't mkdir the cache directory, so fall back to /tmp and unlink
 						 * the package afterwards.
 						 */
-						logaction("warning: couldn't create package cache, using /tmp instead\n");
+						logaction(stderr, "warning: couldn't create package cache, using /tmp instead\n");
 						snprintf(ldir, PATH_MAX, "/tmp");
 						varcache = 0;
 					}
@@ -907,6 +941,55 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		/* double-check */
 		FREELIST(files);
 
+		/* Check integrity of files */
+		printf("checking package integrity... ");
+		fflush(stdout);
+
+		for(i = final; i; i = i->next) {
+			syncpkg_t *sync;
+			char str[PATH_MAX], pkgname[PATH_MAX];
+			char *md5sum1, *md5sum2;
+
+			sync = (syncpkg_t*)i->data;
+			snprintf(pkgname, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);
+
+			md5sum1 = sync->pkg->md5sum;
+			if(md5sum1 == NULL || md5sum1[0] == '\0') {
+				if(allgood) {
+					printf("\n");
+				}
+				fprintf(stderr, "error: can't get md5 checksum for package %s\n", pkgname);
+				allgood = 0;
+				continue;
+			}
+			snprintf(str, PATH_MAX, "%s/%s", ldir, pkgname);
+			md5sum2 = MDFile(str);
+			if(md5sum2 == NULL || md5sum2[0] == '\0') {
+				if(allgood) {
+					printf("\n");
+				}
+				fprintf(stderr, "error: can't get md5 checksum for archive %s\n", pkgname);
+				FREE(md5sum1);
+				allgood = 0;
+				continue;
+			}
+
+			if(strcmp(md5sum1, md5sum2) != 0) {
+				if(allgood) {
+					printf("\n");
+				}
+				fprintf(stderr, "error: archive %s is corrupted\n", pkgname);
+				allgood = 0;
+			}
+
+			FREE(md5sum2);
+		}
+		if(allgood) {
+			printf("done.\n");
+		} else {
+			fprintf(stderr, "\n");
+		}
+
 		if(!pmo_s_downloadonly) {
 			/* remove any conflicting packages (WITH dep checks) */
 			if(rmtargs) {
@@ -918,7 +1001,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					allgood = 0;
 				}
 				/* reload package cache */
-				pm_packages = db_loadpkgs(db, pm_packages);
+				FREELISTPKGS(pm_packages);
+				pm_packages = db_loadpkgs(db);
 			}
 			FREELIST(rmtargs);
 			for(i = final; allgood && i; i = i->next) {
@@ -996,10 +1080,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		syncpkg_t *sync = (syncpkg_t*)i->data;
 		if(sync) {
 			FREEPKG(sync->pkg);
-			for(j = sync->replaces; j; j = j->next) {
-				FREEPKG(j->data);
-			}
-			FREELIST(sync->replaces);
+			FREELISTPKGS(sync->replaces);
 		}
 		FREE(sync);
 		i->data = NULL;
@@ -1011,13 +1092,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	for(i = databases; i; i = i->next) {
 		dbsync_t *dbs = (dbsync_t*)i->data;
 		db_close(dbs->db);
-		for(j = dbs->pkgcache; j; j = j->next) {
-			if(j->data) {
-				freepkg(j->data);
-				j->data = NULL;
-			}
-		}
-		FREELIST(dbs->pkgcache);
+		dbs->db = NULL;
+		FREELISTPKGS(dbs->pkgcache);
 		FREE(dbs);
 		i->data = NULL;
 	}
@@ -1131,10 +1207,10 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				}
 				if(rmtargs && !errorout) {
 					int retcode;
-				 	int oldupg = pmo_upgrade;
+					int oldupg = pmo_upgrade;
 					/* any packages in rmtargs need to be removed from alltargs. */
 					/* rather than ripping out nodes from alltargs, we just copy over */
-				  /* our "good" nodes to a new list and reassign. */
+					/* our "good" nodes to a new list and reassign. */
 					k = NULL;
 					for(lp = alltargs; lp; lp = lp->next) {
 						pkginfo_t *p = (pkginfo_t*)lp->data;
@@ -1162,7 +1238,8 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						return(1);
 					}
 					/* reload package cache */
-					pm_packages = db_loadpkgs(db, pm_packages);
+					FREELISTPKGS(pm_packages);
+					pm_packages = db_loadpkgs(db);
 					pmo_upgrade = oldupg;
 				}
 			}
@@ -1236,7 +1313,8 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						return(1);
 					}
 					/* reload package cache */
-					pm_packages = db_loadpkgs(db, pm_packages);
+					FREELISTPKGS(pm_packages);
+					pm_packages = db_loadpkgs(db);
 				}
 			} else {
 				/* no previous package version is installed, so this is actually just an
@@ -1302,8 +1380,8 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				/* extract the package's version to a temporary file and md5 it */
 				temp = strdup("/tmp/pacman_XXXXXX");
 				mkstemp(temp);
-			  if(tar_extract_file(tar, temp)) {
-					logaction("could not extract %s: %s\n", pathname, strerror(errno));
+				if(tar_extract_file(tar, temp)) {
+					logaction(stderr, "could not extract %s: %s\n", pathname, strerror(errno));
 					errors++;
 					continue;
 				}
@@ -1340,13 +1418,13 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						char newpath[PATH_MAX];
 						snprintf(newpath, PATH_MAX, "%s.pacorig", expath);
 						if(rename(expath, newpath)) {
-							logaction("error: could not rename %s: %s\n", expath, strerror(errno));
+							logaction(stderr, "error: could not rename %s: %s\n", expath, strerror(errno));
 						}
 						if(copyfile(temp, expath)) {
-							logaction("error: could not copy %s to %s: %s\n", temp, expath, strerror(errno));
+							logaction(stderr, "error: could not copy %s to %s: %s\n", temp, expath, strerror(errno));
 							errors++;
 						} else {
-							logaction("warning: %s saved as %s\n", expath, newpath);
+							logaction(stderr, "warning: %s saved as %s\n", expath, newpath);
 						}
 					}
 				} else if(md5_orig) {					
@@ -1373,9 +1451,9 @@ int pacman_add(pacdb_t *db, PMList *targets)
 						installnew = 1;
 						snprintf(newpath, PATH_MAX, "%s.pacsave", expath);
 						if(rename(expath, newpath)) {
-							logaction("error: could not rename %s: %s\n", expath, strerror(errno));
+							logaction(stderr, "error: could not rename %s: %s\n", expath, strerror(errno));
 						} else {
-							logaction("warning: %s saved as %s\n", expath, newpath);
+							logaction(stderr, "warning: %s saved as %s\n", expath, newpath);
 						}
 					}
 
@@ -1399,11 +1477,11 @@ int pacman_add(pacdb_t *db, PMList *targets)
 				} else {
 					vprint("%s is in NoUpgrade - skipping\n", pathname);
 					strncat(expath, ".pacnew", PATH_MAX);
-					logaction("warning: extracting %s%s as %s\n", pmo_root, pathname, expath);
+					logaction(stderr, "warning: extracting %s%s as %s\n", pmo_root, pathname, expath);
 					/*tar_skip_regfile(tar);*/
 				}
-			  if(tar_extract_file(tar, expath)) {
-					logaction("could not extract %s: %s\n", pathname, strerror(errno));
+				if(tar_extract_file(tar, expath)) {
+					logaction(stderr, "could not extract %s: %s\n", pathname, strerror(errno));
 					errors++;
 				}
 				/* calculate an md5 hash if this is in info->backup */
@@ -1427,7 +1505,7 @@ int pacman_add(pacdb_t *db, PMList *targets)
 		tar_close(tar);
 		if(errors) {
 			ret = 1;
-			logaction("errors occurred while %s %s\n",
+			logaction(stderr, "errors occurred while %s %s\n",
 				(pmo_upgrade ? "upgrading" : "installing"), info->name);
 
 /* XXX: this "else" is disabled so the db_write() ALWAYS occurs.  If it doesn't
@@ -1462,17 +1540,15 @@ int pacman_add(pacdb_t *db, PMList *targets)
 			/* make an install date (in UTC) */
 			strncpy(info->installdate, asctime(gmtime(&t)), sizeof(info->installdate));
 			if(db_write(db, info)) {
-				logaction("error updating database for %s!\n", info->name);
+				logaction(stderr, "error updating database for %s!\n", info->name);
 				return(1);
 			}
 			vprint("done.\n");
-			if(pmo_usesyslog) {
-				if(pmo_upgrade && oldpkg) {
-					syslog(LOG_INFO, "upgraded %s (%s -> %s)\n", info->name,
+			if(pmo_upgrade && oldpkg) {
+				logaction(NULL, "upgraded %s (%s -> %s)", info->name,
 						oldpkg->version, info->version);
-				} else {
-					syslog(LOG_INFO, "installed %s (%s)\n", info->name, info->version);
-				}
+			} else {
+				logaction(NULL, "installed %s (%s)", info->name, info->version);
 			}
 
 			/* update dependency packages' REQUIREDBY fields */
@@ -1678,7 +1754,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 							newpath = (char*)realloc(newpath, strlen(line)+strlen(".pacsave")+1);
 							sprintf(newpath, "%s.pacsave", line);
 							rename(line, newpath);
-							logaction("warning: %s saved as %s\n", line, newpath);
+							logaction(stderr, "warning: %s saved as %s\n", line, newpath);
 						} else {
 							/*vprint("  unlinking %s\n", line);*/
 							if(unlink(line)) {
@@ -1761,9 +1837,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 		}
 		if(!pmo_upgrade) {
 			printf("done.\n");
-			if(pmo_usesyslog) {
-				syslog(LOG_INFO, "removed %s (%s)\n", info->name, info->version);
-			}
+			logaction(NULL, "removed %s (%s)\n", info->name, info->version);
 		}
 	}
 
@@ -1865,7 +1939,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				int gotcha = 0;
 				rewinddir(db->dir);
 				while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_FILES)) != NULL && !gotcha) {
-					for(lp = info->files; lp; lp = lp->next) {
+					for(lp = info->files; lp && !gotcha; lp = lp->next) {
 						sprintf(path, "%s%s", pmo_root, (char*)lp->data);
 						if(!strcmp(path, rpath)) {
 							printf("%s is owned by %s %s\n", package, info->name, info->version);
@@ -1915,12 +1989,45 @@ int pacman_query(pacdb_t *db, PMList *targets)
 		} else {
 			/* find a target */
 			if(pmo_q_info) {
-				info = db_scan(db, package, INFRQ_DESC | INFRQ_DEPENDS);
+				info = db_scan(db, package, INFRQ_ALL);
 				if(info == NULL) {
 					fprintf(stderr, "Package \"%s\" was not found.\n", package);
 					return(2);
 				}
 				dump_pkg(info);
+				if(pmo_q_info > 1 && info->backup) {
+					/* extra info */
+					printf("\n");
+					for(lp = info->backup; lp; lp = lp->next) {
+						struct stat buf;
+						char path[PATH_MAX];
+						char *md5sum;
+						char *str = strdup(lp->data);
+						char *ptr = index(str, '\t');
+						if(ptr == NULL) {
+							FREE(str);
+							continue;
+						}
+						*ptr = '\0';
+						ptr++;
+						snprintf(path, PATH_MAX-1, "%s%s", pmo_root, str);
+						if(!stat(path, &buf)) {
+							md5sum = MDFile(path);
+							if(md5sum == NULL) {
+								fprintf(stderr, "error calculating md5sum for %s\n", path);
+								continue;
+							}
+							if(strcmp(md5sum, ptr)) {
+								printf("MODIFIED\t%s\n", path);
+							} else {
+								printf("NOT MODIFIED\t%s\n", path);
+							}
+						} else {
+							printf("MISSING\t\t%s\n", path);
+						}
+						FREE(str);
+					}
+				}
 				printf("\n");
 			} else if(pmo_q_list) {
 				info = db_scan(db, package, INFRQ_DESC | INFRQ_FILES);
@@ -2319,7 +2426,7 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 			for(j = tp->depends; j; j = j->next) {
 				/* split into name/version pairs */				
 				if(splitdep((char*)j->data, &depend)) {
-					logaction("warning: invalid dependency in %s\n", (char*)tp->name);
+					logaction(stderr, "warning: invalid dependency in %s\n", (char*)tp->name);
 					continue;
 				}
 				found = 0;
@@ -2477,6 +2584,7 @@ int splitdep(char *depstr, depend_t *depend)
 	}
 
 	if(ptr == NULL) {
+		FREE(str);
 		return(0);
 	}
 	*ptr = '\0';
@@ -2589,7 +2697,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'e': pmo_q_orphans = 1; break;
 			case 'f': pmo_force = 1; break;
 			case 'g': pmo_group = 1; break;
-			case 'i': pmo_q_info = 1; break;
+			case 'i': pmo_q_info++; break;
 			case 'l': pmo_q_list = 1; break;
 			case 'n': pmo_nosave = 1; break;
 			case 'p': pmo_q_isfile = 1; break;
@@ -2735,6 +2843,9 @@ int parseconfig(char *configfile)
 						}
 						strncpy(pmo_dbpath, ptr, PATH_MAX);
 						vprint("config: dbpath: %s\n", pmo_dbpath);
+					} else if (!strcmp(key, "LOGFILE")) {
+						pmo_logfile = strndup(ptr, PATH_MAX);
+						vprint("config: log file: %s\n", pmo_logfile);
 					} else {
 						fprintf(stderr, "config: line %d: syntax error\n", linenum);
 						return(1);
@@ -2898,18 +3009,28 @@ void vprint(char *fmt, ...)
 	}
 }
 
-/* Output a message to stderr, and (optionally) syslog */
-void logaction(char *fmt, ...)
+/* Output a message to stderr, and (optionally) syslog and/or a logfile */
+void logaction(FILE *fp, char *fmt, ...)
 {
 	char msg[1024];
 	va_list args;
 	va_start(args, fmt);
 	vsnprintf(msg, 1024, fmt, args);
 	va_end(args);
-
-	fprintf(stderr, "%s", msg);
+	if(fp) {
+		fprintf(fp, "%s", msg);
+	}
 	if(pmo_usesyslog) {
 		syslog(LOG_WARNING, "%s", msg);
+	}
+	if(logfd) {
+		time_t t;
+		struct tm *tm;
+		t = time(NULL);
+		tm = localtime(&t);
+		
+		fprintf(logfd, "[%02d/%02d/%02d %02d:%02d] %s\n", tm->tm_mon, tm->tm_mday,
+				tm->tm_year-100, tm->tm_hour, tm->tm_min, msg);
 	}
 }
 
@@ -2958,8 +3079,10 @@ int lckrm(char *file)
 
 void cleanup(int signum)
 {
+	PMList *lp;
+
 	if(pm_access == READ_WRITE && lckrm(lckfile)) {
-		logaction("warning: could not remove lock file %s\n", lckfile);
+		logaction(stderr, "warning: could not remove lock file %s\n", lckfile);
 	}
 	if(workfile) {
 		/* remove the current file being downloaded (as it's not complete) */
@@ -2969,6 +3092,34 @@ void cleanup(int signum)
 	if(pmo_usesyslog) {
 		closelog();
 	}
+	if(logfd) {
+		fclose(logfd);
+	}
+
+	/* free memory */
+	for(lp = pmc_syncs; lp; lp = lp->next) {
+		sync_t *sync = (sync_t *)lp->data;
+		PMList *i;
+		for(i = sync->servers; i; i = i->next) {
+			server_t *server = (server_t *)i->data;
+			FREE(server->protocol);
+			FREE(server->server);
+			FREE(server->path);
+		}
+		FREELIST(sync->servers);
+		FREE(sync->treename);
+	}
+	FREELIST(pmc_syncs);
+	FREELIST(pmo_noupgrade);
+	FREELIST(pmo_ignorepkg);
+	FREE(pmo_root);
+	FREE(pmo_dbpath);
+
+	FREELIST(pm_targets);
+
+	/* this is segfaulting... quick fix for now 
+	FREELISTPKGS(pm_packages);*/
+
 	exit(signum);
 }
 

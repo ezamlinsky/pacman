@@ -22,7 +22,7 @@
 #define _PAC_PACMAN_H
 
 #ifndef PACVER
-#define PACVER    "2.6.4"
+#define PACVER    "2.7"
 #endif
 
 #ifndef PKGDIR
@@ -64,7 +64,7 @@ void usage(int op, char *myname);
 void version(void);
 
 void vprint(char *fmt, ...);
-void logaction(char *fmt, ...);
+void logaction(FILE *fp, char *fmt, ...);
 char* buildstring(PMList *strlist);
 int lckmk(char *file, int retries, unsigned int sleep_secs);
 int lckrm(char *lckfile);

@@ -69,10 +69,12 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 			parse_descfile(descfile, info, &backup, output);
 			if(!strlen(info->name)) {
 				fprintf(stderr, "load_pkg: missing package name in %s.\n", pkgfile);
+				FREEPKG(info);
 				return(NULL);
 			}
 			if(!strlen(info->version)) {
 				fprintf(stderr, "load_pkg: missing package version in %s.\n", pkgfile);
+				FREEPKG(info);
 				return(NULL);
 			}
 			for(lp = backup; lp; lp = lp->next) {
@@ -123,6 +125,7 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 			char errorstr[255];
 			snprintf(errorstr, 255, "bad package file in %s", pkgfile);
 			perror(errorstr);
+			FREEPKG(info);
 			return(NULL);
 		}
 		expath = NULL;
@@ -131,6 +134,7 @@ pkginfo_t* load_pkg(char *pkgfile, unsigned short output)
 
 	if(!config) {
 		fprintf(stderr, "load_pkg: missing package info file in %s\n", pkgfile);
+		FREEPKG(info);
 		return(NULL);
 	}
 
@@ -231,6 +235,7 @@ pkginfo_t* newpkg()
 	pkg->builddate[0]   = '\0';
 	pkg->installdate[0] = '\0';
 	pkg->packager[0]    = '\0';
+	pkg->md5sum[0]      = '\0';
 	pkg->size           = 0;
 	pkg->scriptlet      = 0;
 	pkg->requiredby     = NULL;

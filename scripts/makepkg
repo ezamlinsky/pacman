@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.6.4'
+myver='2.7'
 startdir=`pwd`
 
 # source Arch's abs.conf if it's present
@@ -46,7 +46,7 @@ strip_url() {
 }
 
 checkdeps() {
-	local missdep=`pacman -T $*`
+	local missdep=""
 	local deplist=""
 
 	missdep=`pacman -T $*`
@@ -77,6 +77,72 @@ checkdeps() {
 	echo $deplist
 }
 
+handledeps() {
+	local missingdeps=0
+	local deplist="$*"
+	local haveperm=0
+	if [ "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+		haveperm=1
+	fi
+
+	if [ "$deplist" != "" -a $haveperm -eq 1 ]; then
+		if [ "$DEP_BIN" = "1" ]; then
+			# install missing deps from binary packages (using pacman -S)
+			msg "==> Installing missing dependencies..."
+			pacman -D $deplist
+			if [ "$?" = "127" ]; then
+				msg "==> ERROR: Failed to install missing dependencies."
+				exit 1
+			fi
+			# TODO: check deps again to make sure they were resolved
+		elif [ "$DEP_SRC" = "1" ]; then
+			# install missing deps by building them from source.
+			# we look for each package name in $ABSROOT and build it.
+			if [ "$ABSROOT" = "" ]; then
+				msg "==> ERROR: The ABSROOT environment variable is not defined."
+				exit 1
+			fi
+			# TODO: handle version comparators (eg, glibc>=2.2.5)
+			msg "==> Building missing dependencies..."
+			for dep in $deplist; do
+				candidates=`find $ABSROOT -type d -name "$dep"`
+				if [ "$candidates" = "" ]; then
+					msg "==> ERROR: Could not find \"$dep\" under $ABSROOT"
+					exit 1
+				fi
+				success=0
+				for pkgdir in $candidates; do
+					if [ -f $pkgdir/PKGBUILD ]; then
+						cd $pkgdir
+						if [ "$RMDEPS" = "1" ]; then
+							makepkg -i -c -b -r -w $PKGDEST
+						else
+							makepkg -i -c -b -w $PKGDEST
+						fi
+						if [ $? -eq 0 ]; then
+							success=1
+							break
+						fi
+					fi
+				done
+				if [ "$success" = "0" ]; then
+					msg "==> ERROR: Failed to build \"$dep\""
+					exit 1
+				fi
+			done
+			# TODO: check deps again to make sure they were resolved
+		else
+			missingdeps=1
+		fi
+	elif [ "$deplist" != "" -a $haveperm -eq 0 ]; then
+		if [ "$DEP_SRC" = "1" -o "$DEP_BIN" = "1" ]; then
+			msg "==> WARNING: Cannot auto-install missing dependencies as a normal user!"
+			msg "==>          Run makepkg as root to resolve dependencies automatically."
+		fi
+		missingdeps=1
+	fi
+	return $missingdeps
+}
 
 usage() {
 	echo "makepkg version $myver"
@@ -92,6 +158,7 @@ usage() {
 	echo "  -i, --install    Install package after successful build"
 	echo "  -n, --nostrip    Do not strip binaries/libraries"
 	echo "  -p <buildscript> Use an alternate build script (instead of PKGBUILD)"
+	echo "  -r, --rmdeps     Remove installed dependencies after a successful build"
 	echo "  -s, --syncdeps   Install missing dependencies with pacman"
 	echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
 	echo
@@ -99,6 +166,7 @@ usage() {
 	echo "  file in the current directory."
 	echo
 }
+
 
 # Options
 CLEANUP=0
@@ -110,6 +178,7 @@ DEP_SRC=0
 NODEPS=0
 FORCE=0
 NOSTRIP=0
+RMDEPS=0
 PKGDEST=$startdir
 BUILDSCRIPT="./PKGBUILD"
 
@@ -117,15 +186,16 @@ ARGLIST=$@
 
 while [ "$#" -ne "0" ]; do
 	case $1 in
-		--clean)      CLEANUP=1    ;;
+		--clean)      CLEANUP=1 ;;
 		--cleancache) CLEANCACHE=1 ;;
-		--syncdeps)   DEP_BIN=1    ;;
-		--builddeps)  DEP_SRC=1    ;;
-		--nodeps)     NODEPS=1     ;;
-		--install)    INSTALL=1    ;;
-		--force)      FORCE=1      ;;
-		--nostrip)    NOSTRIP=1    ;;
-		--genmd5)     GENMD5=1     ;;
+		--syncdeps)   DEP_BIN=1 ;;
+		--builddeps)  DEP_SRC=1 ;;
+		--nodeps)     NODEPS=1 ;;
+		--install)    INSTALL=1 ;;
+		--force)      FORCE=1 ;;
+		--nostrip)    NOSTRIP=1 ;;
+		--genmd5)     GENMD5=1 ;;
+		--rmdeps)     RMDEPS=1 ;;
 		--help)
 			usage
 			exit 0
@@ -135,7 +205,7 @@ while [ "$#" -ne "0" ]; do
 			exit 1
 			;;
 		-*)
-			while getopts "cCsbdhifgnp:w:-" opt; do
+			while getopts "cCsbdhifgnrp:w:-" opt; do
 				case $opt in
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
@@ -148,6 +218,7 @@ while [ "$#" -ne "0" ]; do
 					n) NOSTRIP=1 ;;
 					w) PKGDEST=$OPTARG ;;
 					p) BUILDSCRIPT=$OPTARG ;;
+					r) RMDEPS=1 ;;
 					h)
 						usage
 						exit 0
@@ -170,6 +241,11 @@ while [ "$#" -ne "0" ]; do
 	shift
 done
 
+# convert a (possibly) relative path to absolute
+cd $PKGDEST
+PKGDEST=`pwd`
+cd -
+
 if [ "$CLEANCACHE" = "1" ]; then
 	if [ "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
 		msg "==> Cleaning up source files from the cache."
@@ -182,7 +258,7 @@ if [ "$CLEANCACHE" = "1" ]; then
 fi
 
 unset pkgname pkgver pkgrel pkgdesc url groups provides md5sums
-unset replaces depends conflicts backup source install build
+unset replaces depends conflicts backup source install build makedepends
 umask 0022
 
 if [ ! -f $BUILDSCRIPT ]; then
@@ -240,56 +316,19 @@ fi
 
 msg "==> Making package: $pkgname  (`date`)"
 
-unset deplist
+unset deplist makedeplist
 if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
-	msg "==> Checking Dependencies..."
+	msg "==> Checking Runtime Dependencies..."
 	deplist=`checkdeps ${depends[@]}`
-	if [ "$deplist" != "" ]; then
-		if [ "$DEP_BIN" = "1" ]; then
-			# install missing deps from binary packages (using pacman -S)
-			msg "==> Installing missing dependencies..."
-			pacman -D $deplist
-			if [ "$?" = "127" ]; then
-				msg "==> ERROR: Failed to install missing dependencies."
-				exit 1
-			fi
-			# TODO: check deps again to make sure they were resolved
-		elif [ "$DEP_SRC" = "1" ]; then
-			# install missing deps by building them from source.
-			# we look for each package name in $ABSROOT and build it.
-			if [ "$ABSROOT" = "" ]; then
-				msg "==> ERROR: The ABSROOT environment variable is not defined."
-				exit 1
-			fi
-			# TODO: handle version comparators (eg, glibc>=2.2.5)
-			msg "==> Building missing dependencies..."
-			for dep in $deplist; do
-				candidates=`find $ABSROOT -type d -name "$dep"`
-				if [ "$candidates" = "" ]; then
-					msg "==> ERROR: Could not find \"$dep\" under $ABSROOT"
-					exit 1
-				fi
-				success=0
-				for pkgdir in $candidates; do
-					if [ -f $pkgdir/PKGBUILD ]; then
-						cd $pkgdir
-						echo makepkg -i -c -b -w $PKGDEST
-						makepkg -i -c -b -w $PKGDEST
-						if [ $? -eq 0 ]; then
-							success=1
-							break
-						fi
-					fi
-				done
-				if [ "$success" = "0" ]; then
-					msg "==> ERROR: Failed to build \"$dep\""
-					exit 1
-				fi
-			done
-			# TODO: check deps again to make sure they were resolved
-		else
-			exit 1
-		fi
+	handledeps $deplist
+	if [ $? -gt 0 ]; then
+		exit 1
+	fi
+	msg "==> Checking Buildtime Dependencies..."
+	makedeplist=`checkdeps ${makedepends[@]}`
+	handledeps $makedeplist
+	if [ $? -gt 0 ]; then
+		exit 1
 	fi
 elif [ "$NODEPS" = "1" ]; then
 	msg "==> WARNING: skipping dependency checks."
@@ -387,7 +426,7 @@ if [ "$GENMD5" = "0" ]; then
 				*.tar)
 					cmd="tar -xf $file" ;;
 				*.zip)
-					cmd="unzip -qq $file" ;;
+					cmd="unzip -qqo $file" ;;
 				*.gz)
 					cmd="gunzip $file" ;;
 				*.bz2)
@@ -502,7 +541,7 @@ if [ "$NOSTRIP" = "0" ]; then
 fi
 
 # get some package meta info
-builddate=`LC_ALL= ; date -u "+%a %b %e %k:%M:%S %Y"`
+builddate=`LC_ALL= ; LANG= ; date -u "+%a %b %e %H:%M:%S %Y"`
 if [ "$PACKAGER" != "" ]; then
 	packager="$PACKAGER"
 else
@@ -566,14 +605,19 @@ $cmd | sort >../filelist
 
 cd $startdir
 if [ "$CLEANUP" = "1" ]; then
-	msg "==> Cleaning up"
+	msg "==> Cleaning up..."
 	rm -rf src pkg filelist
+fi
+
+if [ "$RMDEPS" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+	msg "==> Removing installed dependencies..."
+	pacman -R $makedeplist $deplist
 fi
 
 msg "==> Finished making: $pkgname  (`date`)"
 
-if [ "$INSTALL" = "1" ]; then
-	msg "==> Running pacman --upgrade"
+if [ "$INSTALL" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+	msg "==> Running pacman --upgrade..."
 	pacman --upgrade $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
 	exit $?
 fi

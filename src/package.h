@@ -25,6 +25,14 @@
 
 #define FREEPKG(p) { freepkg(p); p = NULL; }
 
+#define FREELISTPKGS(p) {\
+	PMList *i;\
+	for(i = p; i; i = i->next) {\
+		FREEPKG(i->data);\
+	}\
+	FREELIST(p);\
+}
+
 /* mods for depend_t.mod */
 #define DEP_ANY 0
 #define DEP_EQ	1
@@ -41,6 +49,7 @@ typedef struct __pkginfo_t {
 	char builddate[32];
 	char installdate[32];
 	char packager[64];
+	char md5sum[33];
 	unsigned long size;
 	unsigned short scriptlet;
 	PMList *replaces;

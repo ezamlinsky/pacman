@@ -1,5 +1,14 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7           - Added build-time dependencies to makepkg (Jason Chu)
+              - Added md5sum integrity checking to packages in --sync
+                mode (Aurelien Foret)
+              - Memory leak fixes (Aurelien Foret)
+              - Added CARCH variable to makepkg.conf for use in PKGBUILDs
+              - Added LogFile option for direct-to-file logging
+              - Added -Qii handling to show modified config files
+              - Allow --sync targets to specify an explicit repository to
+                sync from (eg, pacman -S current/patch)
 2.6.4         - Altered pacman_upgrade() to allow a package to replace itself
 2.6.3         - A couple memory fixes in the new replaces code
 2.6.2         - Fixed a memory cleanup bug
