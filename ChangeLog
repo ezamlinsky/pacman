@@ -1,5 +1,15 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.4         - fixed a bug in conflict handling, where installing a
+                conflicting package would fail even if the new package
+                "provided" it
+              - if pacman sees a newer version of itself during an upgrade,
+                it will ask to install itself first, then be re-run to upgrade
+                the other packages.
+              - You can now use the --info option with --sync to display an
+                uninstalled package's dependency info.
+              - Added a sane umask before db writes
+              - buffer overflow fix (bug #442)
 2.7.3         - makepkg not longer strips files with .exe or .dll extensions
               - Added Aurelien's patch:
                 - proxy support (no authentication yet)

@@ -302,9 +302,9 @@ int is_pkgin(pkginfo_t *needle, PMList *haystack)
 	return(0);
 }
 
-/* Display the content of a package
+/* Display the content of an installed package
  */
-void dump_pkg(pkginfo_t *info)
+void dump_pkg_full(pkginfo_t *info)
 {
 	PMList *pm;
 
@@ -335,7 +335,41 @@ void dump_pkg(pkginfo_t *info)
 	pm = list_sort(info->conflicts);
 	list_display("Conflicts With :", pm);
 	FREELIST(pm);
-	printf("Description    : %s\n", info->desc);
+	printf("Description    : ");
+	indentprint(info->desc, 17);
+	printf("\n");
+}
+
+/* Display the content of a sync package
+ */
+void dump_pkg_sync(pkginfo_t *info)
+{
+	PMList *pm;
+
+	if(info == NULL) {
+		return;
+	}
+
+	printf("Name           : %s\n", info->name);
+	printf("Version        : %s\n", info->version);
+	pm = list_sort(info->groups);
+	list_display("Groups         :", pm);
+	FREELIST(pm);
+	pm = list_sort(info->provides);
+	list_display("Provides       :", pm); 
+	FREELIST(pm);
+	pm = list_sort(info->depends);
+	list_display("Depends On     :", pm); 
+	FREELIST(pm);
+	pm = list_sort(info->conflicts);
+	list_display("Conflicts With :", pm);
+	FREELIST(pm);
+	pm = list_sort(info->replaces);
+	list_display("Replaces       :", pm);
+	FREELIST(pm);
+	printf("Description    : ");
+	indentprint(info->desc, 17);
+	printf("\nMD5 Sum        : %s\n", info->md5sum);
 }
 
 /* vim: set ts=2 sw=2 noet: */

@@ -80,7 +80,8 @@ pkginfo_t* newpkg();
 void freepkg(pkginfo_t *pkg);
 int pkgcmp(const void *p1, const void *p2);
 int is_pkgin(pkginfo_t *needle, PMList *haystack);
-void dump_pkg(pkginfo_t *info);
+void dump_pkg_full(pkginfo_t *info);
+void dump_pkg_sync(pkginfo_t *info);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

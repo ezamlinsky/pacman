@@ -41,7 +41,7 @@ pacdb_t* db_open(char *root, char *pkgdir, char *treename)
 	if(db->dir == NULL) {
 		return(NULL);
 	}
-	strncpy(db->treename, treename, 128);
+	strncpy(db->treename, treename, sizeof(db->treename));
 	
 	return(db);
 }
@@ -355,13 +355,15 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 		info->name, info->version);
 	oldmask = umask(0000);
 	mkdir(topdir, 0755);
-	umask(oldmask);
+	/* make sure we have a sane umask */
+	umask(0022);
 
 	/* DESC */
 	snprintf(path, PATH_MAX, "%s/desc", topdir);
 	fp = fopen(path, "w");
 	if(fp == NULL) {
 		perror("db_write");
+		umask(oldmask);
 		return(1);
 	}
 	fputs("%NAME%\n", fp);
@@ -392,6 +394,7 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	fp = fopen(path, "w");
 	if(fp == NULL) {
 		perror("db_write");
+		umask(oldmask);
 		return(1);
 	}
 	fputs("%FILES%\n", fp);
@@ -411,6 +414,7 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	fp = fopen(path, "w");
 	if(fp == NULL) {
 		perror("db_write");
+		umask(oldmask);
 		return(1);
 	}
 	fputs("%DEPENDS%\n", fp);
@@ -438,6 +442,7 @@ int db_write(pacdb_t *db, pkginfo_t *info)
 	/* INSTALL */
 	/* nothing needed here (script is automatically extracted) */
 
+	umask(oldmask);
 	return(0);
 }
 

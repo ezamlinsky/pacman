@@ -100,6 +100,11 @@ diskspace, you can remove these packages by using the --clean option.
 Display all the members for each package group specified.  If no group
 names are provided, all groups will be listed.
 .TP
+.B "\-i, \-\-info"
+Display dependency information for a given package.  This will search
+through all repositories for a matching package and display the
+dependencies, conflicts, etc.
+.TP
 .B "\-l, \-\-list"
 List all files in the specified repositories.  Multiple repositories can
 be specified on the command line.

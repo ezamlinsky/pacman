@@ -136,7 +136,8 @@ int main(int argc, char *argv[])
 	/* check for permission */
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
-		if(pmo_op == PM_SYNC && !pmo_s_sync && (pmo_s_search || pmo_group || pmo_q_list)) {
+		if(pmo_op == PM_SYNC && !pmo_s_sync &&
+				(pmo_s_search || pmo_group || pmo_q_list || pmo_q_info)) {
 			/* special case:  PM_SYNC can be used w/ pmo_s_search by any user */
 		} else {
 			if(geteuid() != 0) {
@@ -178,7 +179,7 @@ int main(int argc, char *argv[])
 	/* check for db existence */
 	/* add a trailing '/' if there isn't one */
 	if(pmo_root[strlen(pmo_root)-1] != '/') {
-		MALLOC(ptr, strlen(pmo_root)+1);
+		MALLOC(ptr, strlen(pmo_root)+2);
 		strcpy(ptr, pmo_root);
 		strcat(ptr, "/");
 		FREE(pmo_root);
@@ -459,6 +460,48 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			FREELIST(pkg);
 		}
 		FREELIST(groups);
+	} else if(pmo_q_info) {
+		PMList *pkgs = NULL;
+		int found;
+		if(targets) {
+			for(i = targets; i; i = i->next) {
+				pkgs = list_add(pkgs, strdup(i->data));
+			}
+		} else {
+			for(i = databases; i; i = i->next) {
+				dbsync_t *dbs = (dbsync_t *)i->data;
+				for(j = dbs->pkgcache; j; j = j->next) {
+					pkgs = list_add(pkgs, strdup(((pkginfo_t*)j->data)->name));
+				}
+			}
+		}
+		for(i = pkgs; i; i = i->next) {
+			found = 0;
+			for(j = databases; j; j = j->next) {
+				dbsync_t *dbs = (dbsync_t *)j->data;
+				for(k = dbs->pkgcache; k; k = k->next) {
+					pkginfo_t *p = (pkginfo_t*)k->data;
+					if(!strcmp(p->name, i->data)) {
+						/* re-fetch with dependency info */
+						p = db_scan(dbs->db, p->name, INFRQ_DESC | INFRQ_DEPENDS);
+						if(p == NULL) {
+							/* wtf */
+							continue;
+						}
+						dump_pkg_sync(p);
+						printf("\n");
+						freepkg(p);
+						found = 1;
+					}
+				}
+			}
+			if(!found) {
+				fprintf(stderr, "Package \"%s\" was not found.\n", (char *)i->data);
+				allgood = 0;
+				break;
+			}
+		}
+		FREELIST(pkgs);
 	} else if(pmo_q_list) {
 		PMList *reps = NULL;
 		int found;
@@ -493,6 +536,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 	} else if(pmo_s_upgrade) {
 		int newer = 0;
 		int ignore = 0;
+		syncpkg_t *s = NULL;
+
 		logaction(NULL, "starting full system upgrade");
 		/* check for "recommended" package replacements */
 		for(i = databases; i && allgood; i = i->next) {
@@ -507,7 +552,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							/* if confirmed, add this to the 'final' list, designating 'p' as
 							 * the package to replace.
 							 */
-							if(yesno(":: replace %s with %s from \"%s\"? [Y/n] ", p->name, pkg->name, dbs->db->treename)) {
+							if(yesno(":: Replace %s with %s from \"%s\"? [Y/n] ", p->name, pkg->name, dbs->db->treename)) {
 								syncpkg_t *sync = NULL;
 								/* we save the dependency info so we can move p's requiredby stuff
 								 * over to the replacing package
@@ -523,8 +568,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 									/* none found -- enter pkg into the final sync list */
 									MALLOC(sync, sizeof(syncpkg_t));
 									sync->dbs = dbs;
-									sync->replaces = NULL;
-									sync->replaces = list_add(sync->replaces, q);
+									sync->replaces = list_add(NULL, q);
 									sync->pkg = db_scan(sync->dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
 									/* add to the targets list */
 									allgood = !resolvedeps(db, databases, sync, final, trail);
@@ -603,6 +647,27 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		if((newer || ignore) && allgood) {
 			fprintf(stderr, ":: Above packages will be skipped.  To manually upgrade use 'pacman -S <pkg>'\n");
 		}
+		/* check if pacman itself is one of the packages to upgrade.  if so, we
+		 * we should upgrade ourselves first and then re-exec as the new version.
+		 *
+		 * this can prevent some of the "syntax error" problems users can have
+		 * when sysupgrade'ing with an older version of pacman.
+		 */
+		s = find_pkginsync("pacman", final);
+		if(s && list_count(final) > 1) {
+			fprintf(stderr, "\n:: pacman has detected a newer version of the \"pacman\" package.\n");
+			fprintf(stderr, ":: It is recommended that you allow pacman to upgrade itself\n");
+			fprintf(stderr, ":: first, then you can re-run the operation with the newer version.\n");
+			fprintf(stderr, "::\n");
+			if(yesno(":: Upgrade pacman first? [Y/n] ")) {
+				/* XXX: leaving final un-freed is a big memory leak, but pacman quits
+				 * right after this upgrade anyway, so...
+				 */
+				/* and create a new final list with only "pacman" in it */
+				final = list_add(NULL, s);
+				trail = NULL;
+			}
+		}
 	} else {
 		/* process targets */
 		for(i = targets; i && allgood; i = i->next) {
@@ -664,7 +729,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							} else {
 								PMList *l;
 								for(l = k; l; l = l->next) {
-									if(yesno(":: install %s from group %s? [Y/n] ", (char*)l->data, targ)) {
+									if(yesno(":: Install %s from group %s? [Y/n] ", (char*)l->data, targ)) {
 										targets = list_add(targets, strdup((char*)l->data));
 									}
 								}
@@ -762,30 +827,54 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					/* no unresolvable deps, so look for conflicts */
 					for(i = deps; i && !errorout; i = i->next) {
 						depmissing_t *miss = (depmissing_t*)i->data;
-						if(miss->type == CONFLICT) {
-							/* check if the conflicting package is one that's about to be removed/replaced.
-							 * if so, then just ignore it
-							 */
-							found = 0;
-							for(j = final; j && !found; j = j->next) {
-								syncpkg_t *sync = (syncpkg_t*)j->data;
-								for(k = sync->replaces; k && !found; k = k->next) {
-									pkginfo_t *p = (pkginfo_t*)k->data;
-									if(!strcmp(p->name, miss->depend.name)) {
-										found = 1;
-									}
+						if(miss->type != CONFLICT) {
+							continue;
+						}
+
+						/* check if the conflicting package is one that's about to be removed/replaced.
+						 * if so, then just ignore it
+						 */
+						found = 0;
+						for(j = final; j && !found; j = j->next) {
+							syncpkg_t *sync = (syncpkg_t*)j->data;
+							for(k = sync->replaces; k && !found; k = k->next) {
+								pkginfo_t *p = (pkginfo_t*)k->data;
+								if(!strcmp(p->name, miss->depend.name)) {
+									found = 1;
 								}
 							}
-							/* if we didn't find it in any sync->replaces lists, then it's a conflict */
-							if(!found && !is_in(miss->depend.name, rmtargs)) {
+						}
+						/* if we didn't find it in any sync->replaces lists, then it's a conflict */
+						if(!found && !is_in(miss->depend.name, rmtargs)) {
+							int solved = 0;
+							syncpkg_t *sync = find_pkginsync(miss->target, final);
+							for(j = sync->pkg->provides; j && j->data && !solved; j = j->next) {
+								if(!strcmp(j->data, miss->depend.name)) {
+									/* this package also "provides" the package it's conflicting with,
+									 * so just treat it like a "replaces" item so the REQUIREDBY
+									 * fields are inherited properly.
+									 */
+
+									/* we save the dependency info so we can move p's requiredby stuff
+									 * over to the replacing package
+									 */
+									pkginfo_t *q = db_scan(db, miss->depend.name, INFRQ_DESC | INFRQ_DEPENDS);
+									/* append to the replaces list */
+									sync->replaces = list_add(sync->replaces, q);
+									solved = 1;
+								}
+							}
+							if(!solved) {
+								/* It's a conflict -- see if they want to remove it
+								 */
 								pkginfo_t p1;
 								/* build a "fake" pkginfo_t so we can search with is_pkgin() */
 								snprintf(p1.name, sizeof(p1.name), miss->depend.name);
 								sprintf(p1.version, "1.0-1");
-								
+
 								if(is_pkgin(&p1, pm_packages)) {
 									if(yesno(":: %s conflicts with %s. Remove %s? [Y/n] ",
-											miss->target, miss->depend.name, miss->depend.name)) {
+												miss->target, miss->depend.name, miss->depend.name)) {
 										/* remove miss->depend.name */
 										rmtargs = list_add(rmtargs, strdup(miss->depend.name));
 									} else {
@@ -796,7 +885,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 								} else {
 									if(!is_in(miss->depend.name, rmtargs) & !is_in(miss->target, rmtargs)) {
 										fprintf(stderr, "\nerror: %s conflicts with %s\n", miss->target,
-											miss->depend.name); 
+												miss->depend.name); 
 										errorout = 1;
 									}
 								}
@@ -1705,7 +1794,7 @@ int pacman_remove(pacdb_t *db, PMList *targets)
 					}
 				} else {
 					for(j = pkgs; j; j = j->next) {
-						if(yesno(":: remove %s from group %s? [Y/n] ", (char*)j->data, (char*)lp->data)) {
+						if(yesno(":: Remove %s from group %s? [Y/n] ", (char*)j->data, (char*)lp->data)) {
 							info = db_scan(db, (char *)j->data, INFRQ_ALL);
 							alltargs = list_add(alltargs, info);
 						}
@@ -2049,7 +2138,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 					fprintf(stderr, "Package \"%s\" was not found.\n", package);
 					return(2);
 				}
-				dump_pkg(info);
+				dump_pkg_full(info);
 				if(pmo_q_info > 1 && info->backup) {
 					/* extra info */
 					printf("\n");
@@ -3049,6 +3138,7 @@ void usage(int op, char *myname)
 			printf("  -d, --nodeps        skip dependency checks\n");
 			printf("  -f, --force         force install, overwrite conflicting files\n");
 			printf("  -g, --groups        view all members of a package group\n");
+			printf("  -i, --info          view package information\n");
 			printf("  -l, --list          list all packages belonging to the specified repository\n");
 			printf("  -s, --search        search sync database for matching strings\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
