@@ -129,6 +129,11 @@ Retrieve all packages from the server, but do not install/upgrade anything.
 Download a fresh copy of the master package list from the ftp server
 defined in \fI/etc/pacman.conf\fP.  This should typically be used each
 time you use \fB--sysupgrade\fP.
+.TP
+.B "\-\-ignore <pkg>"
+This option functions exactly the same as the \fBIgnorePkg\fP configuration
+directive.  Sometimes it can be handy to skip some package updates without
+having to edit \fIpacman.conf\fP each time.
 .SH REMOVE OPTIONS
 .TP
 .B "\-c, \-\-cascade"

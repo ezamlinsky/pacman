@@ -1,5 +1,6 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9.4         - fixed a bug that was introduced from another bugfix :-/
 2.9.3         - fixed a couple manpage typos
               - added --ignore to -S operations, works just like IgnorePkg
               - respect IgnorePkg list when pulling in dependencies

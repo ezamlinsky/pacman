@@ -155,9 +155,6 @@ int main(int argc, char *argv[])
 		myuid = 99;
 	}
 
-	/* change to / so we can avoid having our CWD removed from under us */
-	chdir("/");
-
 	/* check for permission */
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
@@ -3268,6 +3265,7 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 	char tmpdir[PATH_MAX] = "";
 	char *scriptpath;
 	struct stat buf;
+	char cwd[PATH_MAX];
 
 	if(stat(installfn, &buf)) {
 		/* not found */
@@ -3302,6 +3300,11 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 		return(0);
 	}
 
+	/* save the cwd so we can restore it later */
+	getcwd(cwd, PATH_MAX);
+	/* just in case our cwd was removed in the upgrade operation */
+	chdir("/");
+
 	vprint("Executing %s script...\n", script);
 	if(oldver) {
 		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s %s\" | chroot %s /bin/sh",
@@ -3316,6 +3319,7 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 	if(strlen(tmpdir) && rmrf(tmpdir)) {
 		fprintf(stderr, "warning: could not remove tmpdir %s\n", tmpdir);
 	}
+	chdir(cwd);
 	return(0);
 }
 
