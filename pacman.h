@@ -21,7 +21,7 @@
 #ifndef PACMAN_H
 #define PACMAN_H
 
-#define VERSION   "1.1"
+#define VERSION   "1.2"
 
 #define PKGEXT		".tar.gz"
 #define PKGDB			"/var/lib/pacman/pacman.db"
@@ -36,8 +36,8 @@
 typedef int (*pm_opfunc_t)(char*);
 typedef char** fileset_t;
 typedef struct __pkginfo_t {
-	char version[32];
-	char name[64];
+	char version[64];
+	char name[256];
 } pkginfo_t;
 
 int pacman_add(char* pkgfile);
@@ -50,7 +50,7 @@ int db_update(fileset_t files, unsigned int filecount);
 int db_find_conflicts(fileset_t files, unsigned int filecount);
 int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output);
 
-char* parseargs(int op, int argc, char** argv);
+int parseargs(int op, int argc, char** argv);
 int parse_descfile(char* descfile, unsigned short output, fileset_t* bakptr,
 								unsigned int* bakct);
 

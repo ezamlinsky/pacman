@@ -27,7 +27,7 @@ BINDIR = /usr/bin
 MANDIR = /usr/man
 ETCDIR = /etc
 
-VERSION = 1.1
+VERSION = 1.2
 LIBTAR_VERSION = 1.2.4
 
 CXX = gcc
@@ -45,7 +45,7 @@ pacman: $(OBJECTS)
 pacman.o: pacman.c pacman.h
 	$(CXX) $(CXXFLAGS) -c pacman.c
 
-man: pacman.8
+man: pacman.8 pacsync.8 makepkg.8
 
 %: %.in
 	sed -e "s/#VERSION#/$(VERSION)/" $< > $@
@@ -62,11 +62,14 @@ libtar:
 install: all
 	install -D -m0755 pacman $(DESTDIR)$(BINDIR)/pacman
 	install -D -m0644 pacman.8 $(DESTDIR)$(MANDIR)/man8/pacman.8
+	install -D -m0644 pacsync.8 $(DESTDIR)$(MANDIR)/man8/pacsync.8
+	install -D -m0644 makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	install -D -m0755 makepkg $(DESTDIR)$(BINDIR)/makepkg
 	install -D -m0755 makeworld $(DESTDIR)$(BINDIR)/makeworld
+	install -D -m0755 pacsync $(DESTDIR)$(BINDIR)/pacsync
 	@echo ""
 	@echo "*** If this is a first-time install, you should copy makepkg.conf"
-	@echo "*** to /etc now."
+	@echo "*** and pacsync.conf to /etc now."
 	@echo ""
 
 clean:

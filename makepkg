@@ -1,7 +1,7 @@
 #!/bin/bash
 
 me=`basename $0`
-myver='1.1'
+myver='1.2'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && . /etc/makepkg.conf
@@ -30,9 +30,9 @@ for netfile in ${source[@]}; do
   if [ -f ../$file ]; then
     echo "==> Found $file in build dir" >&2
     cp ../$file .
-  elif [ -f /var/cache/pkg/$file ]; then
+  elif [ -f /var/cache/pacman/src/$file ]; then
     echo "==> Using local copy of $file" >&2
-    cp /var/cache/pkg/$file .
+    cp /var/cache/pacman/src/$file .
   else
     echo "==> Downloading $file" >&2
     wget --passive-ftp --no-directories --tries=3 --waitretry=3 $netfile 2>&1
@@ -41,7 +41,7 @@ for netfile in ${source[@]}; do
       echo "==> Aborting..." >&2
       exit 1
     fi
-    mkdir -p /var/cache/pkg && cp $file /var/cache/pkg
+    mkdir -p /var/cache/pacman/src && cp $file /var/cache/pacman/src
   fi
   case $file in
 	    *.tar.gz|*.tar.Z|*.tgz)
@@ -76,6 +76,12 @@ echo "pkgver = $pkgver-$pkgrel" >>.PKGINFO
 for bakfile in "${backup[@]}"; do
   echo "backup = $bakfile" >>.PKGINFO
 done
+if [ "$install" != "" ]; then
+  cat $startdir/$install  | egrep '^[^$]' | sed 's/^/install = /g' >>.PKGINFO
+fi
+if [ "$remove" != "" ]; then
+  cat $startdir/$remove  | egrep '^[^$]' | sed 's/^/remove = /g' >>.PKGINFO
+fi
 
 # remove info/doc files
 cd $startdir

@@ -13,7 +13,17 @@ DESCRIPTION:
    upgrade packages in the system, and it will allow you to query the
    package database for installed packages, files and owners.
 
-   Plans exist for dependency checking and remote file fetching, as well.
+	 Although the package manager itself is quite simple, the pacman tarball
+	 also comes with scripts that help automate building and installing
+	 packages.  These are used extensively in the Arch Build System (ABS),
+	 used in Arch Linux <http://www.archlinux.org>.  See ABS.txt for more
+	 information.
+
+	 As of version 1.2, pacsync is included as well.  This performs an apt-like
+	 function, keeping your system's packages in sync with the packages on
+	 a remote server.
+
+   Plans exist for dependency checking as I approach version 2.0.
    See TODO for more info.
 
 
@@ -32,15 +42,15 @@ Note:  Since pacman is compiled statically, you will need the static libraries
 
 BUGS:
 -----
-If you find bugs (which is quite likely at version 1.0), please submit
-them to <jvinet@zeroflux.org> with specific information, such as your
+If you find bugs (which is quite likely), please submit them to
+<jvinet@zeroflux.org> with specific information, such as your
 commandline, the nature of the bug, and even the package database, if
 it helps.
 
 
 COPYRIGHT:
 ----------
-pacman is Copyright (c) 2002 Judd vinet <jvinet@zeroflux.org> and is
+pacman is Copyright (c) 2002 Judd Vinet <jvinet@zeroflux.org> and is
 licensed through the GNU General Public License (see COPYING).
 
 pacman uses "libtar", a library for reading/writing tar-files. This 

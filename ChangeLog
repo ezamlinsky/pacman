@@ -1,5 +1,10 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+              - 
+1.1           - Fixed some string-handling bugs
+              - Added better handling of configuration files and the like.
+                If "file" is about to be removed, but it is designated to
+								be backed up, then it will be copied to "file.save"
               - Changed db_find_conflicts() to ignore directories
 1.0           - Initial Release
 

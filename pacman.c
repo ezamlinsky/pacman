@@ -95,15 +95,21 @@ unsigned short pmo_q_info   = 0;
 unsigned short pmo_q_list   = 0;
 char*          pmo_q_owns   = NULL;
 
-pkginfo_t** packages  = NULL;
-unsigned int pkgcount = 0;
+/* list of installed packages */
+pkginfo_t**  pm_packages = NULL;
+unsigned int pm_pkgcount = 0;
 
+/* list of targets specified on command line */
+fileset_t    pm_targets  = NULL;
+unsigned int pm_targct   = 0;
+
+/* path to post-install script, if any */
+char* pm_install = NULL;
 
 int main(int argc, char* argv[])
 {
 	pm_opfunc_t op_func;
-	char* funcvar = NULL;
-	int ret = 0;
+	int i, ret = 0;
 
 	/* default root */
 	pmo_root = (char*)malloc(2);	
@@ -118,16 +124,16 @@ int main(int argc, char* argv[])
 	/* the handler function */
 	if(!strcmp(argv[1], "-A") || !strcmp(argv[1], "--add")) {
 		op_func = pacman_add;
-		funcvar = parseargs(PM_ADD, argc, argv);
+		ret = parseargs(PM_ADD, argc, argv);
 	} else if(!strcmp(argv[1], "-R") || !strcmp(argv[1], "--remove")) {
 		op_func = pacman_remove;
-		funcvar = parseargs(PM_REMOVE, argc, argv);
+		ret = parseargs(PM_REMOVE, argc, argv);
 	} else if(!strcmp(argv[1], "-Q") || !strcmp(argv[1], "--query")) {
 		op_func = pacman_query;
-		funcvar = parseargs(PM_QUERY, argc, argv);
+		ret = parseargs(PM_QUERY, argc, argv);
 	} else if(!strcmp(argv[1], "-U") || !strcmp(argv[1], "--upgrade")) {
 		op_func = pacman_upgrade;
-		funcvar = parseargs(PM_UPGRADE, argc, argv);
+		ret = parseargs(PM_UPGRADE, argc, argv);
 	} else if(!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
 		usage(PM_MAIN, (char*)basename(argv[0]));
 		return(1);
@@ -135,16 +141,21 @@ int main(int argc, char* argv[])
 		version();
 		return(1);
 	} else {
-		printf("error: invalid operation\n\n");
+		fprintf(stderr, "error: invalid operation\n\n");
 		usage(PM_MAIN, (char*)basename(argv[0]));
 		return(1);
 	}
 
-	if(funcvar == NULL && op_func != pacman_query) {
+	if(ret || (pm_targct < 1 && op_func != pacman_query)) {
 		return(1);
 	}
 	vprint("Installation Root: %s\n", pmo_root);
-	vprint("Package Name:      %s\n", funcvar);
+	if(pm_targct) {
+		vprint("Targets:\n");
+		for(i = 0; i < pm_targct; i++) {
+			vprint("  %s\n", pm_targets[i]);
+		}
+	}
 
 	/* check for db existence */
 	if(pmo_root != NULL) {
@@ -161,27 +172,40 @@ int main(int argc, char* argv[])
 
 	ret = db_open(dbpath);
 	if(ret == 1) {
-		printf("error:  Could not open package database file!\n");
-		printf("        Check to see that %s exists.\n", dbpath);
-		printf("        If not, you may simply create it by \"touch\"-ing it.\n");
+		fprintf(stderr, "error:  Could not open package database file!\n");
+		fprintf(stderr, "        Check to see that %s exists.\n", dbpath);
+		fprintf(stderr, "        If not, you may simply create it by \"touch\"-ing it.\n");
 		return(1);
 	}
 	if(ret == 2) {
-		printf("error:  Database is corrupt!  You may need to use the backup database.\n");
-		printf("        I hope you like tweaking...  ;-)\n");
+		fprintf(stderr, "error:  Database is corrupt!  You may need to use the backup database.\n");
+		fprintf(stderr, "        I hope you like tweaking...  ;-)\n");
 		return(1);
 	}
 
 	/* start the requested operation */
 	if(!pmo_nofunc) {
-		ret = op_func(funcvar);
-		if(ret) {
-			printf("There were errors\n");
+		for(i = 0; i < pm_targct; i++) {
+			if(op_func(pm_targets[i])) {
+				ret = 1;
+			}
 		}
+		if(op_func == pacman_query && pm_targct == 0) {
+			ret = op_func(NULL);
+		}
+	}
+	
+	if(op_func == pacman_remove) {
+		/* the remove function no longer updates the db itself. we do it here
+		 * instead, in an effort to save some expensive file rewrites. note that we
+		 * can't do this for pacman_add() yet, as he's gotta call db_find_conflicts
+		 * for each package.
+		 */
+		ret = db_update(NULL, 0);
 	}
 
 	fclose(dbfp);
-	return(0);
+	return(ret);
 }
 
 int pacman_add(char* pkgfile)
@@ -206,13 +230,13 @@ int pacman_add(char* pkgfile)
 	vprint("Looking for DB conflicts...\n");
 	if((i = db_find_conflicts(files, filecount)) == 1) {
 		if(pmo_force) {
-			printf("\nInstalling package anyway...\n");
-			printf("  You might have duplicate entries in your package\n");
-			printf("  database now.  You may want to edit it and remove\n");
-			printf("  one of the copies.\n\n");
+			fprintf(stderr, "\nInstalling package anyway...\n");
+			fprintf(stderr, "  You might have duplicate entries in your package\n");
+			fprintf(stderr, "  database now.  You may want to edit it and remove\n");
+			fprintf(stderr, "  one of the copies.\n\n");
 		} else {
-			printf("Aborting...\n");
-			printf("   (use -f to override)\n\n");		
+			fprintf(stderr, "Aborting...\n");
+			fprintf(stderr, "   (use -f to override)\n\n");		
 			return(1);
 		}
 	} else if(i == 2) {
@@ -225,7 +249,11 @@ int pacman_add(char* pkgfile)
 	if(pmo_upgrade) {
 		vprint("Removing old package first...\n");
 		if(pacman_remove(pkgname)) {
-			printf("\nUpgrade aborted.\n");
+			fprintf(stderr, "\nUpgrade aborted.\n");
+			return(1);
+		}
+		if(db_update(NULL, 0)) {
+			fprintf(stderr, "\nError updating database. Upgrade aborted.\n");
 			return(1);
 		}
 	}
@@ -257,11 +285,11 @@ int pacman_add(char* pkgfile)
 			strcpy(newpath, expath);
 			strcat(newpath, ".save");
 			rename(expath, newpath);
-			printf("%s renamed to %s\n", expath, newpath);
+			fprintf(stderr, "%s renamed to %s\n", expath, newpath);
 		}
 	  if(tar_extract_file(tar, expath)) {
 			errmsg = strerror(errno);
-			printf("could not extract %s: %s\n", th_get_pathname(tar), errmsg);
+			fprintf(stderr, "could not extract %s: %s\n", th_get_pathname(tar), errmsg);
 			errors = 1;
 		}
 		free(expath);
@@ -269,16 +297,29 @@ int pacman_add(char* pkgfile)
 	tar_close(tar);
 	vprint("Done.\n");
 	if(errors) {
-		printf("There were errors.  No database update was performed.\n");
+		fprintf(stderr, "There were errors.  No database update was performed.\n");
+		return(1);
 	} else {
 		vprint("Updating database...\n");
 		if(db_update(files, filecount)) {
-			printf("error: Could not update database!  The database may not\n");
-			printf("       be in a sane state!\n");
+			fprintf(stderr, "error: Could not update database!  The database may not\n");
+			fprintf(stderr, "       be in a sane state!\n");
 			return(1);
 		}
 		vprint("Done.\n");
 	}
+
+	/* run the script in pm_install  */
+	if(pm_install != NULL) {
+		vprint("Executing post-install script...\n");
+		expath = (char*)malloc(256);
+		snprintf(expath, 255, "/bin/bash %s", pm_install);
+		system(expath);
+		free(expath);
+		unlink(pm_install);
+		free(pm_install);
+	}
+	
 	return(0);
 }
 
@@ -286,7 +327,7 @@ int pacman_remove(char* pkgfile)
 {
 	int found = 0, done = 0;
 	int i;
-	char line[255];
+	char line[PATH_MAX+1];
 	fileset_t files = NULL;
 	unsigned int filecount = 0, nb = 0;
 	struct stat buf;
@@ -304,17 +345,17 @@ int pacman_remove(char* pkgfile)
 		strcpy(line, trim(line));
 		if(!strcmp(line, pkgfile)) {
 			/* read the version */
-			fgets(line, 255, dbfp);
+			fgets(line, 63, dbfp);
 			found = 1;
 		}
 	}
 	if(!found) {
-		printf("Cannot remove %s: Package was not found.\n", pkgfile);
+		fprintf(stderr, "Cannot remove %s: Package was not found.\n", pkgfile);
 		return(1);
 	}
 
 	while(!done) {
-		fgets(line, 255, dbfp);
+		fgets(line, PATH_MAX, dbfp);
 		strcpy(line, trim(line));
 		if(strlen(line)) {
 			/* add the path to the list */
@@ -347,13 +388,13 @@ int pacman_remove(char* pkgfile)
 				/* perror("cannot remove directory"); */
 			}
 		} else {
-			/* if the file ends in .conf, back it up */
+			/* if the file is flagged, back it up to .save */
 			if(!pmo_nosave && nb) {
 				newpath = (char*)realloc(newpath, strlen(file)+6);
 				strcpy(newpath, file);
 				strcat(newpath, ".save");
 				rename(file, newpath);
-				printf("%s renamed to %s\n", file, newpath);
+				fprintf(stderr, "%s renamed to %s\n", file, newpath);
 			} else {
 				vprint("  unlinking %s\n", file);
 				if(unlink(file)) {
@@ -365,31 +406,31 @@ int pacman_remove(char* pkgfile)
 
 	/* now splice this name out of the packages list */
 	found = 0;
-	for(i = 0; i < pkgcount-1; i++) {
+	for(i = 0; i < pm_pkgcount-1; i++) {
 		if(found) {
-			packages[i] = packages[i+1];
+			pm_packages[i] = pm_packages[i+1];
 		} else {
-			if(!strcmp(packages[i]->name, pkgfile)) {
+			if(!strcmp(pm_packages[i]->name, pkgfile)) {
 				found = 1;
-				if(i < pkgcount-1) {
-					packages[i] = packages[i+1];
+				if(i < pm_pkgcount-1) {
+					pm_packages[i] = pm_packages[i+1];
 				}
 			} 
 		}
 	}
 	/* drop the last item */
-	packages = (pkginfo_t**)realloc(packages, (--pkgcount)*sizeof(pkginfo_t*));
+	pm_packages = (pkginfo_t**)realloc(pm_packages, (--pm_pkgcount)*sizeof(pkginfo_t*));
 
-	/* and commit the db */
-	return(db_update(NULL, 0));
+	/* the db will be commited back up in main() */
+	return(0);
 }
 
 int pacman_query(char* pkgfile)
 {
 	char *str = NULL;
-	char name[255];
-	char ver[255];
-	char line[255];
+	char name[256];
+	char ver[64];
+	char line[PATH_MAX+1];
 	int found = 0;
 	int done  = 0;
 	int i;
@@ -422,22 +463,25 @@ int pacman_query(char* pkgfile)
 		while(!found && !feof(dbfp)) {
 			fgets(name, 255, dbfp);
 			strcpy(name, trim(name));
-			fgets(ver, 255, dbfp);
+			fgets(ver, 63, dbfp);
 			strcpy(ver, trim(ver));
 			strcpy(line, " ");
 			while(strlen(line) && !feof(dbfp)) {
-				fgets(line, 255, dbfp);
+				fgets(line, PATH_MAX, dbfp);
 				strcpy(line, trim(line));
 				str = line;
+				if(line[0] == '*') {
+					str++;
+				}
 				str += strlen(pmo_root);
-				if(!strcmp(line, pmo_q_owns)) {
+				if(!strcmp(str, pmo_q_owns)) {
 					printf("%s %s\n", name, ver);
 					return(0);
 				}
 			}
 		}
-		printf("No package owns this file.\n");
-		return(0);
+		fprintf(stderr, "No package owns this file.\n");
+		return(2);
 	}
 
 	/* find packages in the db */
@@ -449,7 +493,7 @@ int pacman_query(char* pkgfile)
 			strcpy(name, trim(name));
 			if(pkgfile == NULL || (pkgfile != NULL && !strcmp(name, pkgfile))) {
 				/* read the version */
-				fgets(ver, 255, dbfp);
+				fgets(ver, 63, dbfp);
 				strcpy(ver, trim(ver));
 				found = 1;
 				if(pkgfile != NULL) {
@@ -459,13 +503,14 @@ int pacman_query(char* pkgfile)
 		}
 		if(feof(dbfp)) {
 			if(pkgfile != NULL && !found) {
-				printf("Package was not found in database.\n");
+				fprintf(stderr, "Package \"%s\" was not found in database.\n", pkgfile);
+				return(2);
 			}
 			break;
 		}
 		found = 0;
 		while(!found) {
-			fgets(line, 255, dbfp);
+			fgets(line, PATH_MAX, dbfp);
 			strcpy(line, trim(line));
 			if(strlen(line)) {
 				if(pmo_q_list) {
@@ -494,9 +539,8 @@ int pacman_upgrade(char* pkgfile)
 {
 	/* this is basically just a remove,add process. pacman_add() will */
   /* handle it */
-	pmo_upgrade = 1;
-	pacman_add(pkgfile);
-	return(0);
+  pmo_upgrade = 1;
+	return pacman_add(pkgfile);
 }
 
 /*
@@ -559,10 +603,10 @@ int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output)
 	}
 	tar_close(tar);
 
+	free(descfile);
+
 	if(pkgname == NULL || pkgver == NULL) {
-		printf("The current version of Pacman requires a .PKGINFO file\n");
-		printf("present in the .tar.gz archive.  This package does not\n");
-		printf("have one.\n");
+		fprintf(stderr, "Error: Missing .PKGINFO file in %s\n", pkgfile);
 		return(0);
 	}
 
@@ -575,26 +619,38 @@ int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output)
  */
 int db_open(char* path)
 {
-	char line[255];
+	char line[PATH_MAX+1];
+	int i;
 	pkginfo_t* info;
+
+	/* if pm_packages already contains data, free it first */
+	if(pm_pkgcount) {
+		for(i = 0; i < pm_pkgcount; i++) {
+			free(pm_packages[i]);
+		}
+		free(pm_packages);
+		pm_packages = NULL;
+		pm_pkgcount = 0;
+	}
+	
 	dbfp = fopen(path, "r");
 	if(dbfp == NULL) {
 		return(1);
 	}
 	while(!feof(dbfp)) {
 		info = (pkginfo_t*)malloc(sizeof(pkginfo_t));
-		fgets(line, 64, dbfp);
+		fgets(line, sizeof(info->name)-1, dbfp);
 		if(feof(dbfp)) {
 			break;
 		}
 		strcpy(info->name, trim(line));
-		fgets(line, 32, dbfp);
+		fgets(line, sizeof(info->version)-1, dbfp);
 		strcpy(info->version, trim(line));
 		/* add to the collective */
-		packages = (pkginfo_t**)realloc(packages, (++pkgcount) * sizeof(pkginfo_t*));
-		packages[pkgcount-1] = info;
+		pm_packages = (pkginfo_t**)realloc(pm_packages, (++pm_pkgcount) * sizeof(pkginfo_t*));
+		pm_packages[pm_pkgcount-1] = info;
 		for(;;) {
-			fgets(line, 255, dbfp);
+			fgets(line, PATH_MAX, dbfp);
 			if(feof(dbfp)) {
 				return(2);
 			}
@@ -617,12 +673,12 @@ int db_open(char* path)
  */
 int db_update(fileset_t files, unsigned int filecount)
 {
-	FILE* olddb;
+	FILE* olddb = NULL;
 	char* newpath = NULL;
 	char* str = NULL;
-	char name[64];
-	char ver[32];
-	char line[255];
+	char name[256];
+	char ver[64];
+	char line[PATH_MAX+1];
 	int  i = 0, found = 0, done = 0;
 
 	/* build the backup pathname */
@@ -643,21 +699,21 @@ int db_update(fileset_t files, unsigned int filecount)
 
 	rewind(olddb);
 	while(!feof(olddb)) {
-		if(!fgets(name, 64, olddb)) {
+		if(!fgets(name, 255, olddb)) {
 			break;
 		}
 		strcpy(name, trim(name));
-		fgets(ver, 32, olddb);
+		fgets(ver, 63, olddb);
 		found = 0;
-		for(i = 0; i < pkgcount && !found; i++) {
-			if(!strcmp(packages[i]->name, name)) {
+		for(i = 0; i < pm_pkgcount && !found; i++) {
+			if(!strcmp(pm_packages[i]->name, name)) {
 				/* it's there... copy the entries over */
 				found = 1;
 				fputs(name, dbfp);
 				fputc('\n', dbfp);
 				fputs(ver, dbfp);
 				for(done = 0; !done;) {
-					fgets(line, 255, olddb);
+					fgets(line, PATH_MAX, olddb);
 					if(found) {
 						fputs(line, dbfp);
 					}
@@ -670,7 +726,7 @@ int db_update(fileset_t files, unsigned int filecount)
 		if(!found) {
 			/* skip through filelist for this package */
 			for(done = 0; !done;) {
-				fgets(line, 255, olddb);
+				fgets(line, PATH_MAX, olddb);
 				if(strlen(trim(line)) == 0 || feof(olddb)) {
 					done = 1;
 				}
@@ -713,8 +769,8 @@ int db_update(fileset_t files, unsigned int filecount)
 int db_find_conflicts(fileset_t files, unsigned int filecount)
 {
 	int i;
-	char line[255];
-	char name[255];
+	char line[PATH_MAX+1];
+	char name[256];
 	char* dbstr   = NULL;
 	char* filestr = NULL;
 	struct stat buf;
@@ -726,13 +782,13 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 		fgets(name, 255, dbfp);
 		strcpy(name, trim(name));
 		if(!pmo_upgrade && !strcmp(name, pkgname)) {
-			printf("error: This package is already installed.\n");
-			printf("       Maybe you should be using --upgrade.\n");
+			fprintf(stderr, "error: This package is already installed.\n");
+			fprintf(stderr, "       Maybe you should be using --upgrade.\n");
 			return(2);
 		}
-		fgets(line, 255, dbfp);
+		fgets(line, 64, dbfp);
 		while(!feof(dbfp)) {
-			fgets(line, 255, dbfp);
+			fgets(line, PATH_MAX, dbfp);
 			strcpy(line, trim(line));
 			dbstr = line;
 			if(dbstr[0] == '*') {
@@ -742,6 +798,7 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 				break;
 			}
 			if(index(dbstr, '/') == dbstr && (!pmo_upgrade || strcmp(name,pkgname))) {
+				/* we're looking at a file in the db that belongs to a different package */
 				for(i = 0; i < filecount; i++) {
 					filestr = files[i];
 					if(filestr[0] == '*') {
@@ -752,7 +809,7 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 							/* this filename has a trailing '/', so it's a directory -- skip it. */
 							continue;
 						}
-						printf("conflict: %s already exists in package \"%s\"\n", dbstr, name);
+						fprintf(stderr, "conflict: %s already exists in package \"%s\"\n", dbstr, name);
 						conflicts = 1;
 					}
 				}
@@ -768,7 +825,7 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 			filestr++;
 		}
 		if(!stat(filestr, &buf) && !S_ISDIR(buf.st_mode)) {
-			printf("conflict: %s already exists in filesystem\n", filestr);
+			fprintf(stderr, "conflict: %s already exists in filesystem\n", filestr);
 			conflicts = 1;
 		}
 	}
@@ -785,8 +842,9 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
 								unsigned int* bakct)
 {
-	FILE* fp;
-	char line[255];
+	FILE* fp = NULL;
+	FILE* inst = NULL;
+	char line[PATH_MAX+1];
 	char* ptr = NULL;
 	char* key = NULL;
 	int linenum = 0;
@@ -799,7 +857,7 @@ int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
 	}
 
 	while(!feof(fp)) {
-		fgets(line, 255, fp);
+		fgets(line, PATH_MAX, fp);
 		if(output) {
 			printf("%s", line);
 		}
@@ -814,7 +872,7 @@ int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
 		ptr = line;
 		key = strsep(&ptr, "=");
 		if(key == NULL || ptr == NULL) {
-			printf("Syntax error in description file line %d\n", linenum);
+			fprintf(stderr, "Syntax error in description file line %d\n", linenum);
 		} else {
 			key = trim(key);
 			key = strtoupper(key);
@@ -827,18 +885,36 @@ int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
 				strcpy(pkgver, ptr);
 			} else if(!strcmp(key, "PKGDESC")) {
 				/* Not used yet */
+			} else if(!strcmp(key, "INSTALL")) {
+				if(inst == NULL) {
+					pm_install = (char*)malloc(strlen("/tmp/pacman_XXXXXX")+1);
+					strcpy(pm_install, "/tmp/pacman_XXXXXX");	
+					mkstemp(pm_install);
+					inst = fopen(pm_install, "w");
+					if(inst == NULL) {
+						perror("fopen");
+						return(1);
+					}
+				}
+				fputs(ptr, inst);
+				fputc('\n', inst);
 			} else if(!strcmp(key, "BACKUP")) {
 				backup = (fileset_t)realloc(backup, (++count) * sizeof(char*));
 				backup[count-1] = (char*)malloc(strlen(ptr)+1);
 				strcpy(backup[count-1], ptr);
 			} else {
-				printf("Syntax error in description file line %d\n", linenum);
+				fprintf(stderr, "Syntax error in description file line %d\n", linenum);
 			}
 		}
 		line[0] = '\0';
 	}
 	fclose(fp);
 	unlink(descfile);
+
+	if(inst != NULL) {
+		fputs("exit 0\n", inst);
+		fclose(inst);
+	}
 
 	if(count > 0) {
 		(*bakptr) = backup;
@@ -853,19 +929,21 @@ int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
  *     argc: argc
  *     argv: argv
  *     
- * Returns: the functional variable for that operation
- *          (eg, the package file name for PM_ADD)
+ * Returns: 0 on success, 1 on error
  */
-char* parseargs(int op, int argc, char** argv)
+int parseargs(int op, int argc, char** argv)
 {
-  char* pkg = NULL;
 	int i;
 
 	for(i = 2; i < argc; i++) {
+		if(strlen(argv[i]) > PATH_MAX) {
+			fprintf(stderr, "error: argument %d is too long.\n", i);
+			return(1);
+		}
 		if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
 			pmo_nofunc = 1;
 			usage(op, (char*)basename(argv[0]));
-			return(NULL);
+			return(1);
 		} else if(!strcmp(argv[i], "-v") || !strcmp(argv[i], "--verbose")) {
 			pmo_verbose = 1;
 		} else if(!strcmp(argv[i], "-f") || !strcmp(argv[i], "--force")) {
@@ -873,14 +951,14 @@ char* parseargs(int op, int argc, char** argv)
 		} else if(!strcmp(argv[i], "-r") || !strcmp(argv[i], "--root")) {
 			i++;
 			if(i >= argc) {
-				printf("error: missing argument for %s\n", argv[i-1]);
-				return(NULL);
+				fprintf(stderr, "error: missing argument for %s\n", argv[i-1]);
+				return(1);
 			}
 			free(pmo_root);
 			pmo_root = (char*)malloc(PATH_MAX);
 			if(realpath(argv[i], pmo_root) == NULL) {
 				perror("bad root path");
-				return(NULL);
+				return(1);
 			}
 		} else if(!strcmp(argv[i], "-n") || !strcmp(argv[i], "--nosave")) {
 			pmo_nosave = 1;
@@ -888,15 +966,19 @@ char* parseargs(int op, int argc, char** argv)
 			/* PM_QUERY only */
 			i++;
 			if(i >= argc) {
-				printf("error: missing argument for %s\n", argv[i-1]);
-				return(NULL);
+				fprintf(stderr, "error: missing argument for %s\n", argv[i-1]);
+				return(1);
+			}
+			if(strlen(argv[i]) > PATH_MAX) {
+				fprintf(stderr, "error: argument %d is too long.\n", i);
+				return(1);
 			}
 			free(pmo_q_owns);
 			pmo_q_owns = (char*)malloc(PATH_MAX);
 			if(realpath(argv[i], pmo_q_owns) == NULL) {
 				perror("bad path specified for --owns");
 				pmo_nofunc = 1;
-				return(NULL);
+				return(1);
 			}
 		} else if(!strcmp(argv[i], "-l") || !strcmp(argv[i], "--list")) {
 			/* PM_QUERY only */
@@ -908,20 +990,22 @@ char* parseargs(int op, int argc, char** argv)
 			/* PM_QUERY only */
 			pmo_q_info = 1;
 		} else {
-			pkg = argv[i];
+			/* add the target to our pseudo linked list */
+			pm_targets = (fileset_t)realloc(pm_targets, (++pm_targct) * sizeof(char*));
+			pm_targets[pm_targct-1] = argv[i];
 		}
 	}
 
-	if(op != PM_QUERY && pkg == NULL) {
-		printf("error: no package specified\n\n");
+	if(op != PM_QUERY && pm_targct < 1) {
+		fprintf(stderr, "error: no package specified\n\n");
 		usage(op, (char*)basename(argv[0]));
-		return(NULL);
+		return(1);
 	}
-	if(op == PM_QUERY && pmo_q_isfile && pkg == NULL) {
-		printf("error: no package file specified\n\n");
-		return(NULL);
+	if(op == PM_QUERY && pmo_q_isfile && pm_targct < 1) {
+		fprintf(stderr, "error: no package file specified\n\n");
+		return(1);
 	}
-	return(pkg);
+	return(0);
 }
 
 /* Display usage/syntax for the specified operation.

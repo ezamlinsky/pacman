@@ -1,0 +1,110 @@
+.TH makepkg 8 "Mar 17, 2002" "makepkg #VERSION#" ""
+.SH NAME
+makepkg \- package build utility
+.SH SYNOPSIS
+\fBmakepkg\fP
+.SH DESCRIPTION
+\fBmakepkg\fP will build packages for you.  All it needs is
+a build-capable linux platform, wget, and some build scripts.  The advantage
+to a script-based build is that you only really do the work once.  Once you
+have the build script for a package, you just need to run makepkg and it
+will do the rest: download source files, configure the buildtime settings,
+build the package, install the package into a temporary root, make
+customizations, and package the whole thing up for pacman to use.
+
+\fBmakeworld\fP can be used to rebuild an entire package group, or the
+entire build tree.
+.SH BUILD PROCESS (or How To Build Your Own Packages)
+Start in an isolated directory (ie, it's not used for anything other
+than building this package).  The build script should be called PKGBUILD
+and it should bear resemblance to the example below.
+
+.TP
+.TP
+.SH PKGBUILD Example:
+.RS
+.nf
+pkgname=modutils
+pkgver=2.4.13
+pkgrel=1
+backup=(etc/modules.conf)
+source=(ftp://ftp.server.com/$pkgname-$pkgver.tar.gz modules.conf)
+
+build() {
+  cd $startdir/src/$pkgname-$pkgver
+  ./configure --prefix=/usr
+  make || return 1
+  make prefix=$startdir/pkg/usr install
+  # copy our custom modules.conf into the package root
+  mkdir -p $startdir/pkg/etc
+  cp ../modules.conf $startdir/pkg/etc
+}
+.fi
+.RE
+
+As you can see, the setup is fairly simple.  The first three lines define
+the package name and version info.  They also define the final package name,
+which will be of the form $pkgname-$pkgver-$pkgrel.pkg.tar.gz
+
+The sources are then decompressed (if necessary) into a directory called ./src.
+Then the \fIbuild\fP function is called.  This is where all package configuration,
+building, and installing should be done.  Any customization will likely take
+place here.
+
+After a package is built, the \fIbuild\fP function must install the package
+files into a special package root, which can be referenced by \fB$startdir/pkg\fP
+in the \fIbuild\fP function.  The typical way to do this is one of the following:
+.RS
+.nf
+
+make DESTDIR=$startdir/pkg install
+
+or
+
+make prefix=$startdir/pkg/usr install
+
+.fi
+.RE
+Notice that the "/usr" portion should be present with "prefix", but not "DESTDIR."
+
+Once the package is successfully installed into the package root, \fImakepkg\fP
+will remove some directories (as per Arch Linux package guidelines; if you use
+this elsewhere, feel free to change it) like /usr/doc and /usr/info.  It will
+then strip debugging info from libraries and binaries and compress
+
+.SH PKGBUILD Directives
+.TP
+.B backup
+A space-delimited array of filenames (without a preceiding slash). The
+\fIbackup\fP line will be propagated to the package meta-info file for
+pacman.  This will designate all files listed there to be backed up if this
+package is ever removed from a system.
+
+.TP
+.B source
+The \fIsource\fP line is an array of source files required to build the
+package.  Source files must reside in the same directory as the PKGBUILD
+file, unless they have a fully-qualified URL.  Then if the source file
+does not already exist in /var/cache/pacman/src, the file is downloaded
+by wget.
+
+.TP
+.B install
+There is also an \fIinstall\fP directive that is not used in the example
+above.  If \fIinstall\fP is set to the name of a file in the package build
+directory (but \fBnot\fP listed in the source line), then it will be
+copied to the package meta-info file and designated as a post-install script.
+This will be run by pacman whenever it installs the package.
+
+.SH CONFIGURATION
+Configuration options are stored in /etc/makepkg.conf.  This file is parsed
+as a bash script, so you can export any special compiler flags you wish
+to use.  This is helpful for building for different architectures, or with
+different optimizations.
+
+\fBNOTE:\fP This does not guarantee that all package Makefiles will use
+your exported variables.  Some of them are flaky...
+.SH AUTHOR
+.nf
+Judd Vinet <jvinet@zeroflux.org>
+.fi
