@@ -21,7 +21,7 @@
 #ifndef PACMAN_H
 #define PACMAN_H
 
-#define VERSION   "1.0"
+#define VERSION   "1.1"
 
 #define PKGEXT		".tar.gz"
 #define PKGDB			"/var/lib/pacman/pacman.db"
@@ -50,11 +50,15 @@ int db_update(fileset_t files, unsigned int filecount);
 int db_find_conflicts(fileset_t files, unsigned int filecount);
 int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output);
 
+char* parseargs(int op, int argc, char** argv);
+int parse_descfile(char* descfile, unsigned short output, fileset_t* bakptr,
+								unsigned int* bakct);
+
 int vprint(char* fmt, ...);
 void usage(int op, char* myname);
 void version(void);
-char* parseargs(int op, int argc, char** argv);
-int parse_descfile(char* descfile, unsigned short output);
+int is_in(char* needle, fileset_t haystack, unsigned int hayct);
+int needbackup(char* file, fileset_t files, unsigned int filect);
 char* trim(char* str);
 char* strtoupper(char* str);
 static int gzopen_frontend(char *pathname, int oflags, int mode);

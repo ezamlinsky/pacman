@@ -2,28 +2,48 @@
 
 toplevel=`pwd`
 
-if [ $# -lt 1 ]; then
-  echo "usage: $0 <destdir>"
+if [ $# -lt 2 ]; then
+  echo "usage: $0 <destdir> <category> [category] ..."
+  echo "  where <category> is base, opt, etc."
+  echo "  eg: makeworld /packages base opt extra"
   exit 1
 fi
 
-for port in `find $toplevel -type d -maxdepth 1 -mindepth 1 | sort`; do
-  cd $port
-  if [ -f PKGBUILD ]; then
-    . PKGBUILD
-    donebuild=0
-    if [ ! -f $1/$pkgname-$pkgver-$pkgrel.pkg.tar.gz ]; then
-      makepkg
-      rm -rf pkg src
-      mv -v $pkgname-$pkgver-$pkgrel.pkg.tar.gz $1/
-      donebuild=1
+dest=$1
+shift
+
+sd=`date +"[%b %d %H:%M]"`
+
+for category in $*; do
+  for port in `find $toplevel/$category -type d -maxdepth 1 -mindepth 1 | sort`; do
+    cd $port
+    if [ -f PKGBUILD ]; then
+      . PKGBUILD
+      buildstatus=0
+      if [ ! -f $dest/$pkgname-$pkgver-$pkgrel.pkg.tar.gz ]; then
+        makepkg
+        if [ $? -gt 0 ]; then
+          buildstatus=2
+        else
+          rm -rf pkg src
+          # some packages (mozilla) have been split into multiple packages
+          mv -v $pkgname-*.pkg.tar.gz $dest/
+          buildstatus=1
+        fi
+      fi
+      d=`date +"[%b %d %H:%M]"`
+      echo -n "$d  " >>$toplevel/build.log
+      case $buildstatus in
+        0) echo "$pkgname already built -- skipping" >>$toplevel/build.log ;;
+        1) echo "$pkgname was built successfully" >>$toplevel/build.log ;;
+        2) echo "$pkgname build failed" >>$toplevel/build.log ;;
+      esac
     fi
-    d=`date +"[%b %d %H:%M]"`
-    echo -n "$d  " >>$toplevel/build.log
-    if [ $donebuild = 1 ]; then
-      echo "$pkgname was built successfully" >>$toplevel/build.log
-    else
-      echo "$pkgname already built -- skipping" >>$toplevel/build.log
-    fi
-  fi
+  done
 done
+ed=`date +"[%b %d %H:%M]"`
+
+echo "makeworld complete." >>$toplevel/build.log
+echo "  started:  $sd" >>$toplevel/build.log
+echo "  finished: $ed" >>$toplevel/build.log
+

@@ -1,4 +1,4 @@
-/**
+/*
  *  pacman
  * 
  *  Copyright (c) 2002 by Judd Vinet <jvinet@zeroflux.org>
@@ -18,6 +18,7 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, 
  *  USA.
  */
+
 #include "pacman.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -191,11 +192,12 @@ int pacman_add(char* pkgfile)
 	char* expath = NULL;
 	char* newpath = NULL;
 	fileset_t files = NULL;
-	unsigned int filecount = 0;
+	unsigned int filecount = 0, nb = 0;
 	struct stat buf;
 
 	/* Populate the file list */
 	filecount = load_pkg(pkgfile, &files, 0);
+
 	if(filecount == 0) {
 		return(1);
 	}
@@ -244,16 +246,18 @@ int pacman_add(char* pkgfile)
 		strcpy(expath, pmo_root);
 		strcat(expath, "/");
 		strcat(expath, th_get_pathname(tar));
+		
+		/* see if this file should be backed up */
+		nb = needbackup(expath, files, filecount);
+
 		vprint("  %s\n", expath);
-		if(!stat(expath, &buf)) {
-			/* if the file ends in .conf, back it up */
-			if(!strcmp((char*)(expath+strlen(expath)-5), ".conf")) {
-				newpath = (char*)realloc(newpath, strlen(expath)+6);
-				strcpy(newpath, expath);
-				strcat(newpath, ".save");
-				rename(expath, newpath);
-				printf("%s renamed to %s\n", expath, newpath);
-			}
+		if(!pmo_nosave && nb && !stat(expath, &buf)) {
+			/* backup this file */
+			newpath = (char*)realloc(newpath, strlen(expath)+6);
+			strcpy(newpath, expath);
+			strcat(newpath, ".save");
+			rename(expath, newpath);
+			printf("%s renamed to %s\n", expath, newpath);
 		}
 	  if(tar_extract_file(tar, expath)) {
 			errmsg = strerror(errno);
@@ -284,9 +288,10 @@ int pacman_remove(char* pkgfile)
 	int i;
 	char line[255];
 	fileset_t files = NULL;
-	unsigned int filecount = 0;
+	unsigned int filecount = 0, nb = 0;
 	struct stat buf;
 	char* newpath = NULL;
+	char* file = NULL;
 
 	if(pkgfile == NULL) {
 		return(0);
@@ -322,27 +327,36 @@ int pacman_remove(char* pkgfile)
 	}
 	/* iterate through the list backwards, unlinking files */
 	for(i = filecount-1; i >= 0; i--) {
-		if(lstat(files[i], &buf)) {
-			vprint("file %s does not exist\n", files[i]);
+		file = (char*)realloc(file, strlen(files[i])+strlen(pmo_root)+1);
+		strcpy(file, pmo_root);
+		if(files[i][0] == '*') {
+			nb = 1;
+			strcat(file, (char*)(files[i]+1));
+		} else {
+			nb = 0;
+			strcat(file, files[i]);
+		}
+		if(lstat(file, &buf)) {
+			vprint("file %s does not exist\n", file);
 			continue;
 		}
 		if(S_ISDIR(buf.st_mode)) {
-			vprint("  removing directory %s\n", files[i]);
-			if(rmdir(files[i])) {
+			vprint("  removing directory %s\n", file);
+			if(rmdir(file)) {
 				/* this is okay, other packages are probably using it. */
 				/* perror("cannot remove directory"); */
 			}
 		} else {
 			/* if the file ends in .conf, back it up */
-			if(!pmo_nosave && !strcmp((char*)(files[i]+strlen(files[i])-5), ".conf")) {
-				newpath = (char*)realloc(newpath, strlen(files[i])+6);
-				strcpy(newpath, files[i]);
+			if(!pmo_nosave && nb) {
+				newpath = (char*)realloc(newpath, strlen(file)+6);
+				strcpy(newpath, file);
 				strcat(newpath, ".save");
-				rename(files[i], newpath);
-				printf("%s renamed to %s\n", files[i], newpath);
+				rename(file, newpath);
+				printf("%s renamed to %s\n", file, newpath);
 			} else {
-				vprint("  unlinking %s\n", files[i]);
-				if(unlink(files[i])) {
+				vprint("  unlinking %s\n", file);
+				if(unlink(file)) {
 					perror("cannot remove file");
 				}
 			}
@@ -388,7 +402,11 @@ int pacman_query(char* pkgfile)
 		if(pmo_q_list) {
 			for(i = 0; i < filecount; i++) {
 				if(strcmp(files[i], ".PKGINFO")) {
-					printf("%s\n", files[i]);
+				  if(files[i][0] == '*') {
+						printf("%s\n", (char*)(files[i]+1));
+					} else {
+						printf("%s\n", files[i]);
+					}
 				}
 			}
 		} else {
@@ -451,7 +469,11 @@ int pacman_query(char* pkgfile)
 			strcpy(line, trim(line));
 			if(strlen(line)) {
 				if(pmo_q_list) {
-					printf("%s%s\n", pmo_root, line);
+					if(line[0] == '*') {
+						printf("%s%s\n", pmo_root, (char*)(line+1));
+					} else {
+						printf("%s%s\n", pmo_root, line);
+					}
 				}
 			} else {
 				found = 1;
@@ -493,6 +515,8 @@ int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output)
 	TAR* tar;
 	unsigned int filecount = 0;
 	fileset_t files = NULL;
+	fileset_t backup = NULL;
+	unsigned int bakct = 0;
 
 	descfile = (char*)malloc(strlen("/tmp/pacman_XXXXXX")+1);
 	strcpy(descfile, "/tmp/pacman_XXXXXX");	
@@ -508,12 +532,19 @@ int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output)
 			vprint("Found package description file.\n");
 			mkstemp(descfile);
 			tar_extract_file(tar, descfile);
-			parse_descfile(descfile, output);
+			parse_descfile(descfile, output, &backup, &bakct);
 			continue;
 		}
 		/* build the new pathname relative to pmo_root */
-		expath = (char*)malloc(strlen(th_get_pathname(tar))+strlen(pmo_root)+2);
-		strcpy(expath, pmo_root);
+		if(is_in(th_get_pathname(tar), backup, bakct)) {
+			expath = (char*)malloc(strlen(th_get_pathname(tar))+strlen(pmo_root)+3);
+			// prepend the backup symbol
+			strcpy(expath, "*");
+		} else {
+			expath = (char*)malloc(strlen(th_get_pathname(tar))+strlen(pmo_root)+2);
+			expath[0] = '\0';
+		}
+		strcat(expath, pmo_root);
 		strcat(expath, "/");
 		strcat(expath, th_get_pathname(tar));
 		/* add the path to the list */
@@ -522,7 +553,7 @@ int load_pkg(char* pkgfile, fileset_t* listptr, unsigned short output)
 
 		if(TH_ISREG(tar) && tar_skip_regfile(tar)) {
 			perror("bad package file");
-			return(0);
+			return(1);
 		}
 		expath = NULL;
 	}
@@ -657,6 +688,10 @@ int db_update(fileset_t files, unsigned int filecount)
 		for(i = 0; i < filecount; i++) {
 			str = files[i];
 			str += strlen(pmo_root);
+			if(files[i][0] == '*') {
+				fputc('*', dbfp);
+				str++;
+			}
 			fputs(str, dbfp);
 			fputc('\n', dbfp);
 		}
@@ -680,6 +715,8 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 	int i;
 	char line[255];
 	char name[255];
+	char* dbstr   = NULL;
+	char* filestr = NULL;
 	struct stat buf;
 	int conflicts = 0;
 
@@ -697,17 +734,25 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 		while(!feof(dbfp)) {
 			fgets(line, 255, dbfp);
 			strcpy(line, trim(line));
-			if(!strlen(line)) {
+			dbstr = line;
+			if(dbstr[0] == '*') {
+			  dbstr++;
+			}
+			if(!strlen(dbstr)) {
 				break;
 			}
-			if(index(line, '/') == (char*)line && (!pmo_upgrade || strcmp(name,pkgname))) {
+			if(index(dbstr, '/') == dbstr && (!pmo_upgrade || strcmp(name,pkgname))) {
 				for(i = 0; i < filecount; i++) {
-					if(!strcmp(line, files[i])) {
-						if(rindex(files[i], '/') == files[i]+strlen(files[i])-1) {
+					filestr = files[i];
+					if(filestr[0] == '*') {
+						filestr++;
+					}
+					if(!strcmp(dbstr, filestr)) {
+						if(rindex(files[i], '/') == filestr+strlen(filestr)-1) {
 							/* this filename has a trailing '/', so it's a directory -- skip it. */
 							continue;
 						}
-						printf("conflict: %s already exists in package \"%s\"\n", line, name);
+						printf("conflict: %s already exists in package \"%s\"\n", dbstr, name);
 						conflicts = 1;
 					}
 				}
@@ -718,8 +763,12 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
 	/* CHECK 2: checking filesystem conflicts */
 	/* TODO: run filesystem checks for upgrades */
 	for(i = 0; i < filecount && !pmo_upgrade; i++) {
-		if(!stat(files[i], &buf) && !S_ISDIR(buf.st_mode)) {
-			printf("conflict: %s already exists in filesystem\n", files[i]);
+		filestr = files[i];
+		if(filestr[0] == '*') {
+			filestr++;
+		}
+		if(!stat(filestr, &buf) && !S_ISDIR(buf.st_mode)) {
+			printf("conflict: %s already exists in filesystem\n", filestr);
 			conflicts = 1;
 		}
 	}
@@ -733,13 +782,16 @@ int db_find_conflicts(fileset_t files, unsigned int filecount)
  * Returns: 0 on success, 1 on error
  *
  */
-int parse_descfile(char* descfile, unsigned short output)
+int parse_descfile(char* descfile, unsigned short output, fileset_t *bakptr,
+								unsigned int* bakct)
 {
 	FILE* fp;
 	char line[255];
 	char* ptr = NULL;
 	char* key = NULL;
 	int linenum = 0;
+	fileset_t backup = NULL;
+	unsigned int count = 0;
 
 	if((fp = fopen(descfile, "r")) == NULL) {
 		perror(descfile);
@@ -775,6 +827,10 @@ int parse_descfile(char* descfile, unsigned short output)
 				strcpy(pkgver, ptr);
 			} else if(!strcmp(key, "PKGDESC")) {
 				/* Not used yet */
+			} else if(!strcmp(key, "BACKUP")) {
+				backup = (fileset_t)realloc(backup, (++count) * sizeof(char*));
+				backup[count-1] = (char*)malloc(strlen(ptr)+1);
+				strcpy(backup[count-1], ptr);
 			} else {
 				printf("Syntax error in description file line %d\n", linenum);
 			}
@@ -783,6 +839,12 @@ int parse_descfile(char* descfile, unsigned short output)
 	}
 	fclose(fp);
 	unlink(descfile);
+
+	if(count > 0) {
+		(*bakptr) = backup;
+		(*bakct)  = count;
+	}
+
 	return(0);
 }
 
@@ -879,20 +941,20 @@ void usage(int op, char* myname)
 	  printf("usage:  %s {-A --add} [options] <file>\n", myname);
 		printf("options:\n");
 		printf("  -f, --force        force install, overwrite conflicting files\n");
-		printf("  -n, --nosave       do not save .conf files\n");
+		printf("  -n, --nosave       do not save configuration files\n");
 		printf("  -v, --verbose      be verbose\n");
 		printf("  -r, --root <path>  set an alternative installation root\n");
 	} else if(op == PM_REMOVE) {
 		printf("usage:  %s {-R --remove} [options] <package>\n", myname);
 		printf("options:\n");
-		printf("  -n, --nosave       do not save .conf files\n");
+		printf("  -n, --nosave       do not save configuration files\n");
 		printf("  -v, --verbose      be verbose\n");
 		printf("  -r, --root <path>  set an alternative installation root\n");
 	} else if(op == PM_UPGRADE) {
 		printf("usage:  %s {-U --upgrade} [options] <file>\n", myname);
 		printf("options:\n");
 		printf("  -f, --force        force install, overwrite conflicting files\n");
-		printf("  -n, --nosave       do not save .conf files\n");
+		printf("  -n, --nosave       do not save configuration files\n");
 		printf("  -v, --verbose      be verbose\n");
 		printf("  -r, --root <path>  set an alternative installation root\n");
 	} else if(op == PM_QUERY) {
@@ -930,6 +992,34 @@ int vprint(char* fmt, ...)
 		vprintf(fmt, args);
 		va_end(args);
 		fflush(stdout);
+	}
+	return(0);
+}
+
+/* See if a file should be backed up or not
+ */
+int needbackup(char* file, fileset_t files, unsigned int filect)
+{
+	int i;
+
+	for(i = 0; i < filect; i++) {
+		if(files[i][0] == '*' && !strcmp((char*)(files[i]+1), file)) {
+			return(1);
+		}
+	}
+	return(0);
+}
+
+/* Test for existence of a string in a fileset
+ */
+int is_in(char* needle, fileset_t haystack, unsigned int hayct)
+{
+	int i;
+
+	for(i = 0; i < hayct; i++) {
+		if(!strcmp(haystack[i], needle)) {
+			return(1);
+		}
 	}
 	return(0);
 }

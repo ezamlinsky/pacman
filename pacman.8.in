@@ -47,6 +47,11 @@ files owned by the package.
 .B "\-i, \-\-info"
 Output the .PKGINFO file contained in <package>.  This option
 can only be used with the \fB-p\fP option.
+.TP
+.B "\-p, \-\-file"
+Tells pacman that the package supplied on the command line is a
+file, not an entry in the database.  Pacman will decompress the
+file and query it.  This is useful with \fB--info\fP and \fB--list\fP.
 .SH OPTIONS
 .TP
 .B "\-v, \-\-verbose"
@@ -57,6 +62,13 @@ Force installation, overwriting conflicting files.  If the package
 that is about to be installed contains files that are already
 installed this option will cause all those files to be overwritten.
 This option should be used with care, preferably not at all.
+.TP
+.B "\-n, \-\-nosave"
+Instructs pacman to ignore file backup designations.  Normally, when
+a file is about to be removed from the system, the database is first
+checked to see if the file should be renamed to a .save extension
+(indicated by a '\fB*\fP' prefix in the pacman database).  The \fB--nosave\fP
+will turn off all file backups.
 .TP
 .B "\-r, \-\-root <path>"
 Specify alternative installation root (default is "/"). This
