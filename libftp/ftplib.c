@@ -411,14 +411,18 @@ GLOBALDEF int FtpConnect(const char *host, netbuf **nControl)
     }
     else
     {
-	*pnum++ = '\0';
-	if (isdigit(*pnum))
-	    sin.sin_port = htons(atoi(pnum));
-	else
-	{
-	    pse = getservbyname(pnum,"tcp");
-	    sin.sin_port = pse->s_port;
-	}
+			*pnum++ = '\0';
+			if (isdigit(*pnum))
+				sin.sin_port = htons(atoi(pnum));
+			else
+			{
+				pse = getservbyname(pnum,"tcp");
+				if(pse == NULL) {
+					perror("getservbyname");
+					return 0;
+				}
+				sin.sin_port = pse->s_port;
+			}
     }
     if ((sin.sin_addr.s_addr = inet_addr(lhost)) == -1)
     {

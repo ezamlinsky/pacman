@@ -941,56 +941,57 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		/* double-check */
 		FREELIST(files);
 
-		/* Check integrity of files */
-		printf("checking package integrity... ");
-		fflush(stdout);
-
-		for(i = final; i; i = i->next) {
-			syncpkg_t *sync;
-			char str[PATH_MAX], pkgname[PATH_MAX];
-			char *md5sum1, *md5sum2;
-
-			sync = (syncpkg_t*)i->data;
-			snprintf(pkgname, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);
-
-			md5sum1 = sync->pkg->md5sum;
-			if(md5sum1 == NULL || md5sum1[0] == '\0') {
-				if(allgood) {
-					printf("\n");
-				}
-				fprintf(stderr, "error: can't get md5 checksum for package %s\n", pkgname);
-				allgood = 0;
-				continue;
-			}
-			snprintf(str, PATH_MAX, "%s/%s", ldir, pkgname);
-			md5sum2 = MDFile(str);
-			if(md5sum2 == NULL || md5sum2[0] == '\0') {
-				if(allgood) {
-					printf("\n");
-				}
-				fprintf(stderr, "error: can't get md5 checksum for archive %s\n", pkgname);
-				FREE(md5sum1);
-				allgood = 0;
-				continue;
-			}
-
-			if(strcmp(md5sum1, md5sum2) != 0) {
-				if(allgood) {
-					printf("\n");
-				}
-				fprintf(stderr, "error: archive %s is corrupted\n", pkgname);
-				allgood = 0;
-			}
-
-			FREE(md5sum2);
-		}
 		if(allgood) {
-			printf("done.\n");
-		} else {
-			fprintf(stderr, "\n");
+			/* Check integrity of files */
+			printf("checking package integrity... ");
+			fflush(stdout);
+
+			for(i = final; i; i = i->next) {
+				syncpkg_t *sync;
+				char str[PATH_MAX], pkgname[PATH_MAX];
+				char *md5sum1, *md5sum2;
+
+				sync = (syncpkg_t*)i->data;
+				snprintf(pkgname, PATH_MAX, "%s-%s.pkg.tar.gz", sync->pkg->name, sync->pkg->version);
+
+				md5sum1 = sync->pkg->md5sum;
+				if(md5sum1 == NULL || md5sum1[0] == '\0') {
+					if(allgood) {
+						printf("\n");
+					}
+					fprintf(stderr, "error: can't get md5 checksum for package %s\n", pkgname);
+					allgood = 0;
+					continue;
+				}
+				snprintf(str, PATH_MAX, "%s/%s", ldir, pkgname);
+				md5sum2 = MDFile(str);
+				if(md5sum2 == NULL || md5sum2[0] == '\0') {
+					if(allgood) {
+						printf("\n");
+					}
+					fprintf(stderr, "error: can't get md5 checksum for archive %s\n", pkgname);
+					allgood = 0;
+					continue;
+				}
+
+				if(strcmp(md5sum1, md5sum2) != 0) {
+					if(allgood) {
+						printf("\n");
+					}
+					fprintf(stderr, "error: archive %s is corrupted\n", pkgname);
+					allgood = 0;
+				}
+
+				FREE(md5sum2);
+			}
+			if(allgood) {
+				printf("done.\n");
+			} else {
+				fprintf(stderr, "\n");
+			}
 		}
 
-		if(!pmo_s_downloadonly) {
+		if(!pmo_s_downloadonly && allgood) {
 			/* remove any conflicting packages (WITH dep checks) */
 			if(rmtargs) {
 				int retcode;
@@ -1067,7 +1068,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 		}
 
-		if(!varcache && !pmo_s_downloadonly) {
+		if(!varcache && !pmo_s_downloadonly && allgood) {
 			/* delete packages */
 			for(i = files; i; i = i->next) {
 				unlink(i->data);
@@ -3029,7 +3030,7 @@ void logaction(FILE *fp, char *fmt, ...)
 		t = time(NULL);
 		tm = localtime(&t);
 		
-		fprintf(logfd, "[%02d/%02d/%02d %02d:%02d] %s\n", tm->tm_mon, tm->tm_mday,
+		fprintf(logfd, "[%02d/%02d/%02d %02d:%02d] %s\n", tm->tm_mon+1, tm->tm_mday,
 				tm->tm_year-100, tm->tm_hour, tm->tm_min, msg);
 	}
 }

@@ -1,5 +1,11 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.7.1         - Fixed a couple obscure segfaults
+              - LogFiles were logging incorrect dates - fixed
+              - Cleaned up md5sum output in makepkg -g
+              - Added (optional) colorized output messages to makepkg
+              - Renamed the "stable" repo to "release" in pacman.conf
+              - Renamed the "unofficial" repo to "extra" in pacman.conf
 2.7           - Added build-time dependencies to makepkg (Jason Chu)
               - Added md5sum integrity checking to packages in --sync
                 mode (Aurelien Foret)

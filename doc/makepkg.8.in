@@ -1,4 +1,4 @@
-.TH makepkg 8 "November 22, 2003" "makepkg #VERSION#" ""
+.TH makepkg 8 "December 20, 2003" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -311,6 +311,9 @@ Output syntax and commandline options.
 .TP
 .B "\-i, \-\-install"
 Install/Upgrade the package after a successful build.
+.TP
+.B "\-m, \-\-nocolor"
+Disable color in output messages
 .TP
 .B "\-n, \-\-nostrip"
 Do not strip binaries and libraries.
