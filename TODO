@@ -1,11 +1,22 @@
-- add a [sibling] option to .PKGINFO -- used when only one of
-  the siblings can be installed at a time (eg, bsdinit,sysvinit)
-- sort packages by package name in pacman.db
-? manage conditional file installs (ie, 'info' pages)
-- maybe add a 'confirm every action' option for doing paranoid installs
-- add a consistency check operation
-- add file locking to db
+- check $PACCONF env var
+- ftp transfer progress bar breaks after ~42000 K
+- use a 'trust pacman' config option for downgrading?
+- use a provides tag (instead of an OR operator in depends)
+- instead of 'conflicts' use a ! operator in depends
+- add a --pretend option
+- add a consistency/sanity check operation
 - add a --dbpath option
-+ dependency checking
-- upgrade currently does a double db backup; not really desirable
-
+- build-time (source) dependencies in makepkg
+- auto-resolve dependencies in makepkg
+- use package caches more for performance
++ add an "ignore package" option in either pacman.conf or in each package
+  record. this will prevent it from being upgraded from the sync set
+- duplicate dep checks occur with sync (one in sync, one in add)
+- clean up output a bit (message queue?)
+- add an OR operator to dependencies or allow a sibling tag (ie, mawk, gawk)
+- run ldd on every executable in a newly built package to find required so's
+- add a freshen operation
+- allow multiple ftp servers to be defined and fallback to backups on failure
+- use a files.cache gdbm (or whatever) for --owns and db_find_conflicts
+- things like 'groupadd' and 'useradd' in the install scriptlets will affect
+  the real root, not the one specified with -r

@@ -7,24 +7,23 @@ DESCRIPTION:
 ------------
    pacman is a utility which manages software packages in Linux.  It uses
    simple .tar.gz files as a package format, and maintains a text-based
-   package database, just in case some hand tweaking is necessary.
+   package database (more of a hierarchy), just in case some hand tweaking
+	 is necessary.
 
    pacman does not strive to "do everything."  It will add, remove and
    upgrade packages in the system, and it will allow you to query the
-   package database for installed packages, files and owners.
+   package database for installed packages, files and owners.  It also
+	 attempts to handle dependencies automatically and can 
 
    Although the package manager itself is quite simple, the pacman tarball
    also comes with scripts that help automate building and installing
    packages.  These are used extensively in the Arch Build System (ABS),
-   used in Arch Linux <http://www.archlinux.org>.  See ABS.txt for more
-   information.
+   used in Arch Linux <http://www.archlinux.org>.
 
-   As of version 1.2, pacsync is included as well.  This performs an
-   apt-like function, keeping your system's packages in sync with the
-   packages on a remote server.
-
-   Plans exist for dependency checking as I approach version 2.0.
-   See TODO for more info.
+   As of version 2.0, pacman can also keep your system's packages in
+	 sync with a master server.  You can follow CURRENT and STABLE trees,
+	 or lock yourself into a specific version.  See the pacman manpage
+	 for more info on this (--sync operation).
 
 
 INSTALL:
@@ -44,7 +43,7 @@ BUGS:
 -----
 If you find bugs (which is quite likely), please submit them to
 <jvinet@zeroflux.org> with specific information, such as your
-commandline, the nature of the bug, and even the package database, if
+commandline, the nature of the bug, and even the package database if
 it helps.
 
 

@@ -1,5 +1,14 @@
 VERSION         DESCRIPTION
 ------------------------------------------------------------------
+              - Improved dependency resolution and sorting
+2.0           - Added dependency functionality
+              - Completely new database format, similar to FreeBSD
+							- Better internal data structures
+							- Merged pacsync functionality into pacman
+							- Now uses libftp for all file retrieval (currently only ftp)
+							- Automatic dependency resolution, a la apt-get
+							- Moved config stuff from /etc/pacsync.conf to /etc/pacman.conf
+							- Much better backup file handling, now uses md5 hashes a la rpm
 1.23          - Added install/upgrade/remove scripting control
 1.22          - Some manpage typo fixes
               - Added --root switch to pacsync

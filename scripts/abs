@@ -1,0 +1,54 @@
+#!/bin/bash
+
+myver='2.0'
+ABS_ROOT=/usr/abs
+
+usage() {
+  echo "abs $myver"
+  echo "usage: $0"
+	echo
+	echo "abs will synchronize PKGBUILD scripts from the CVS repository"
+	echo "into /usr/abs.  You can follow different package trees by editing"
+	echo "/etc/abs/supfile"
+  echo
+  exit 0
+}
+
+update() {
+	if [ ! `type -p cvsup` ]; then
+		echo "abs: cvsup was not found in PATH.  Install cvsup"
+		exit 1
+	fi
+
+	if [ ! -d "$ABS_ROOT" ]; then
+		echo "abs: directory $ABS_ROOT does not exist"
+		exit 1
+	fi
+
+	if [ ! -r /etc/abs/supfile ]; then
+		echo "abs: missing config file /etc/abs/supfile"
+		exit 1
+	fi
+
+	if [ "`id -u`" != "0" ]; then
+		echo "abs: you must be root to update your ABS tree"
+		exit 1
+	fi
+
+	cd $ABS_ROOT && cvsup -L 1 -r 0 -g -c .sup /etc/abs/supfile
+}
+
+for opt in "$@"; do
+	case $opt in
+		-h|--help)
+			usage
+			exit 0 ;;
+		*)
+			echo "abs: invalid option \"$opt\""
+			exit 1 ;;
+	esac
+done
+
+update
+
+exit 0

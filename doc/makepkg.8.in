@@ -1,4 +1,4 @@
-.TH makepkg 8 "Mar 17, 2002" "makepkg #VERSION#" ""
+.TH makepkg 8 "July 18, 2002" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -8,9 +8,10 @@ makepkg \- package build utility
 a build-capable linux platform, wget, and some build scripts.  The advantage
 to a script-based build is that you only really do the work once.  Once you
 have the build script for a package, you just need to run makepkg and it
-will do the rest: download source files, configure the buildtime settings,
-build the package, install the package into a temporary root, make
-customizations, and package the whole thing up for pacman to use.
+will do the rest: download source files, check dependencies, 
+configure the buildtime settings, build the package, install the package
+into a temporary root, make customizations, generate meta-info, and package
+the whole thing up for \fBpacman\fP to use.
 
 \fBmakeworld\fP can be used to rebuild an entire package group, or the
 entire build tree.
@@ -18,6 +19,11 @@ entire build tree.
 Start in an isolated directory (ie, it's not used for anything other
 than building this package).  The build script should be called PKGBUILD
 and it should bear resemblance to the example below.
+
+\fBNOTE:\fP If you have a local copy of the Arch Build System (ABS) tree
+on your computer, you can copy the PKGBUILD.proto file to your new package
+build directory and edit it from there.  To acquire/sync the ABS tree, use
+the \fBabs\fP script included with pacman/makepkg.
 
 .TP
 .TP
@@ -27,7 +33,9 @@ and it should bear resemblance to the example below.
 pkgname=modutils
 pkgver=2.4.13
 pkgrel=1
+pkgdesc="Utilities for inserting and removing modules from the linux kernel"
 backup=(etc/modules.conf)
+depends=('glibc>=2.2.5' 'bash' 'zlib')
 source=(ftp://ftp.server.com/$pkgname-$pkgver.tar.gz modules.conf)
 
 build() {
@@ -43,11 +51,26 @@ build() {
 .RE
 
 As you can see, the setup is fairly simple.  The first three lines define
-the package name and version info.  They also define the final package name,
-which will be of the form $pkgname-$pkgver-$pkgrel.pkg.tar.gz
+the package name and version info.  They also define the final package name
+which will be of the form \fI$pkgname-$pkgver-$pkgrel.pkg.tar.gz\fP.  The fourth
+line provides a brief description of the package.  These four lines should
+be present in every PKGBUILD script.
 
-The sources are then decompressed (if necessary) into a directory called ./src.
-Then the \fIbuild\fP function is called.  This is where all package configuration,
+The line with \fIbackup=\fP specifies files that should be treated specially
+when removing or upgrading packages.  See \fBHANDLING CONFIG FILES\fP in
+the \fIpacman\fP manpage for more information on this.
+
+The sixth line lists the dependencies for this package.  In order to build/run
+the package, all dependencies must be satisifed first.  makepkg will check this
+before attempting to build the package.
+
+Once your PKGBUILD is created, you can run \fImakepkg\fP from the build directory.
+makepkg will then check dependencies and look for the source files required to
+build.  If some are missing it will attempt to download them, provided there is
+a fully-qualified URL in the \fIsource\fP array.
+
+The sources are then extracted into a directory called ./src and
+the \fIbuild\fP function is called.  This is where all package configuration,
 building, and installing should be done.  Any customization will likely take
 place here.
 
@@ -65,13 +88,14 @@ make prefix=$startdir/pkg/usr install
 
 .fi
 .RE
-Notice that the "/usr" portion should be present with "prefix", but not "DESTDIR."
+Notice that the "/usr" portion should be present with "prefix", but not "DESTDIR".
 
 Once the package is successfully installed into the package root, \fImakepkg\fP
 will remove some directories (as per Arch Linux package guidelines; if you use
 this elsewhere, feel free to change it) like /usr/doc and /usr/info.  It will
-then strip debugging info from libraries and binaries and compress everything
-into a .pkg.tar.gz file in the directory you ran \fBmakepkg\fP from.
+then strip debugging info from libraries and binaries and generate a meta-info
+file.  Finally, it will compress everything into a .pkg.tar.gz file and leave it
+in the directory you ran \fBmakepkg\fP from.
 
 At this point you should have a package file in the current directory, named
 something like name-version-release.pkg.tar.gz.  Done!
@@ -95,11 +119,15 @@ script is run after all files have been upgraded.
 script is run right before files are removed.
 
 .RE
-In order to use this feature, your build function should put the script in
-$startdir/pkg/var/lib/pacman/scripts and it must be named exactly the same
-as the \fI$pkgname\fP variable in the PKGBUILD script.  For example, an
-install script for grep will be $startdir/pkg/var/lib/pacman/scripts/grep.
-Note that the scripts should be 644, not 755 (we don't need execute permission).
+To use this feature, just create a file (eg, pkgname.install) and put it in
+the same directory as the PKGBUILD script.  Then use the \fIinstall\fP directive:
+.RS
+.nf
+install=pkgname.install
+.fi
+.RE
+
+The install script does not need to be specified in the \fIsource\fP array.
 
 .TP
 .TP
@@ -111,6 +139,7 @@ post_install() {
   #
   #  do post-install stuff here
   #
+  /bin/true
 }
 
 # arg 1:  the new package version
@@ -119,6 +148,7 @@ post_upgrade() {
   #
   #  do post-upgrade stuff here
   #
+  /bin/true
 }
 
 # arg 1:  the old package version
@@ -126,6 +156,7 @@ pre_remove() {
   #
   #  do pre-remove stuff here
   #
+  /bin/true
 }
 
 op=$1
@@ -152,11 +183,38 @@ This is the version of the software as released from the author (eg, 2.7.1).
 This is the release number specific to Arch Linux packages.
 
 .TP
+.B pkgdesc
+This should be a brief description of the package and its functionality.
+
+.TP
 .B backup
 A space-delimited array of filenames (without a preceding slash). The
 \fIbackup\fP line will be propagated to the package meta-info file for
 pacman.  This will designate all files listed there to be backed up if this
-package is ever removed from a system.
+package is ever removed from a system.  See \fBHANDLING CONFIG FILES\fP in
+the \fIpacman\fP manpage for more information.
+
+.TP
+.B install
+Specified a special install script that is to be included in the package.
+This file should reside in the same directory as the PKGBUILD, and will be
+copied into the package by makepkg.  It does not need to be included in the
+\fIsource\fP array.  (eg, install=modutils.install)
+
+.TP
+.B depends
+An array of packages that this package depends on to build and run.  Packages
+in this list should be surrounded with single quotes and contain at least the
+package name.  They can also include a version requirement of the form
+\fBname<>version\fP, where <> is one of these three comparisons: \fB>=\fP
+(greater than equal to), \fB<=\fP (less than or equal to), or \fB=\fP (equal to).
+See the PKGBUILD example above for an example of the \fIdepends\fP directive.
+
+.TP
+.B conflicts
+An array of packages that will conflict with this package (ie, they cannot both
+be installed at the same time).  This directive follows the same format as
+\fIdepends\fP except you cannot specify versions here, only package names.
 
 .TP
 .B source
@@ -166,14 +224,27 @@ file, unless they have a fully-qualified URL.  Then if the source file
 does not already exist in /var/cache/pacman/src, the file is downloaded
 by wget.
 
+.SH MAKEPKG OPTIONS
+.TP
+.B "\-c, \-\-clean"
+Clean up leftover work files/directories after a successful build.
+.TP
+.B "\-i, \-\-install"
+Install/Upgrade the package after a successful build.
+
 .SH CONFIGURATION
-Configuration options are stored in /etc/makepkg.conf.  This file is parsed
+Configuration options are stored in \fI/etc/makepkg.conf\fP.  This file is parsed
 as a bash script, so you can export any special compiler flags you wish
 to use.  This is helpful for building for different architectures, or with
 different optimizations.
 
 \fBNOTE:\fP This does not guarantee that all package Makefiles will use
 your exported variables.  Some of them are flaky...
+.SH SEE ALSO
+\fBpacman\fP is the package manager that uses packages built by makepkg.
+
+See the Arch Linux Documentation for package-building guidelines if you wish
+to contribute packages to the Arch Linux project.
 .SH AUTHOR
 .nf
 Judd Vinet <jvinet@zeroflux.org>
