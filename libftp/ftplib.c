@@ -1104,7 +1104,7 @@ static int FtpXfer(const char *localfile, const char *path,
 
     if (localfile != NULL)
     {
-	char ac[4] = "w";
+	char ac[4] = "a";
 	if (typ == FTPLIB_FILE_WRITE)
 	    ac[0] = 'r';
 	if (mode == FTPLIB_IMAGE)
@@ -1196,6 +1196,22 @@ GLOBALDEF int FtpSize(const char *path, int *size, char mode, netbuf *nControl)
 	else
 	    rv = 0;
     }   
+    return rv;
+}
+
+/*
+ * FtpRestart - issue a REST command
+ *
+ * return 1 if successful, 0 otherwise
+ */
+GLOBALDEF int FtpRestart(int offset, netbuf *nControl)
+{
+    char cmd[256];
+    int rv=1;
+
+    sprintf(cmd,"REST %d",offset);
+    if (!FtpSendCmd(cmd,'3',nControl))
+	rv = 0;
     return rv;
 }
 

@@ -38,6 +38,7 @@
 
 static int log_progress(netbuf *ctl, int xfered, void *arg);
 static char sync_fnm[25];
+static int offset;
 
 /* pacman options */
 extern char *pmo_root;
@@ -104,7 +105,6 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 	int done = 0;
 	PMList *complete = NULL;
 	PMList *i;
-	extern char* workfile;
 
 	if(files == NULL) {
 		return(0);
@@ -136,12 +136,13 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 			char output[PATH_MAX];
 			int j;
 			char *fn = (char*)lp->data;
+			struct stat st;
 
 			if(is_in(fn, complete)) {
 				continue;
 			}
 
-			snprintf(output, PATH_MAX, "%s/%s", localpath, fn);
+			snprintf(output, PATH_MAX, "%s/%s.part", localpath, fn);
 			strncpy(sync_fnm, lp->data, 24);
 			for(j = strlen(sync_fnm); j < 24; j++) {
 				sync_fnm[j] = ' ';
@@ -157,30 +158,36 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 				if(!FtpSize(fn, &fsz, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "warning: failed to get filesize for %s\n", fn);
 				}
+				offset = 0;
+				if(!stat(output, &st)) {
+					offset = (int)st.st_size;
+				}
+				if(offset) {
+					if(!FtpRestart(offset, control)) {
+						fprintf(stderr, "warning: failed to resume download -- restarting\n");
+						/* can't resume: */
+						/* unlink the file in order to restart download from scratch */
+						unlink(output);
+					}
+				}
 				/* set up our progress bar's callback */
 				FtpOptions(FTPLIB_CALLBACK, (long)log_progress, control);
 				FtpOptions(FTPLIB_IDLETIME, (long)1000, control);
 				FtpOptions(FTPLIB_CALLBACKARG, (long)&fsz, control);
 				FtpOptions(FTPLIB_CALLBACKBYTES, (10*1024), control);
 
-				/* declare our working file so it can be removed it on interrupt */
-				/* by the cleanup() function */
-				if(workfile) {
-					FREE(workfile);
-				}
-				MALLOC(workfile, PATH_MAX);
-				strcpy(workfile, output);
-		
 				if(!FtpGet(output, lp->data, FTPLIB_IMAGE, control)) {
 					fprintf(stderr, "\nfailed downloading %s from %s: %s\n",
 						fn, server->server, FtpLastResponse(control));
-					/* unlink the file */
-					unlink(output);
+					/* we leave the partially downloaded file in place so it can be resumed later */
 				} else {
-					log_progress(control, fsz, &fsz);
+					char completefile[PATH_MAX];
+					log_progress(control, fsz-offset, &fsz);
 					complete = list_add(complete, fn);
+					/* rename "output.part" file to "output" file */
+					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
+					rename(output, completefile);
 				}
-				FREE(workfile);
 				printf("\n");
 				fflush(stdout);
 			} else {
@@ -220,20 +227,20 @@ int downloadfiles(PMList *servers, char *localpath, PMList *files)
 
 static int log_progress(netbuf *ctl, int xfered, void *arg)
 {
-    int fsz = *(int*)arg;
-		int pct = ((float)xfered / fsz) * 100;
-		int i;
-		
-		printf("%s [", sync_fnm);
-		for(i = 0; i < (int)(pct/3); i++) {
-			printf("#");
-		}
-		for(i = (int)(pct/3); i < (int)(100/3); i++) {
-			printf(" ");
-		}
-		printf("] %3d%% | %6dK\r", pct, (xfered/1024));
-    fflush(stdout);
-    return(1);
+	int fsz = *(int*)arg;
+	int pct = ((float)(xfered+offset) / fsz) * 100;
+	int i;
+
+	printf("%s [", sync_fnm);
+	for(i = 0; i < (int)(pct/3); i++) {
+		printf("#");
+	}
+	for(i = (int)(pct/3); i < (int)(100/3); i++) {
+		printf(" ");
+	}
+	printf("] %3d%% | %6dK\r ", pct, ((xfered+offset)/1024));
+	fflush(stdout);
+	return(1);
 }
 
 /* vim: set ts=2 sw=2 noet: */

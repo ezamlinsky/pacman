@@ -76,6 +76,7 @@ unsigned short pmo_s_sync     = 0;
 unsigned short pmo_s_search   = 0;
 unsigned short pmo_s_clean    = 0;
 PMList        *pmo_noupgrade  = NULL;
+PMList        *pmo_ignorepkg  = NULL;
 
 
 /* list of sync_t structs for sync locations */
@@ -379,6 +380,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		}
 	} else if(pmo_s_upgrade) {
 		int newer = 0;
+		int ignore = 0;
 		for(i = pm_packages; i && allgood; i = i->next) {
 			int cmp, found = 0;
 			pkginfo_t *local = (pkginfo_t*)i->data;
@@ -398,6 +400,12 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			}
 			if(!found) {
 				/*fprintf(stderr, "%s: not found in sync db.  skipping.", local->name);*/
+				continue;
+			}
+			/* check if package should be ignored */
+			if(is_in((char*)i->data, pmo_ignorepkg)) {
+				fprintf(stderr, ":: %s: ignoring package upgrade\n", (char*)i->data);
+				ignore = 1;
 				continue;
 			}
 			/* compare versions and see if we need to upgrade */
@@ -438,7 +446,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				}
 			}
 		}
-		if(newer && allgood) {
+		if((newer || ignore) && allgood) {
 			fprintf(stderr, ":: Above packages will be skipped.  To manually upgrade use 'pacman -S <pkg>'\n");
 		}
 	} else {

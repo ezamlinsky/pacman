@@ -109,6 +109,7 @@ GLOBALREF int FtpPwd(char *path, int max, netbuf *nControl);
 GLOBALREF int FtpNlst(const char *output, const char *path, netbuf *nControl);
 GLOBALREF int FtpDir(const char *output, const char *path, netbuf *nControl);
 GLOBALREF int FtpSize(const char *path, int *size, char mode, netbuf *nControl);
+GLOBALREF int FtpRestart(int offset, netbuf *nControl);
 GLOBALREF int FtpModDate(const char *path, char *dt, int max, netbuf *nControl);
 GLOBALREF int FtpGet(const char *output, const char *path, char mode,
 	netbuf *nControl);

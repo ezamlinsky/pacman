@@ -59,6 +59,7 @@ extern unsigned short pmo_s_clean;
 extern unsigned short pmo_s_upgrade;
 extern unsigned short pmo_s_downloadonly;
 extern PMList        *pmo_noupgrade;
+extern PMList        *pmo_ignorepkg;
 
 extern PMList *pmc_syncs;
 extern PMList *pm_targets;
@@ -305,6 +306,18 @@ int parseconfig(char *configfile)
 						}
 						pmo_noupgrade = list_add(pmo_noupgrade, strdup(p));
 						vprint("config: noupgrade: %s\n", p);
+					} else if(!strcmp(key, "IGNOREPKG")) {
+						char *p = ptr;
+						char *q;
+						while((q = strchr(p, ' '))) {
+							*q = '\0';
+							pmo_ignorepkg = list_add(pmo_ignorepkg, strdup(p));
+							vprint("config: ignorepkg: %s\n", p);
+							p = q;
+							p++;
+						}
+						pmo_ignorepkg = list_add(pmo_ignorepkg, strdup(p));
+						vprint("config: ignorepkg: %s\n", p);
 					} else {
 						fprintf(stderr, "config: line %d: syntax error\n", linenum);
 						return(1);

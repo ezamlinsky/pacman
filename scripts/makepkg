@@ -1,6 +1,6 @@
 #!/bin/bash
 
-myver='2.3.1'
+myver='2.3.2'
 startdir=`pwd`
 
 [ -f /etc/makepkg.conf ] && source /etc/makepkg.conf
@@ -52,6 +52,7 @@ if [ "$1" = "--help" -o "$1" = "-h" ]; then
   echo "usage: $0 [options] [build_script]"
   echo "options:"
   echo "  -c, --clean      Clean up work files after build"
+  echo "  -C, --cleancache Clean up source files from the cache"
   echo "  -s, --syncdeps   Install missing dependencies with pacman"
   echo "  -b, --builddeps  Build missing dependencies from source"
   echo "  -d, --nodeps     Skip all dependency checks"
@@ -67,6 +68,7 @@ fi
 
 # Options
 CLEANUP=0
+CLEANCACHE=0
 INSTALL=0
 DEP_BIN=0
 DEP_SRC=0
@@ -78,6 +80,9 @@ for arg in $*; do
   case $arg in
     -c|--clean)
       CLEANUP=1
+      ;;
+    -C|--cleancache)
+      CLEANCACHE=1
       ;;
     -s|--syncdeps)
       DEP_BIN=1
@@ -100,21 +105,15 @@ for arg in $*; do
   esac
 done
 
+if [ "$CLEANCACHE" = "1" ]; then
+  msg "==> Cleaning up source files from the cache"
+  rm -rf /var/cache/pacman/src/*
+  exit 0
+fi
+
 unset pkgname pkgver pkgrel pkgdesc
 unset depends conflicts backup source install build
 umask 0022
-
-# check for a download utility
-if [ -x /usr/bin/wget ]; then
- 	ftpagent="/usr/bin/wget --passive-ftp --tries=3 --waitretry=3"
-elif [ -x /usr/bin/snarf ]; then
- 	ftpagent="/usr/bin/snarf"
-elif [ -x /usr/bin/lftpget -a "$proto" = "ftp" ]; then
- 	ftpagent="/usr/bin/lftpget"
-else
- 	msg "==> ERROR:  You need an ftp client installed (snarf/lftp/wget) in /usr/bin"
- 	exit 1
-fi
 
 if [ ! -f $BUILDSCRIPT ]; then
   msg "==> ERROR:  $BUILDSCRIPT does not exist."
@@ -151,7 +150,7 @@ if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
         msg "==> ERROR: Failed to install missing dependencies."
         exit 1
       fi
-			# TODO: check deps again to make sure they were resolved
+      # TODO: check deps again to make sure they were resolved
     elif [ "$DEP_SRC" = "1" ]; then
       # install missing deps by building them from source.
       # we look for each package name in $ABSROOT and build it.
@@ -183,7 +182,7 @@ if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
           exit 1
         fi
       done
-			# TODO: check deps again to make sure they were resolved
+      # TODO: check deps again to make sure they were resolved
     else
       exit 1
     fi
@@ -211,6 +210,18 @@ for netfile in ${source[@]}; do
     msg "==> Using local copy of $file"
     cp /var/cache/pacman/src/$file .
   else
+    # check for a download utility
+    if [ -z "$FTPAGENT" ]; then
+      msg "==> ERROR:  FTPAGENT is not configured. Check the /etc/makepkg.conf file."
+      msg "==> Aborting..."
+      exit 1
+    fi
+    ftpclient=`echo $FTPAGENT | awk {'print $1'}`
+    if [ ! -x $ftpclient ]; then
+      msg "==> ERROR:  ftpclient `basename $ftpclient` is not installed."
+      msg "==> Aborting..."
+      exit 1
+    fi
     proto=`echo $netfile | sed 's|://.*||'`
     if [ "$proto" != "ftp" -a "$proto" != "http" ]; then
       msg "==> ERROR:  $netfile was not found in the build directory and is not a proper URL."
@@ -218,7 +229,7 @@ for netfile in ${source[@]}; do
       exit 1
     fi
     msg "==> Downloading $file"
-    $ftpagent $netfile 2>&1
+    $FTPAGENT $netfile 2>&1
     if [ ! -f $file ]; then
       msg "==> ERROR: Failed to download $file"
       msg "==> Aborting..."
@@ -242,6 +253,11 @@ for netfile in ${source[@]}; do
   if [ "$cmd" != "" ]; then
     msg "==> $cmd"
     $cmd
+    if [ $? -ne 0 ]; then
+      msg "==> ERROR:  Failed to extract $file"
+      msg "==> Aborting..."
+      exit 1
+    fi
   fi
 done
 
@@ -348,7 +364,7 @@ fi
 cd $startdir
 if [ "$CLEANUP" = "1" ]; then
   msg "==> Cleaning up"
-  rm -rf src pkg
+  rm -rf src pkg filelist
 fi
 
 d=`date`
