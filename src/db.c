@@ -148,6 +148,7 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 			/* stat the entry, make sure it's a directory */
 			snprintf(path, PATH_MAX, "%s/%s", db->path, name);
 			if(stat(path, &sbuf) || !S_ISDIR(sbuf.st_mode)) {
+				ent = readdir(db->dir);
 				continue;
 			}
 			/* truncate the string at the second-to-last hyphen, */
