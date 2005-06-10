@@ -22,6 +22,7 @@
 #define _PAC_DB_H
 
 #include <dirent.h>
+#include "strhash.h"
 
 /* info requests for db_read */
 #define INFRQ_DESC     0x01
@@ -35,6 +36,9 @@ typedef struct __pacdb_t {
 	DIR* dir;
 } pacdb_t;
 
+/* hash table for caching db_scan() results */
+static strhash_t* db_htable;
+
 pacdb_t* db_open(char *root, char *dbpath, char *treename);
 void db_close(pacdb_t *db);
 int db_getlastupdate(const char *dbpath, char *ts);
@@ -43,8 +47,9 @@ PMList* db_loadpkgs(pacdb_t *db);
 pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq);
 pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq);
 int db_write(pacdb_t *db, pkginfo_t *info, unsigned int inforeq);
+void db_remove(pacdb_t *db, pkginfo_t *target);
 void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles);
-PMList* db_find_conflicts(pacdb_t *db, PMList* targets, char *root);
+PMList* db_find_conflicts(pacdb_t *db, PMList* targets, char *root, PMList **skip_list);
 PMList *whatprovides(pacdb_t *db, char* package);
 PMList *find_groups(pacdb_t *db);
 PMList *pkg_ingroup(pacdb_t *db, char *group);

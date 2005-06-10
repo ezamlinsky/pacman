@@ -441,6 +441,13 @@ int downloadfiles_forreal(PMList *servers, const char *localpath,
 					snprintf(completefile, PATH_MAX, "%s/%s", localpath, fn);
 					rename(output, completefile);
 				} else if(filedone < 0) {
+					if(!pmo_xfercommand) {
+						if(!strcmp(server->protocol, "ftp") && !pmo_proxyhost) {
+							 FtpQuit(control);
+						} else if(!strcmp(server->protocol, "http") || (pmo_proxyhost && strcmp(server->protocol, "file"))) {
+							 HttpQuit(control);
+						}
+					}
 					return(-1);
 				}
 				printf("\n");

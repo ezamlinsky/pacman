@@ -34,7 +34,7 @@ INSTALL_PROGRAM = @INSTALL_PROGRAM@ $(AM_INSTALL_PROGRAM_FLAGS)
 INSTALL_DATA = @INSTALL_DATA@
 INSTALL_SCRIPT = @INSTALL_SCRIPT@
 
-PACVER = 2.9.5
+PACVER = 2.9.6
 
 TOPDIR = @srcdir@
 SRCDIR = $(TOPDIR)/src/
@@ -106,6 +106,7 @@ install: pacman vercmp convertdb man
 	$(INSTALL) -D -m0755 $(SCRDIR)makeworld $(DESTDIR)$(BINDIR)/makeworld
 	$(INSTALL) -D -m0755 $(SCRDIR)gensync $(DESTDIR)$(BINDIR)/gensync
 	$(INSTALL) -D -m0755 $(SCRDIR)updatesync $(DESTDIR)$(BINDIR)/updatesync
+	$(INSTALL) -D -m0755 $(SCRDIR)pacman-optimize $(DESTDIR)$(BINDIR)/pacman-optimize
 	$(INSTALL) -D -m0644 $(MANSRC)pacman.8 $(DESTDIR)$(MANDIR)/man8/pacman.8
 	$(INSTALL) -D -m0644 $(MANSRC)makepkg.8 $(DESTDIR)$(MANDIR)/man8/makepkg.8
 	$(INSTALL) -D -m0644 etc/pacman.conf $(DESTDIR)/etc/pacman.conf

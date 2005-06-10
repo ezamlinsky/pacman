@@ -22,7 +22,7 @@
 #define _PAC_PACCONF_H
 
 #ifndef PACVER
-#define PACVER    "2.9.5"
+#define PACVER    "2.9.6"
 #endif
 
 #ifndef PACDBDIR

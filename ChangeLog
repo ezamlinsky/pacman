@@ -1,5 +1,16 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9.6         - added a pacman-optimize script to try and defragment the DB
+              - modified NoUpgrade behaviour to avoid extracting files
+                that are missing from the filesystem -- this helps in
+                situations where the admin does not want the file there, eg,
+                remove index.html so index.php takes precedence
+              - fixed a bug where files would sometimes go missing if they
+                moved from one package to another
+              - add db_remove() which is responsible for clearing out stale
+                hash table entries when packages are removed
+              - added cache support to makepkg
+              - patch from Aurelien Foret fixes a few memory leaks
 2.9.5         - bugfix: missing files after re-ordering packages wrt
                 deps with --upgrade
               - added "Repository" line to -Si output

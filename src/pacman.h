@@ -33,7 +33,7 @@
 #define min(X, Y)  ((X) < (Y) ? (X) : (Y))
 
 int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly);
-int pacman_remove(pacdb_t *db, PMList *targets);
+int pacman_remove(pacdb_t *db, PMList *targets, PMList *skiplist);
 int pacman_upgrade(pacdb_t *db, PMList *targets, PMList *dependonly);
 int pacman_query(pacdb_t *db, PMList *targets);
 int pacman_sync(pacdb_t *db, PMList *targets);

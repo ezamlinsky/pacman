@@ -2,7 +2,7 @@
 # 
 #   makepkg
 #  
-#   Copyright (c) 2002-2004 by Judd Vinet <jvinet@zeroflux.org>
+#   Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
 #  
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.9.2'
+myver='2.9.6'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
@@ -357,7 +357,7 @@ if [ "`id -u`" != "0" ]; then
 	fi
 fi
 
-msg "Making package: $pkgname  (`date`)"
+msg "Making package: $pkgname $pkgver-$pkgrel (`date`)"
 
 unset deplist makedeplist
 if [ `type -p pacman` -a "$NODEPS" = "0" ]; then
@@ -551,6 +551,9 @@ if [ "$NOBUILD" = "1" ]; then
 	msg "Sources are ready."
 	exit 0
 fi
+
+# use ccache if it's available
+[ -d /usr/lib/ccache/bin ] && export PATH=/usr/lib/ccache/bin:$PATH
 
 # build
 msg "Starting build()..."

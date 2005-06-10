@@ -3,7 +3,7 @@
 #   updatesync
 #  
 #   Copyright (c) 2004 by Jason Chu <jason@archlinux.org>
-#   Derived from gensync (c) 2002-2004 Judd Vinet <jvinet@zeroflux.org>
+#   Derived from gensync (c) 2002-2005 Judd Vinet <jvinet@zeroflux.org>
 #  
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 #   USA.
 #
 
-myver='2.9.2'
+myver='2.9.6'
 
 usage() {
 	echo "updatesync $myver"

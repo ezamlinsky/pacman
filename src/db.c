@@ -137,21 +137,32 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 	char *ptr = NULL;
 	int found = 0;
 
-	/* hash table for caching directory names */
-	static strhash_t* htable = NULL;
-	
-	if (!htable)
-		htable = new_strhash(951);
+	/* initialize the hash table */
+	if(!db_htable) {
+		db_htable = new_strhash(951);
+	}
 
 	snprintf(path, PATH_MAX, "%s/", db->path);
 	path_len = strlen(path);
+
+	/* TODO:
+	 *
+	 * Currently we're using a hash table to cache the directory
+	 * name of each package we db_scan() for.  This saves us from
+	 * having to scan the db directory for the full
+	 * pkgname-pkgver-pkgrel dir name, but we still have to issue
+	 * a db_read() call to get the actual package data.
+	 *
+	 * A more efficient method may be to cache the package data
+	 * itself.
+	 */
 
 	if(target != NULL) {
 		/* search for a specific package (by name only) */
 
 		/* See if we have the path cached. */
 		strcat(path, target);
-		if (strhash_isin(htable, path)) {
+		if(strhash_isin(db_htable, path)) {
 			struct dirent* pkgdir;
 			pkginfo_t* pkg;
 
@@ -159,7 +170,7 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 			 * Actually it only uses the d_name field. */
 
 			MALLOC(pkgdir, sizeof(struct dirent));
-			strcpy(pkgdir->d_name, strhash_get(htable, path));
+			strcpy(pkgdir->d_name, strhash_get(db_htable, path));
 
 			pkg = db_read(db, pkgdir, inforeq);
 			FREE(pkgdir);
@@ -242,8 +253,8 @@ pkginfo_t* db_scan(pacdb_t *db, char *target, unsigned int inforeq)
 			 *         data: xrally-1.1.1-1
 			 */
 
-			if (!strhash_isin(htable, path)) {
-				strhash_add(htable, strdup(path), strdup(ent->d_name));
+			if(!strhash_isin(db_htable, path)) {
+				strhash_add(db_htable, strdup(path), strdup(ent->d_name));
 			}
 		}
 	}
@@ -595,6 +606,40 @@ int db_write(pacdb_t *db, pkginfo_t *info, unsigned int inforeq)
 	return(0);
 }
 
+/*
+ * Remove a package record from the database
+ */
+void db_remove(pacdb_t *db, pkginfo_t *target)
+{
+	char topdir[PATH_MAX];
+	char path[PATH_MAX];
+
+	snprintf(topdir, PATH_MAX, "%s/%s-%s", db->path,
+		target->name, target->version);
+
+	/* DESC */
+	snprintf(path, PATH_MAX, "%s/desc", topdir);
+	unlink(path);
+	/* FILES */
+	snprintf(path, PATH_MAX, "%s/files", topdir);
+	unlink(path);
+	/* DEPENDS */
+	snprintf(path, PATH_MAX, "%s/depends", topdir);
+	unlink(path);
+	/* INSTALL */
+	snprintf(path, PATH_MAX, "%s/install", topdir);
+	unlink(path);
+	/* directory */
+	rmdir(topdir);
+
+	/* remove the entry from the hash table */
+	if(db_htable) {
+		/*clear_strhash(db_htable);*/
+		snprintf(topdir, PATH_MAX, "%s/%s", db->path, target->name);
+		strhash_remove(db_htable, topdir);
+	}
+}
+
 void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles)
 {
 	PMList *i, *j;
@@ -655,7 +700,7 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 }
 
 
-PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
+PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root, PMList **skip_list)
 {
 	PMList *i, *j, *k;
 	char *filestr = NULL;
@@ -663,6 +708,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 	char *str = NULL;
 	struct stat buf, buf2;
 	PMList *conflicts = NULL;
+
 	strhash_t** htables;
 	int target_num = 0;
 	int d = 0;
@@ -680,42 +726,12 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 
 	for(d = 0, i = targets; i; i = i->next, d++) {
 		htables[d] = new_strhash(151);
-
 		strhash_add_list(htables[d], ((pkginfo_t*)i->data)->files);
 	}
 
 	htables[target_num] = new_strhash(151);
 
-	/* CHECK 1: check every db package against every target package */
-	/* XXX: I've disabled the database-against-targets check for now, as the
-	 *      many many strcmp() calls slow it down heavily and most of the
-	 *      checking is redundant to the targets-against-filesystem check.
-	 *      This will be re-enabled if I can improve performance significantly.
-	 *
-	pkginfo_t *info = NULL;
-	char *dbstr   = NULL;
-	rewinddir(db->dir);
-
-	while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_FILES)) != NULL) {
-		for(i = info->files; i; i = i->next) {
-			dbstr = (char*)i->data;
-			
-			if(dbstr == NULL || rindex(dbstr, '/') == dbstr+strlen(dbstr)-1)
-				continue;
-
-			for(d = 0, j = targets; j; j = j->next, d++) {
-				pkginfo_t *targ = (pkginfo_t*)j->data;
-				if(strcmp(info->name, targ->name) && strhash_isin(htables[d], dbstr)) {
-					MALLOC(str, 512);
-					snprintf(str, 512, "%s: exists in \"%s\" (target) and \"%s\" (installed)", dbstr,
-							targ->name, info->name);
-					conflicts = list_add(conflicts, str);
-				}
-			}
-		}
-	}*/
-
-	/* CHECK 2: check every target against every target */
+	/* CHECK 1: check every target against every target */
 	for(d = 0, i = targets; i; i = i->next, d++) {
 		pkginfo_t *p1 = (pkginfo_t*)i->data;
 		for(e = d, j = i; j; j = j->next, e++) {
@@ -741,7 +757,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 		}
 	}
 
-	/* CHECK 3: check every target against the filesystem */
+	/* CHECK 2: check every target against the filesystem */
 	for(i = targets; i; i = i->next) {
 		pkginfo_t *p = (pkginfo_t*)i->data;
 		pkginfo_t *dbpkg = NULL;
@@ -769,6 +785,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 						snprintf(str, PATH_MAX, "%s%s", root, (char*)k->data);
 						stat(str, &buf2);
 						if(buf.st_ino == buf2.st_ino && buf.st_dev == buf2.st_dev) {
+							printf("inodes match: %s and %s\n", path, str);
 							ok = 1;
 						}
 					}
@@ -785,7 +802,26 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 							dbpkg2 = db_scan(db, p1->name, INFRQ_DESC | INFRQ_FILES);
 							/* If it used to exist in there, but doesn't anymore */
 							if(dbpkg2 && !is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
+								/*printf("file %s moved from %s to %s\n", filestr, p1->name, p->name);*/
+								
 								ok = 1;
+								/* Add to the "skip list" of files that we shouldn't remove during an upgrade.
+								 *
+								 * This is a workaround for the following scenario:
+								 *
+								 *    - the old package A provides file X
+								 *    - the new package A does not
+								 *    - the new package B provides file X
+								 *    - package A depends on B, so B is upgraded first
+								 *
+								 * Package B is upgraded, so file X is installed.  Then package A
+								 * is upgraded, and it *removes* file X, since it no longer exists
+								 * in package A.
+								 *
+								 * Our workaround is to scan through all "old" packages and all "new"
+								 * ones, looking for files that jump to different packages.
+								 */
+								*skip_list = list_add(*skip_list, filestr);
 							}
 							FREEPKG(dbpkg2);
 						}
@@ -799,6 +835,11 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root)
 			}
 		}
 		FREEPKG(dbpkg);
+	}
+
+	/* free up the hash tables */
+	for(d = 0; d <= target_num; d++) {
+		free_strhash(htables[d]);
 	}
 
 	return(conflicts);

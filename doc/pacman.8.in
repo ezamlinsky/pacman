@@ -81,7 +81,7 @@ Output more status and error messages.
 Specify an alternate configuration file.
 .TP
 .B "\-\-noconfirm"
-Bypass any and all "Are you sure?" messages.  It's not a good to do this
+Bypass any and all "Are you sure?" messages.  It's not a good idea to do this
 unless you want to run pacman from a script.
 .SH SYNC OPTIONS
 .TP

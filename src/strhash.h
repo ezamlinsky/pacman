@@ -55,6 +55,7 @@ void strhash_add_list(strhash_t *hash, PMList* list);
 strhash_t *new_strhash(size_t hsize);
 void free_strhash(strhash_t *hash);
 void clear_strhash(strhash_t *hash);
+void strhash_remove(strhash_t *hash, char *key);
 void strhash_add(strhash_t *hash, char *key, char *data);
 int strhash_isin(strhash_t *hash, char* key);
 char* strhash_get(strhash_t *hash, char* key);

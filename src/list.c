@@ -67,17 +67,14 @@ PMList* list_new()
 
 void list_free(PMList *list)
 {
-	if(list == NULL) {
-		return;
+	PMList *ptr, *it = list;
+
+	while(it) {
+		ptr = it->next;
+		free(it->data);
+		free(it);
+		it = ptr;
 	}
-	if(list->data != NULL) {
-		free(list->data);
-		list->data = NULL;
-	}
-	if(list->next != NULL) {
-		list_free(list->next);
-	}
-	free(list);
 	return;
 }
 
