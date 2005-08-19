@@ -20,7 +20,7 @@
 #   USA.
 #
 
-myver='2.9.6'
+myver='2.9.7'
 
 usage() {
 	echo "pacman-optimize $myver"
@@ -77,7 +77,7 @@ touch /tmp/pacman.lck
 
 # step 1: sum the old db
 echo "==> md5sum'ing the old database..."
-tar c $dbroot 2>/dev/null | md5sum >/tmp/pacsums.old
+tar --same-order -c $dbroot 2>/dev/null | md5sum >/tmp/pacsums.old
 
 # step 1: copy the entire db directory to a new one
 echo "==> copying $dbroot..."
@@ -87,7 +87,7 @@ cp -a $dbroot $dbroot.new || die_r "error copying $dbroot"
 echo "==> md5sum'ing the new database..."
 mv $dbroot $dbroot.bak || die_r "error renaming $dbroot"
 mv $dbroot.new $dbroot || die_r "error renaming $dbroot.new"
-tar c $dbroot 2>/dev/null | md5sum >/tmp/pacsums.new
+tar --same-order -c $dbroot 2>/dev/null | md5sum >/tmp/pacsums.new
 
 # step 3: compare sums
 echo "==> checking integrity..."
@@ -96,7 +96,7 @@ if [ $? -ne 0 ]; then
 	# failed, move the old one back into place
 	rm -rf $dbroot
 	mv $dbroot.bak $dbroot
-	die_r "integrity check FAILED, reverting to old databse"
+	die_r "integrity check FAILED, reverting to old database"
 fi
 
 # step 4: remove the backup

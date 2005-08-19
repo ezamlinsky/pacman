@@ -34,6 +34,7 @@ int unpack(char *archive, const char *prefix, const char *fn);
 int copyfile(char *src, char *dest);
 int makepath(char *path);
 int rmrf(char *path);
+char *rel2abs(const char *path, char *result, const size_t size);
 void indentprint(char *str, int indent);
 char* trim(char *str);
 char* strtoupper(char *str);

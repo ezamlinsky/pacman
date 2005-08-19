@@ -197,8 +197,6 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				info->groups = list_add(info->groups, strdup(ptr));
 			} else if(!strcmp(key, "URL")) {
 				strncpy(info->url, ptr, sizeof(info->url));
-			} else if(!strcmp(key, "LICENSE")) {
-				strncpy(info->license, ptr, sizeof(info->license));
 			} else if(!strcmp(key, "BUILDDATE")) {
 				strncpy(info->builddate, ptr, sizeof(info->builddate));
 			} else if(!strcmp(key, "INSTALLDATE")) {
@@ -211,6 +209,8 @@ int parse_descfile(char *descfile, pkginfo_t *info, PMList **backup, int output)
 				char tmp[32];
 				strncpy(tmp, ptr, sizeof(tmp));
 				info->size = atol(tmp);
+			} else if(!strcmp(key, "LICENSE")) {
+				info->license = list_add(info->license, strdup(ptr));
 			} else if(!strcmp(key, "DEPEND")) {
 				info->depends = list_add(info->depends, strdup(ptr));
 			} else if(!strcmp(key, "CONFLICT")) {
@@ -244,7 +244,6 @@ pkginfo_t* newpkg()
 	pkg->version[0]     = '\0';
 	pkg->desc[0]        = '\0';
 	pkg->url[0]         = '\0';
-	pkg->license[0]     = '\0';
 	pkg->builddate[0]   = '\0';
 	pkg->installdate[0] = '\0';
 	pkg->packager[0]    = '\0';
@@ -254,6 +253,7 @@ pkginfo_t* newpkg()
 	pkg->scriptlet      = 0;
 	pkg->force          = 0;
 	pkg->reason         = REASON_EXPLICIT;
+	pkg->license        = NULL;
 	pkg->requiredby     = NULL;
 	pkg->conflicts      = NULL;
 	pkg->files          = NULL;
@@ -340,7 +340,9 @@ void dump_pkg_full(pkginfo_t *info)
 	FREELIST(pm);
 	printf("Packager       : %s\n", info->packager);
 	printf("URL            : %s\n", info->url);
-	printf("License        : %s\n", info->license);
+	pm = list_sort(info->license);
+	list_display("License        :", pm);
+	FREELIST(pm);
 	printf("Architecture   : %s\n", info->arch);
 	printf("Size           : %ld\n", info->size);
 	printf("Build Date     : %s %s\n", info->builddate, strlen(info->builddate) ? "UTC" : "");

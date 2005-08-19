@@ -342,6 +342,11 @@ Do not perform any dependency checks.  This will let you override/ignore any
 dependencies required.  There's a good chance this option will break the build
 process if all of the dependencies aren't installed.
 .TP
+.B "\-e, \-\-noextract"
+Do not extract source files.  Instead, use whatever already exists in the
+src/ directory.  This is handy if you want to go into src and manually
+patch/tweak code, then make a package out of the result.
+.TP
 .B "\-f, \-\-force"
 \fBmakepkg\fP will not build a package if a \fIpkgname-pkgver-pkgrel.pkg.tar.gz\fP
 file already exists in the build directory.  You can override this behaviour with
@@ -383,6 +388,11 @@ Install missing dependencies using pacman.  When makepkg finds missing build-tim
 or run-time dependencies, it will run pacman to try and resolve them.  If successful,
 pacman will download the missing packages from a package repository and
 install them for you.
+.TP
+.B "\-S, \-\-sudosync"
+Install missing dependencies using pacman and sudo. This is the same as \fB-s\fP
+except that makepkg will call pacman with sudo. This means you don't have to
+build as root to use dependency auto-resolution.
 .TP
 .B "\-w <destdir>"
 Write the resulting package file to the directory \fI<destdir>\fP instead of the

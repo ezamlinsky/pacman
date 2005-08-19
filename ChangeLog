@@ -1,5 +1,15 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
+2.9.7         - patch from Miklos Vanja fixed md5sums on x86_64
+              - patch from Miklos Vanja adds --sudosync to makepkg
+              - changed license field to operate as an array, not a string
+              - added more logic for file conflict checks - if one target
+                is a file and the other is a directory, then it's a conflict
+              - fixed the integrity check in pacman-optimize
+              - reverted NoUpgrade to old behaviour and instead, added the
+                NoExtract directive to pacman.conf, which prevents a file
+                from ever being extracted on to the system
+                 eg, NoExtract = home/httpd/html/index.html
 2.9.6         - added a pacman-optimize script to try and defragment the DB
               - modified NoUpgrade behaviour to avoid extracting files
                 that are missing from the filesystem -- this helps in
@@ -9,7 +19,7 @@ VERSION         DESCRIPTION
                 moved from one package to another
               - add db_remove() which is responsible for clearing out stale
                 hash table entries when packages are removed
-              - added cache support to makepkg
+              - added ccache support to makepkg
               - patch from Aurelien Foret fixes a few memory leaks
 2.9.5         - bugfix: missing files after re-ordering packages wrt
                 deps with --upgrade

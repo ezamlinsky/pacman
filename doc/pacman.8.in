@@ -1,4 +1,4 @@
-.TH pacman 8 "September 17, 2004" "pacman #VERSION#" ""
+.TH pacman 8 "July 6, 2005" "pacman #VERSION#" ""
 .SH NAME
 pacman \- package manager utility
 .SH SYNOPSIS
@@ -106,9 +106,9 @@ List all files in the specified repositories.  Multiple repositories can
 be specified on the command line.
 .TP
 .B "\-p, \-\-print-uris"
-Print out URIs for each specified package and its dependencies.  These
-can be piped to a file and downloaded at a later time, using a program
-like wget.
+Print out URIs for each package that will be installed, including any
+dependencies that have yet to be installed.  These can be piped to a
+file and downloaded at a later time, using a program like wget.
 .TP
 .B "\-s, \-\-search <string>"
 This will search each package in the package list for names or descriptions
@@ -271,6 +271,13 @@ Disables passive ftp connections when downloading packages. (aka Active Mode)
 .B "NoUpgrade = <file> [file] ..."
 All files listed with a \fBNoUpgrade\fP directive will never be touched during a package
 install/upgrade.  \fINote:\fP do not include the leading slash when specifying files.
+.TP
+.B "NoExtract = <file> [file] ..."
+All files listed with a \fBNoExtract\fP directive will never be extracted from
+a package into the filesystem.  This can be useful when you don't want part of
+a package to be installed.  For example, if your httpd root uses an index.php,
+then you would not want the index.html file to be extracted from the apache
+package.
 .TP
 .B "UseSyslog"
 Log action messages through syslog().  This will insert pacman log entries into your

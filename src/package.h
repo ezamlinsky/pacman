@@ -50,7 +50,6 @@ typedef struct __pkginfo_t {
 	char version[64];
 	char desc[512];
 	char url[256];
-	char license[128];
 	char builddate[32];
 	char installdate[32];
 	char packager[64];
@@ -60,6 +59,7 @@ typedef struct __pkginfo_t {
 	unsigned short scriptlet;
 	unsigned short force;
 	unsigned short reason;
+	PMList *license;
 	PMList *replaces;
 	PMList *groups;
 	PMList *files;

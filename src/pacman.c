@@ -92,6 +92,7 @@ char          *pmo_proxyhost    = NULL;
 unsigned short pmo_proxyport    = 0;
 char          *pmo_xfercommand  = NULL;
 PMList        *pmo_noupgrade    = NULL;
+PMList        *pmo_noextract    = NULL;
 PMList        *pmo_ignorepkg    = NULL;
 PMList        *pmo_holdpkg      = NULL;
 unsigned short pmo_chomp        = 0;
@@ -1801,15 +1802,14 @@ int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly)
 				snprintf(expath, PATH_MAX, "%s%s", pmo_root, pathname);
 			}
 
-			/* if a file is in NoUpgrade and missing from the filesystem,
-			 * then we never extract it.
+			/* if a file is in NoExtract then we never extract it.
 			 *
 			 * eg, /home/httpd/html/index.html may be removed so index.php
 			 * could be used
 			 */
-			if(stat(expath, &buf) && is_in(pathname, pmo_noupgrade)) {
-				vprint("%s is in NoUpgrade - skipping\n", pathname);
-				logaction(stderr, "warning: %s is in NoUpgrade -- skipping extraction", pathname);
+			if(is_in(pathname, pmo_noextract)) {
+				vprint("%s is in NoExtract - skipping\n", pathname);
+				logaction(stderr, "warning: %s is in NoExtract -- skipping extraction", pathname);
 				tar_skip_regfile(tar);
 				continue;
 			}
@@ -2105,7 +2105,7 @@ int pacman_remove(pacdb_t *db, PMList *targets, PMList *skiplist)
 	}
 
 	/* load package info from all targets */
-	for(lp = targets; lp; lp = lp->next) {
+	for(lp = targets; lp && lp->data; lp = lp->next) {
 		info = db_scan(db, (char*)lp->data, INFRQ_ALL);
 		if(info == NULL) {
 			PMList *groups;
@@ -2149,6 +2149,10 @@ int pacman_remove(pacdb_t *db, PMList *targets, PMList *skiplist)
 			}
 		}
 		alltargs = list_add(alltargs, info);
+	}
+	if(!alltargs) {
+		/* no targets, nothing to do */
+		return(0);
 	}
 	if(!pmo_nodeps && !pmo_upgrade) {
 		vprint("checking dependencies...\n");
@@ -2447,14 +2451,14 @@ int pacman_query(pacdb_t *db, PMList *targets)
 				fprintf(stderr, "error: no file was specified for --owns\n");
 				return(1);
 			}
-			if(realpath(package, rpath)) {
+			if(rel2abs(package, rpath, sizeof(rpath)-1)) {
 				int gotcha = 0;
 				rewinddir(db->dir);
 				while((info = db_scan(db, NULL, INFRQ_DESC | INFRQ_FILES)) != NULL && !gotcha) {
 					for(lp = info->files; lp && !gotcha; lp = lp->next) {
 						sprintf(path, "%s%s", pmo_root, (char*)lp->data);
 						if(!strcmp(path, rpath)) {
-							printf("%s is owned by %s %s\n", package, info->name, info->version);
+							printf("%s is owned by %s %s\n", rpath, info->name, info->version);
 							gotcha = 1;
 						}
 					}
@@ -2679,6 +2683,7 @@ PMList* removedeps(pacdb_t *db, PMList *targs)
 {
 	PMList *i, *j, *k;
 	PMList *newtargs = targs;
+	char realpkgname[255];
 
 	for(i = targs; i; i = i->next) {
 		pkginfo_t *pkg = (pkginfo_t*)i->data;
@@ -2708,6 +2713,7 @@ PMList* removedeps(pacdb_t *db, PMList *targs)
 				FREEPKG(dep);
 				continue;
 			}
+			strncpy(realpkgname, dep->name, sizeof(realpkgname));
 			/* see if it was explicitly installed */
 			if(dep->reason == REASON_EXPLICIT) {
 				vprint("excluding %s -- explicitly installed\n", dep->name);
@@ -2725,7 +2731,7 @@ PMList* removedeps(pacdb_t *db, PMList *targs)
 			FREEPKG(dep);
 			if(!needed) {
 				/* add it to the target list */
-				dep = db_scan(db, depend.name, INFRQ_ALL);
+				dep = db_scan(db, realpkgname, INFRQ_ALL);
 				newtargs = list_add(newtargs, dep);
 				newtargs = removedeps(db, newtargs);
 			}
@@ -3374,10 +3380,10 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 
 	vprint("Executing %s script...\n", script);
 	if(oldver) {
-		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s %s\" | /usr/sbin/chroot %s /bin/sh",
+		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s %s\" | /usr/sbin/chroot %s /bin/bash",
 				scriptpath, script, ver, oldver, pmo_root);
 	} else {
-		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s\" | /usr/sbin/chroot %s /bin/sh",
+		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s\" | /usr/sbin/chroot %s /bin/bash",
 				scriptpath, script, ver, pmo_root);
 	}
 	vprint("%s\n", cmdline);
@@ -3612,6 +3618,18 @@ int parseconfig(char *configfile)
 						}
 						pmo_noupgrade = list_add(pmo_noupgrade, strdup(p));
 						vprint("config: noupgrade: %s\n", p);
+					} else if(!strcmp(key, "NOEXTRACT")) {
+						char *p = ptr;
+						char *q;
+						while((q = strchr(p, ' '))) {
+							*q = '\0';
+							pmo_noextract = list_add(pmo_noextract, strdup(p));
+							vprint("config: noextract: %s\n", p);
+							p = q;
+							p++;
+						}
+						pmo_noextract = list_add(pmo_noextract, strdup(p));
+						vprint("config: noextract: %s\n", p);
 					} else if(!strcmp(key, "IGNOREPKG")) {
 						char *p = ptr;
 						char *q;

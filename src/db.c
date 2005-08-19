@@ -327,12 +327,6 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 					return(NULL);
 				}
 				trim(info->url);
-			} else if(!strcmp(line, "%LICENSE%")) {
-				if(fgets(info->license, sizeof(info->license), fp) == NULL) {
-					FREEPKG(info);
-					return(NULL);
-				}
-				trim(info->license);
 			} else if(!strcmp(line, "%ARCH%")) {
 				if(fgets(info->arch, sizeof(info->arch), fp) == NULL) {
 					FREEPKG(info);
@@ -386,6 +380,11 @@ pkginfo_t* db_read(pacdb_t *db, struct dirent *ent, unsigned int inforeq)
 				}
 				trim(tmp);
 				info->size = atol(tmp);
+			} else if(!strcmp(line, "%LICENSE%")) {
+				while(fgets(line, 512, fp) && strlen(trim(line))) {
+					char *s = strdup(line);
+					info->license = list_add(info->license, s);
+				}
 			} else if(!strcmp(line, "%REPLACES%")) {
 				/* the REPLACES tag is special -- it only appears in sync repositories,
 				 * not the local one.  */
@@ -529,7 +528,10 @@ int db_write(pacdb_t *db, pkginfo_t *info, unsigned int inforeq)
 		fputs("%URL%\n", fp);
 		fprintf(fp, "%s\n\n", info->url);
 		fputs("%LICENSE%\n", fp);
-		fprintf(fp, "%s\n\n", info->license);
+		for(lp = info->license; lp; lp = lp->next) {
+			fprintf(fp, "%s\n", (char*)lp->data);
+		}
+		fprintf(fp, "\n");
 		fputs("%ARCH%\n", fp);
 		fprintf(fp, "%s\n\n", info->arch);
 		fputs("%BUILDDATE%\n", fp);
@@ -762,68 +764,84 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root, PMList **ski
 		pkginfo_t *p = (pkginfo_t*)i->data;
 		pkginfo_t *dbpkg = NULL;
 		for(j = p->files; j; j = j->next) {
+			int isdir = 0;
 			filestr = (char*)j->data;
 			snprintf(path, PATH_MAX, "%s%s", root, filestr);
-			if(!stat(path, &buf) && !S_ISDIR(buf.st_mode)) {
+			/* is this target a file or directory? */
+			if(path[strlen(path)-1] == '/') {
+				isdir = 1;
+				path[strlen(path)-1] = '\0';
+			}
+			if(!lstat(path, &buf)) {
 				int ok = 0;
-				if(dbpkg == NULL) {
-					dbpkg = db_scan(db, p->name, INFRQ_DESC | INFRQ_FILES);
-
-					if(dbpkg)
-						strhash_add_list(htables[target_num], dbpkg->files);
-				}
-				if(dbpkg && strhash_isin(htables[target_num], filestr)) {
+				if(!S_ISLNK(buf.st_mode) && ((isdir && !S_ISDIR(buf.st_mode)) || (!isdir && S_ISDIR(buf.st_mode)))) {
+					/* if the package target is a directory, and the filesystem target
+					 * is not (or vice versa) then it's a conflict
+					 */
+					ok = 0;
+				} else if(S_ISDIR(buf.st_mode)) {
+					/* if it's a directory, then we have no conflict */
 					ok = 1;
-				}
-				/* Make sure that the supposedly-conflicting file is not actually just
-				 * a symlink that points to a path that used to exist in the package.
-				 */
-				/* Check if any part of the conflicting file's path is a symlink */
-				if(dbpkg && !ok) {
-					MALLOC(str, PATH_MAX);
-					for(k = dbpkg->files; k; k = k->next) {
-						snprintf(str, PATH_MAX, "%s%s", root, (char*)k->data);
-						stat(str, &buf2);
-						if(buf.st_ino == buf2.st_ino && buf.st_dev == buf2.st_dev) {
-							printf("inodes match: %s and %s\n", path, str);
-							ok = 1;
-						}
+				} else {
+					if(dbpkg == NULL) {
+						dbpkg = db_scan(db, p->name, INFRQ_DESC | INFRQ_FILES);
+
+						if(dbpkg)
+							strhash_add_list(htables[target_num], dbpkg->files);
 					}
-					FREE(str);
-				}
-				/* Check if the conflicting file has been moved to another package/target */
-				if(!ok) {
-					/* Look at all the targets */
-					for(k = targets; k && !ok; k = k->next) {
-						pkginfo_t *p1 = (pkginfo_t*)k->data;
-						/* As long as they're not the current package */
-						if(strcmp(p1->name, p->name)) {
-							pkginfo_t *dbpkg2 = NULL;
-							dbpkg2 = db_scan(db, p1->name, INFRQ_DESC | INFRQ_FILES);
-							/* If it used to exist in there, but doesn't anymore */
-							if(dbpkg2 && !is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
-								/*printf("file %s moved from %s to %s\n", filestr, p1->name, p->name);*/
-								
+					if(dbpkg && strhash_isin(htables[target_num], filestr)) {
+						ok = 1;
+					}
+					/* Make sure that the supposedly-conflicting file is not actually just
+					 * a symlink that points to a path that used to exist in the package.
+					 */
+					/* Check if any part of the conflicting file's path is a symlink */
+					if(dbpkg && !ok) {
+						MALLOC(str, PATH_MAX);
+						for(k = dbpkg->files; k; k = k->next) {
+							snprintf(str, PATH_MAX, "%s%s", root, (char*)k->data);
+							stat(str, &buf2);
+							if(buf.st_ino == buf2.st_ino && buf.st_dev == buf2.st_dev) {
+								/*printf("inodes match: %s and %s\n", path, str);*/
 								ok = 1;
-								/* Add to the "skip list" of files that we shouldn't remove during an upgrade.
-								 *
-								 * This is a workaround for the following scenario:
-								 *
-								 *    - the old package A provides file X
-								 *    - the new package A does not
-								 *    - the new package B provides file X
-								 *    - package A depends on B, so B is upgraded first
-								 *
-								 * Package B is upgraded, so file X is installed.  Then package A
-								 * is upgraded, and it *removes* file X, since it no longer exists
-								 * in package A.
-								 *
-								 * Our workaround is to scan through all "old" packages and all "new"
-								 * ones, looking for files that jump to different packages.
-								 */
-								*skip_list = list_add(*skip_list, filestr);
 							}
-							FREEPKG(dbpkg2);
+						}
+						FREE(str);
+					}
+					/* Check if the conflicting file has been moved to another package/target */
+					if(!ok) {
+						/* Look at all the targets */
+						for(k = targets; k && !ok; k = k->next) {
+							pkginfo_t *p1 = (pkginfo_t*)k->data;
+							/* As long as they're not the current package */
+							if(strcmp(p1->name, p->name)) {
+								pkginfo_t *dbpkg2 = NULL;
+								dbpkg2 = db_scan(db, p1->name, INFRQ_DESC | INFRQ_FILES);
+								/* If it used to exist in there, but doesn't anymore */
+								if(dbpkg2 && !is_in(filestr, p1->files) && is_in(filestr, dbpkg2->files)) {
+									/*printf("file %s moved from %s to %s\n", filestr, p1->name, p->name);*/
+								
+									ok = 1;
+									/* Add to the "skip list" of files that we shouldn't remove during an upgrade.
+									 *
+									 * This is a workaround for the following scenario:
+									 *
+									 *    - the old package A provides file X
+									 *    - the new package A does not
+									 *    - the new package B provides file X
+									 *    - package A depends on B, so B is upgraded first
+									 *
+									 * Package B is upgraded, so file X is installed.  Then package A
+									 * is upgraded, and it *removes* file X, since it no longer exists
+									 * in package A.
+									 *
+									 * Our workaround is to scan through all "old" packages and all "new"
+									 * ones, looking for files that jump to different packages.
+									 */
+									*skip_list = list_add(*skip_list, filestr);
+								}
+								FREEPKG(dbpkg2);
+							}
 						}
 					}
 				}

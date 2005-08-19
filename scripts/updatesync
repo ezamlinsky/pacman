@@ -21,7 +21,7 @@
 #   USA.
 #
 
-myver='2.9.6'
+myver='2.9.7'
 
 usage() {
 	echo "updatesync $myver"
