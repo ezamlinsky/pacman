@@ -693,7 +693,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			cmp = rpmvercmp(local->version, sync->pkg->version);
 			if(cmp > 0 && !sync->pkg->force) {
 				/* local version is newer */
-				fprintf(stderr, ":: %s: local version (%s) is newer than repo version (%s)\n",
+				fprintf(stderr, ":: %s: local version (%s) appears to be newer than repo version (%s)\n",
 					local->name, local->version, sync->pkg->version);
 				newer = 1;
 				FREE(sync);

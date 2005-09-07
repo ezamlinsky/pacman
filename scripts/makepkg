@@ -590,6 +590,7 @@ fi
 cd $startdir
 rm -rf pkg/usr/info pkg/usr/share/info
 rm -rf pkg/usr/doc pkg/usr/share/doc
+rm -rf pkg/{usr,opt/gnome}/share/gtk-doc
 
 # move /usr/share/man files to /usr/man
 if [ -d pkg/usr/share/man ]; then

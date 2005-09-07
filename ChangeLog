@@ -2,6 +2,7 @@ VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
 2.9.7         - patch from Miklos Vanja fixed md5sums on x86_64
               - patch from Miklos Vanja adds --sudosync to makepkg
+              - patch from Jason Chu adds SHA1 hashes to PKGBUILDs
               - changed license field to operate as an array, not a string
               - added more logic for file conflict checks - if one target
                 is a file and the other is a directory, then it's a conflict

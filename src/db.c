@@ -779,7 +779,11 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root, PMList **ski
 					 * is not (or vice versa) then it's a conflict
 					 */
 					ok = 0;
-				} else if(S_ISDIR(buf.st_mode)) {
+					goto donecheck;
+				}
+				/* re-fetch with stat() instead of lstat() */
+				stat(path, &buf);
+				if(S_ISDIR(buf.st_mode)) {
 					/* if it's a directory, then we have no conflict */
 					ok = 1;
 				} else {
@@ -845,6 +849,7 @@ PMList* db_find_conflicts(pacdb_t *db, PMList *targets, char *root, PMList **ski
 						}
 					}
 				}
+donecheck:
 				if(!ok) {
 					MALLOC(str, 512);
 					snprintf(str, 512, "%s: %s: exists in filesystem", p->name, path);
