@@ -238,6 +238,8 @@ int list_strcmp(const void *s1, const void *s2)
 	return(strcmp(*str1, *str2));
 }
 
+/* Sort a list of strings.
+ */
 PMList *list_sort(PMList *list)
 {
 	char **arr = NULL;
@@ -268,6 +270,24 @@ PMList *list_sort(PMList *list)
 	}
 
 	return(lp);
+}
+
+/* Filter out any duplicate strings in a list.
+ *
+ * Not the most efficient way, but simple to implement -- we assemble
+ * a new list, using is_in() to check for dupes at each iteration.
+ *
+ */
+PMList* list_remove_dupes(PMList *list)
+{
+	PMList *i, *newlist = NULL;
+
+	for(i = list; i; i = i->next) {
+		if(!is_in(i->data, newlist)) {
+			newlist = list_add(newlist, strdup(i->data));
+		}
+	}
+	return newlist;
 }
 
 /* Reverse the order of a list

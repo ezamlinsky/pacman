@@ -125,7 +125,17 @@ handledeps() {
 		elif [ "$DEP_SUDO" = "1" ]; then
 			# install missing deps from binary packages (using pacman -S and sudo)
 			msg "Installing missing dependencies..."
+			if [ "$INFAKEROOT" = "1" ]; then
+				# kinda hacky, but we need to make pacman think that we're NOT
+				# in fakeroot so it will go ahead and install the dependencies.
+				FAKEROOTKEY2=$FAKEROOTKEY
+				unset FAKEROOTKEY
+			fi
 			sudo pacman -D $deplist
+			if [ "$INFAKEROOT" = "1" ]; then
+				FAKEROOTKEY=$FAKEROOTKEY2
+				unset FAKEROOTKEY2
+			fi
 			if [ "$?" = "127" ]; then
 				error "Failed to install missing dependencies."
 				exit 1
@@ -185,6 +195,7 @@ usage() {
 	echo "usage: $0 [options]"
 	echo "options:"
 	echo "  -b, --builddeps  Build missing dependencies from source"
+	echo "  -B, --noccache   Do not use ccache during build"
 	echo "  -c, --clean      Clean up work files after build"
 	echo "  -C, --cleancache Clean up source files from the cache"
 	echo "  -d, --nodeps     Skip all dependency checks"
@@ -210,20 +221,21 @@ usage() {
 
 
 # Options
+BUILDSCRIPT="./PKGBUILD"
 CLEANUP=0
 CLEANCACHE=0
-INSTALL=0
-GENMD5=0
 DEP_BIN=0
-DEP_SUDO=0
 DEP_SRC=0
-NODEPS=0
+DEP_SUDO=0
 FORCE=0
+GENMD5=0
+INSTALL=0
+NOBUILD=0
+NOCCACHE=0
+NODEPS=0
 NOEXTRACT=0
 NOSTRIP=0
-NOBUILD=0
 RMDEPS=0
-BUILDSCRIPT="./PKGBUILD"
 
 ARGLIST=$@
 
@@ -234,6 +246,7 @@ while [ "$#" -ne "0" ]; do
 		--syncdeps)   DEP_BIN=1 ;;
 		--sudosync)   DEP_SUDO=1 ;;
 		--builddeps)  DEP_SRC=1 ;;
+		--noccache)   NOCCACHE=1 ;;
 		--nodeps)     NODEPS=1 ;;
 		--noextract)  NOEXTRACT=1 ;;
 		--install)    INSTALL=1 ;;
@@ -252,11 +265,12 @@ while [ "$#" -ne "0" ]; do
 			exit 1
 			;;
 		-*)
-			while getopts "cCsSbdehifgj:mnorp:w:-" opt; do
+			while getopts "bBcCdefghij:mnop:rsSw:-" opt; do
 				case $opt in
+					b) DEP_SRC=1 ;;
+					B) NOCCACHE=1 ;;
 					c) CLEANUP=1 ;;
 					C) CLEANCACHE=1 ;;
-					b) DEP_SRC=1 ;;
 					d) NODEPS=1 ;;
 					e) NOEXTRACT=1 ;;
 					f) FORCE=1 ;;
@@ -576,7 +590,9 @@ if [ "$NOBUILD" = "1" ]; then
 fi
 
 # use ccache if it's available
-[ -d /usr/lib/ccache/bin ] && export PATH=/usr/lib/ccache/bin:$PATH
+if [ "$NOCCACHE" = "0" ]; then
+	[ -d /usr/lib/ccache/bin ] && export PATH=/usr/lib/ccache/bin:$PATH
+fi
 
 # build
 msg "Starting build()..."
@@ -711,13 +727,20 @@ if [ "$CLEANUP" = "1" ]; then
 	rm -rf src pkg filelist
 fi
 
-if [ "$RMDEPS" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
+if [ "$RMDEPS" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" -a \( ! -z "$deplist" -o ! -z "$makedeplist" \) ]; then
 	msg "Removing installed dependencies..."
 	pacman -R $makedeplist $deplist
-
 elif [ "$RMDEPS" = "1" -a "$DEP_SUDO" = "1" ]; then
 	msg "Removing installed dependencies..."
+	if [ "$INFAKEROOT" = "1" ]; then
+		FAKEROOTKEY2=$FAKEROOTKEY
+		unset FAKEROOTKEY
+	fi
 	sudo pacman -R $makedeplist $deplist
+	if [ "$INFAKEROOT" = "1" ]; then
+		FAKEROOTKEY=$FAKEROOTKEY2
+		unset FAKEROOTKEY2
+	fi
 fi
 
 msg "Finished making: $pkgname  (`date`)"

@@ -331,6 +331,9 @@ $ABSROOT (set in your /etc/makepkg.conf).  If it finds them it will
 run another copy of makepkg to build and install the missing dependencies.
 The child makepkg calls will be made with the \fB-b\fP and \fB-i\fP options.
 .TP
+.B "\-B, \-\-noccache"
+Do not use ccache during build.
+.TP
 .B "\-c, \-\-clean"
 Clean up leftover work files/directories after a successful build.
 .TP

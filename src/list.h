@@ -47,6 +47,7 @@ PMList* list_merge(PMList *one, PMList *two);
 PMList* list_last(PMList* list);
 int list_strcmp(const void *s1, const void *s2);
 PMList *list_sort(PMList *list);
+PMList* list_remove_dupes(PMList *list);
 PMList *list_reverse(PMList *list);
 void list_display(const char *title, PMList *list);
 

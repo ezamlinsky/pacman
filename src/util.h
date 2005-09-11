@@ -39,6 +39,7 @@ void indentprint(char *str, int indent);
 char* trim(char *str);
 char* strtoupper(char *str);
 int grep(const char *fn, const char *needle);
+int reg_match(char *string, char *pattern);
 
 #endif
 /* vim: set ts=2 sw=2 noet: */

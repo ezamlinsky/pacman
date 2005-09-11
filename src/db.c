@@ -659,7 +659,7 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 			/* check name */
 			haystack = strdup(pkg->name);
 			strtoupper(haystack);
-			if(strstr(haystack, targ)) {
+			if(reg_match(haystack, targ)) {
 				match = 1;
 			}
 			FREE(haystack);
@@ -668,7 +668,7 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 			if(!match) {
 				haystack = strdup(pkg->desc);
 				strtoupper(haystack);
-				if(strstr(haystack, targ)) {
+				if(reg_match(haystack, targ)) {
 					match = 1;
 				}
 				FREE(haystack);
@@ -682,7 +682,7 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 					for(m = info->provides; m; m = m->next) {
 						haystack = strdup(m->data);
 						strtoupper(haystack);
-						if(strstr(haystack, targ)) {
+						if(reg_match(haystack, targ)) {
 							match = 1;
 						}
 						FREE(haystack);

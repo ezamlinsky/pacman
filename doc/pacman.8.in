@@ -110,9 +110,9 @@ Print out URIs for each package that will be installed, including any
 dependencies that have yet to be installed.  These can be piped to a
 file and downloaded at a later time, using a program like wget.
 .TP
-.B "\-s, \-\-search <string>"
+.B "\-s, \-\-search <regexp>"
 This will search each package in the package list for names or descriptions
-that contains <string>.
+that matches <regexp>.
 .TP
 .B "\-u, \-\-sysupgrade"
 Upgrades all packages that are out of date.  pacman will examine every
@@ -182,9 +182,9 @@ Tells pacman that the package supplied on the command line is a
 file, not an entry in the database.  Pacman will decompress the
 file and query it.  This is useful with \fB--info\fP and \fB--list\fP.
 .TP
-.B "\-s, \-\-search <string>"
+.B "\-s, \-\-search <regexp>"
 This will search each locally-installed package for names or descriptions
-that contains <string>.
+that matches <regexp>.
 .SH HANDLING CONFIG FILES
 pacman uses the same logic as rpm to determine action against files
 that are designated to be backed up.  During an upgrade, it uses 3

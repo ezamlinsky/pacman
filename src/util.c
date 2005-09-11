@@ -30,6 +30,7 @@
 #include <dirent.h>
 #include <zlib.h>
 #include <libtar.h>
+#include <regex.h>
 #include "util.h"
 
 extern unsigned short pmo_verbose;
@@ -427,5 +428,15 @@ int grep(const char *fn, const char *needle)
 	return(0);
 }
 
+int reg_match(char *string, char *pattern)
+{
+	int result;
+	regex_t reg;
+
+	regcomp(&reg, pattern, REG_EXTENDED | REG_NOSUB);
+	result = regexec(&reg, string, 0, 0, 0);
+	regfree(&reg);
+	return(!(result));
+}
 
 /* vim: set ts=2 sw=2 noet: */

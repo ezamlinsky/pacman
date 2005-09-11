@@ -1,8 +1,12 @@
 VERSION         DESCRIPTION
 -----------------------------------------------------------------------------
-2.9.7         - patch from Miklos Vanja fixed md5sums on x86_64
-              - patch from Miklos Vanja adds --sudosync to makepkg
-              - patch from Jason Chu adds SHA1 hashes to PKGBUILDs
+2.9.7         - fixed the dupe listings of packages when dealing w/ groups
+              - patches from Miklos Vanja:
+                - add regexp search support for -Qs and -Ss
+                - fixed md5sums on x86_64
+                - add --sudosync to makepkg
+                - show syntax help if an invalid option is used
+                - added makepkg option to disable ccache support
               - changed license field to operate as an array, not a string
               - added more logic for file conflict checks - if one target
                 is a file and the other is a directory, then it's a conflict

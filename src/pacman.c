@@ -160,8 +160,9 @@ int main(int argc, char *argv[])
 	/* check for permission */
 	pm_access = READ_ONLY;
 	if(pmo_op != PM_MAIN && pmo_op != PM_QUERY && pmo_op != PM_DEPTEST) {
-		if(pmo_op == PM_SYNC && !pmo_s_sync &&
-				(pmo_s_search || pmo_s_printuris || pmo_group || pmo_q_list || pmo_q_info)) {
+		if((pmo_op == PM_SYNC && !pmo_s_sync &&
+				(pmo_s_search || pmo_s_printuris || pmo_group || pmo_q_list ||
+				 pmo_q_info)) || (pmo_op == PM_DEPTEST && !pmo_d_resolve)) {
 			/* special case:  PM_SYNC can be used w/ pmo_s_search by any user */
 		} else {
 			if(myuid) {
@@ -237,6 +238,10 @@ int main(int argc, char *argv[])
 
 	/* load pm_packages cache */
 	pm_packages = db_loadpkgs(db_local);
+
+	/* the operation requires at least one target */
+	if (list_count(pm_targets) == 0 && !(pmo_op == PM_QUERY || (pmo_op == PM_SYNC && (pmo_s_sync || pmo_s_upgrade || pmo_s_clean || pmo_group || pmo_q_list))))
+		usage(pmo_op, (char*)basename(argv[0]));
 
 	/* start the requested operation */
 	switch(pmo_op) {
@@ -509,7 +514,7 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 		if(targets) {
 			groups = NULL;
 			for(j = targets; j; j = j->next) {
-				if(is_in((char *)j->data, allgroups)) {
+				if(is_in(j->data, allgroups)) {
 					groups = list_add(groups, strdup((char *)j->data));
 				}
 			}
@@ -532,6 +537,12 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				FREELIST(l);
 			}
 			pkg = list_sort(i);
+			FREELIST(i);
+			i = pkg;
+			/* need to remove dupes in the list -- dupes can appear if a package
+			 * belonging to this group exists in more than one repo at the same
+			 * time. */
+			pkg = list_remove_dupes(i);
 			FREELIST(i);
 			list_display("   ", pkg);
 			FREELIST(pkg);
@@ -693,8 +704,8 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 			cmp = rpmvercmp(local->version, sync->pkg->version);
 			if(cmp > 0 && !sync->pkg->force) {
 				/* local version is newer */
-				fprintf(stderr, ":: %s: local version (%s) appears to be newer than repo version (%s)\n",
-					local->name, local->version, sync->pkg->version);
+				fprintf(stderr, ":: %s: local (%s) appears to be newer than repo (%s/%s)\n",
+					local->name, local->version, sync->dbs->sync->treename, sync->pkg->version);
 				newer = 1;
 				FREE(sync);
 				continue;
@@ -811,6 +822,12 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 							FREELIST(l);
 						}
 						if(k != NULL) {
+							/* remove dupe entries in case a package exists in
+							 * multiple repos */
+							PMList *tmp = list_remove_dupes(k);
+							FREELIST(k);
+							k = tmp;
+
 							printf(":: group %s:\n", targ);
 							list_display("   ", k);
 							if(yesno("    Install whole content? [Y/n] ")) {
@@ -3488,7 +3505,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'v': pmo_verbose = 1; break;
 			case 'w': pmo_s_downloadonly = 1; break;
 			case 'y': pmo_s_sync = 1; break;
-			case '?': return(1);
+			case '?': pmo_help = 1; break;
 			default:  return(1);
 		}
 	}
@@ -3504,6 +3521,12 @@ int parseargs(int op, int argc, char **argv)
 	}
 	if(pmo_version) {
 		version();
+		return(2);
+	}
+
+	if (optind == 1) {
+		fprintf(stderr, "error: you should specify at least one operation\n");
+		usage(pmo_op, (char*)basename(argv[0]));
 		return(2);
 	}
 
@@ -3813,7 +3836,7 @@ void usage(int op, char *myname)
 			printf("  -o, --owns <file>   query the package that owns <file>\n");
 			printf("  -p, --file          pacman will query the package file [package] instead of\n");
 			printf("                      looking in the database\n");
-			printf("  -s, --search        search locally-installed packages for matching strings\n");
+			printf("  -s, --search        search locally-installed packages for matching regexps\n");
 		} else if(op == PM_SYNC) {
 			printf("usage:  %s {-S --sync} [options] [package]\n", myname);
 			printf("options:\n");
@@ -3824,7 +3847,7 @@ void usage(int op, char *myname)
 			printf("  -i, --info          view package information\n");
 			printf("  -l, --list          list all packages belonging to the specified repository\n");
 			printf("  -p, --print-uris    print out download URIs for each package to be installed\n");
-			printf("  -s, --search        search remote repositories for matching strings\n");
+			printf("  -s, --search        search remote repositories for matching regexps\n");
 			printf("  -u, --sysupgrade    upgrade all packages that are out of date\n");
 			printf("  -w, --downloadonly  download packages but do not install/upgrade anything\n");
 			printf("  -y, --refresh       download fresh package databases from the server\n");
