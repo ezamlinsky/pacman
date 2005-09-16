@@ -107,9 +107,10 @@ PMList *pm_packages = NULL;
 /* list of targets specified on command line */
 PMList *pm_targets  = NULL;
 
-FILE *logfd    = NULL;
-char *lckfile  = "/tmp/pacman.lck";
-char *workfile = NULL;
+FILE *logfd     = NULL;
+char *lckfile   = "/tmp/pacman.lck";
+char *workfile  = NULL;
+char *chrootbin = NULL;
 enum {READ_ONLY, READ_WRITE} pm_access;
 int maxcols = 80;
 int neednl = 0; /* for cleaner message output */
@@ -148,6 +149,21 @@ int main(int argc, char *argv[])
 		FREE(pmo_root);
 		FREE(pmo_dbpath);
 		return(ret);
+	}
+
+	/* look for the chroot binary */
+	if(!chrootbin) {
+		struct stat buf;
+		/* the install initrd (busybox) places chroot in /usr/bin, so
+		 * have to accomodate.
+		 */ 
+		if(!stat("/usr/sbin/chroot", &buf)) {
+			chrootbin = strdup("/usr/sbin/chroot");
+		} else if(!stat("/usr/bin/chroot", &buf)) {
+			chrootbin = strdup("/usr/bin/chroot");
+		} else {
+			fprintf(stderr, "warning: cannot find chroot binary - unable to run scriptlets\n");
+		}
 	}
 
 	/* see if we're root or not */
@@ -3361,6 +3377,10 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 		/* not found */
 		return(0);
 	}	
+	if(!chrootbin) {
+		fprintf(stderr, "warning: cannot find chroot binary - unable to run scriptlet\n");
+		return(0);
+	}
 
 	if(!strcmp(script, "pre_upgrade") || !strcmp(script, "pre_install")) {
 		snprintf(tmpdir, PATH_MAX, "%stmp/", pmo_root);
@@ -3397,11 +3417,11 @@ int runscriptlet(char *installfn, char *script, char *ver, char *oldver)
 
 	vprint("Executing %s script...\n", script);
 	if(oldver) {
-		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s %s\" | /usr/sbin/chroot %s /bin/bash",
-				scriptpath, script, ver, oldver, pmo_root);
+		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s %s\" | %s %s /bin/bash",
+				scriptpath, script, ver, oldver, chrootbin, pmo_root);
 	} else {
-		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s\" | /usr/sbin/chroot %s /bin/bash",
-				scriptpath, script, ver, pmo_root);
+		snprintf(cmdline, PATH_MAX, "echo \"umask 0022; source %s %s %s\" | %s %s /bin/bash",
+				scriptpath, script, ver, chrootbin, pmo_root);
 	}
 	vprint("%s\n", cmdline);
 	system(cmdline);
