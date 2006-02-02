@@ -1,4 +1,4 @@
-.TH makepkg 8 "August 3, 2004" "makepkg #VERSION#" ""
+.TH makepkg 8 "January 30, 2006" "makepkg #VERSION#" ""
 .SH NAME
 makepkg \- package build utility
 .SH SYNOPSIS
@@ -236,9 +236,26 @@ This is the release number specific to Arch Linux packages.
 This should be a brief description of the package and its functionality.
 
 .TP
-.B force
-This is used to force the package to be upgraded by \fB--sysupgrade\fP, even
+.B options
+This array allows you to override some of makepkg's default behaviour
+when building packages.  To set an option, just include the option name
+in the \fBoptions\fP array.
+.TP
+.RS
+\fIAvailable Options:\fP
+.RS
+.TP
+.B FORCE
+force the package to be upgraded by \fB--sysupgrade\fP, even
 if its an older version.
+.TP
+.B KEEPDOCS
+do not remove /usr/share/doc and /usr/share/info directories.
+.TP
+.B NOSTRIP
+do not strip debugging symbols from binaries and libraries.
+.RE
+.RE
 
 .TP
 .B url
@@ -247,8 +264,17 @@ being packaged.  This is typically the project's website.
 
 .TP
 .B license
-Sets the license type (eg, "GPL", "BSD", "NON-FREE").  (\fBNote\fP: This
-option is still in development and may change in the future)
+This field specifies the license(s) that apply to the package.  Commonly-used
+licenses are typically found in \fI/usr/share/licenses/common\fP.  If you
+see the package's license there, simply reference it in the license field
+(eg, \fBlicense="GPL"\fP).  If the package provides a license not found in
+\fI/usr/share/licenses/common\fP, then you should include the license in
+the package itself and set \fBlicense="custom"\fP or \fBlicense="custom:LicenseName"\fP.
+The license itself should be placed in a directory called
+\fI$startdir/pkg/usr/share/licenses/$pkgname\fP.
+.TP
+.RE
+If multiple licenses are applied, use the array form: \fBlicenses=('GPL' 'FDL')\fP
 
 .TP
 .B install
@@ -271,7 +297,7 @@ If this field is present, it should contain an MD5 hash for every source file
 specified in the \fIsource\fP array (in the same order).  makepkg will use
 this to verify source file integrity during subsequent builds.  To easily
 generate md5sums, first build using the PKGBUILD then run
-\fBmakepkg -g >>PKGBILD\fP.  Then you can edit the PKGBUILD and move the
+\fBmakepkg -g >>PKGBUILD\fP.  Then you can edit the PKGBUILD and move the
 \fImd5sums\fP line from the bottom to an appropriate location.
 
 .TP
@@ -400,6 +426,15 @@ build as root to use dependency auto-resolution.
 .B "\-w <destdir>"
 Write the resulting package file to the directory \fI<destdir>\fP instead of the
 current working directory.
+.TP
+.B "\-\-noconfirm"
+When calling pacman to resolve dependencies or conflicts, makepkg can pass
+the \fI--noconfirm\fP option to it so it does not wait for any user
+input before proceeding with operations.
+.TP
+.B "\-\-noprogressbar"
+When calling pacman, makepkg can pass the \fI--noprogressbar\fP option to it.
+This is useful if one is directing makepkg's output to a non-terminal (ie, a file).
 
 .SH CONFIGURATION
 Configuration options are stored in \fI/etc/makepkg.conf\fP.  This file is parsed

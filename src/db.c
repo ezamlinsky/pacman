@@ -1,7 +1,7 @@
 /*
  *  db.c
  * 
- *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -651,14 +651,12 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 
 	for(i = needles; i; i = i->next) {
 		char *targ = strdup(i->data);
-		strtoupper(targ);
 		for(j = cache; j; j = j->next) {
 			pkginfo_t *pkg = (pkginfo_t*)j->data;
 			char *haystack;
 			int match = 0;
 			/* check name */
 			haystack = strdup(pkg->name);
-			strtoupper(haystack);
 			if(reg_match(haystack, targ)) {
 				match = 1;
 			}
@@ -667,7 +665,6 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 			/* check description */
 			if(!match) {
 				haystack = strdup(pkg->desc);
-				strtoupper(haystack);
 				if(reg_match(haystack, targ)) {
 					match = 1;
 				}
@@ -681,7 +678,6 @@ void db_search(pacdb_t *db, PMList *cache, const char *treename, PMList *needles
 				if(info != NULL) {
 					for(m = info->provides; m; m = m->next) {
 						haystack = strdup(m->data);
-						strtoupper(haystack);
 						if(reg_match(haystack, targ)) {
 							match = 1;
 						}

@@ -1,7 +1,7 @@
 /*
  *  pacsync.c
  * 
- *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ extern char *pmo_xfercommand;
 
 extern unsigned short pmo_proxyport;
 extern unsigned short pmo_nopassiveftp;
+extern unsigned short pmo_noprogressbar;
 extern unsigned short pmo_chomp;
 
 /* sync servers */
@@ -482,6 +483,10 @@ static int log_progress(netbuf *ctl, int xfered, void *arg)
 	 */
 	static unsigned short mouth;
 	static unsigned int   lastcur = 0;
+
+	if(pmo_noprogressbar) {
+		return(1);
+	}
 
 	gettimeofday(&t1, NULL);
 	if(xfered+offset == fsz) {

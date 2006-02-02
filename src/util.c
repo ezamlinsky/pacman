@@ -1,7 +1,7 @@
 /*
  *  util.c
  * 
- *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -433,7 +433,11 @@ int reg_match(char *string, char *pattern)
 	int result;
 	regex_t reg;
 
-	regcomp(&reg, pattern, REG_EXTENDED | REG_NOSUB);
+	if (regcomp(&reg, pattern, REG_EXTENDED | REG_NOSUB | REG_ICASE) != 0)
+	{
+		fprintf(stderr, "error: %s is not a valid regular expression.\n", pattern);
+		exit(1);
+	}
 	result = regexec(&reg, string, 0, 0, 0);
 	regfree(&reg);
 	return(!(result));

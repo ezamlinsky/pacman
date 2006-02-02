@@ -2,7 +2,7 @@
 # 
 #   makepkg
 #  
-#   Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+#   Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
 #  
 #   This program is free software; you can redistribute it and/or modify
 #   it under the terms of the GNU General Public License as published by
@@ -20,10 +20,30 @@
 #   USA.
 #
 
-myver='2.9.7'
+myver='2.9.8'
 startdir=`pwd`
 PKGDEST=$startdir
 USE_COLOR="n"
+
+# Options
+BUILDSCRIPT="./PKGBUILD"
+CLEANUP=0
+CLEANCACHE=0
+DEP_BIN=0
+DEP_SRC=0
+DEP_SUDO=0
+FORCE=0
+GENMD5=0
+INSTALL=0
+KEEPDOCS=0
+NOBUILD=0
+NOCCACHE=0
+NODEPS=0
+NOEXTRACT=0
+NOSTRIP=0
+RMDEPS=0
+
+PACMAN_OPTS=
 
 # source Arch's abs.conf if it's present
 [ -f /etc/abs/abs.conf ] && source /etc/abs/abs.conf
@@ -72,11 +92,25 @@ strip_url() {
 	echo $1 | sed 's|^.*://.*/||g'
 }
 
+check_option() {
+	local i
+	for i in ${options[@]}; do
+		local uc=`echo $i | tr [:lower:] [:upper:]`
+		local lc=`echo $i | tr [:upper:] [:lower:]`
+		if [ "$uc" = "$1" -o "$lc" = "$1" ]; then
+			echo $1
+			return
+		fi
+	done
+}
+
 checkdeps() {
 	local missdep=""
 	local deplist=""
 
-	missdep=`pacman -T $*`
+	[ $# -gt 0 ] || return
+
+	missdep=`pacman $PACMAN_OPTS -T $*`
 	ret=$?
 	if [ "$ret" != "0" ]; then
 		if [ "$ret" = "127" ]; then
@@ -116,7 +150,7 @@ handledeps() {
 		if [ "$DEP_BIN" = "1" ]; then
 			# install missing deps from binary packages (using pacman -S)
 			msg "Installing missing dependencies..."
-			pacman -D $deplist
+			pacman $PACMAN_OPTS -D $deplist
 			if [ "$?" = "127" ]; then
 				error "Failed to install missing dependencies."
 				exit 1
@@ -131,9 +165,9 @@ handledeps() {
 				FAKEROOTKEY2=$FAKEROOTKEY
 				unset FAKEROOTKEY
 			fi
-			sudo pacman -D $deplist
+			sudo pacman $PACMAN_OPTS -D $deplist
 			if [ "$INFAKEROOT" = "1" ]; then
-				FAKEROOTKEY=$FAKEROOTKEY2
+				export FAKEROOTKEY=$FAKEROOTKEY2
 				unset FAKEROOTKEY2
 			fi
 			if [ "$?" = "127" ]; then
@@ -192,8 +226,10 @@ handledeps() {
 
 usage() {
 	echo "makepkg version $myver"
-	echo "usage: $0 [options]"
-	echo "options:"
+	echo
+	echo "Usage: $0 [options]"
+	echo
+	echo "Options:"
 	echo "  -b, --builddeps  Build missing dependencies from source"
 	echo "  -B, --noccache   Do not use ccache during build"
 	echo "  -c, --clean      Clean up work files after build"
@@ -214,33 +250,23 @@ usage() {
 	echo "  -S, --sudosync   Install missing dependencies with pacman and sudo"
 	echo "  -w <destdir>     Write package to <destdir> instead of the working dir"
 	echo
-	echo "  if -p is not specified, makepkg will look for a PKGBUILD"
-	echo "  file in the current directory."
+	echo "These options can be passed to pacman:"
+	echo
+	echo "  --noconfirm      Do not ask for confirmation when resolving dependencies"
+	echo "  --noprogressbar  Do not show a progress bar when downloading files"
+	echo
+	echo "If -p is not specified, makepkg will look for ./PKGBUILD"
 	echo
 }
-
-
-# Options
-BUILDSCRIPT="./PKGBUILD"
-CLEANUP=0
-CLEANCACHE=0
-DEP_BIN=0
-DEP_SRC=0
-DEP_SUDO=0
-FORCE=0
-GENMD5=0
-INSTALL=0
-NOBUILD=0
-NOCCACHE=0
-NODEPS=0
-NOEXTRACT=0
-NOSTRIP=0
-RMDEPS=0
 
 ARGLIST=$@
 
 while [ "$#" -ne "0" ]; do
 	case $1 in
+# pacman
+		--noconfirm)      PACMAN_OPTS="$PACMAN_OPTS --noconfirm" ;;
+		--noprogressbar)  PACMAN_OPTS="$PACMAN_OPTS --noprogressbar" ;;
+# makepkg
 		--clean)      CLEANUP=1 ;;
 		--cleancache) CLEANCACHE=1 ;;
 		--syncdeps)   DEP_BIN=1 ;;
@@ -335,6 +361,9 @@ fi
 
 unset pkgname pkgver pkgrel pkgdesc url license groups provides md5sums force
 unset replaces depends conflicts backup source install build makedepends
+unset options
+# some applications (eg, blackbox) will not build with some languages
+unset LC_ALL LANG
 umask 0022
 
 if [ ! -f $BUILDSCRIPT ]; then
@@ -361,7 +390,8 @@ fi
 if [ -f $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz -a "$FORCE" = "0" -a "$GENMD5" = "0" ]; then
 	if [ "$INSTALL" = "1" ]; then
 		warning "a package has already been built, installing existing package."
-		pacman --upgrade $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
+		echo pacman $PACMAN_OPTS -U $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
+		pacman $PACMAN_OPTS -U $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
 		exit $?
 	else
 		error "a package has already been built.  (use -f to overwrite)"
@@ -506,7 +536,7 @@ if [ "$GENMD5" = "0" ]; then
 			case $file in
 				*.tar.gz|*.tar.Z|*.tgz)
 				cmd="tar --use-compress-program=gzip -xf $file" ;;
-				*.tar.bz2)
+				*.tar.bz2|*.tbz2)
 				cmd="tar --use-compress-program=bzip2 -xf $file" ;;
 				*.tar)
 				cmd="tar -xf $file" ;;
@@ -571,7 +601,6 @@ else
 	exit 0
 fi
 
-
 if [ "`id -u`" = "0" ]; then
 	# chown all source files to root.root
 	chown -R root.root $startdir/src
@@ -589,6 +618,15 @@ if [ "$NOBUILD" = "1" ]; then
 	exit 0
 fi
 
+# use distcc if requested
+if [ "$DISTCC" = "y" ]; then
+	[ -d /usr/lib/distcc/bin ] && export PATH=/usr/lib/distcc/bin:$PATH
+	if [ "$INCHROOT" = "1" ]; then
+		[ -d /var/tmp/fst/.distcc ] || mkdir /var/tmp/fst/.distcc
+		export DISTCC_DIR=/var/tmp/fst/.distcc
+	fi
+fi
+
 # use ccache if it's available
 if [ "$NOCCACHE" = "0" ]; then
 	[ -d /usr/lib/ccache/bin ] && export PATH=/usr/lib/ccache/bin:$PATH
@@ -602,11 +640,14 @@ if [ $? -gt 0 ]; then
 	exit 2
 fi
 
-# remove info/doc files
-cd $startdir
-rm -rf pkg/usr/info pkg/usr/share/info
-rm -rf pkg/usr/doc pkg/usr/share/doc
-rm -rf pkg/{usr,opt/gnome}/share/gtk-doc
+if [ ! "`check_option KEEPDOCS`" -a "$KEEPDOCS" = "0" ]; then
+	# remove info/doc files
+	msg "Removing info/doc files..."
+	cd $startdir
+	rm -rf pkg/usr/info pkg/usr/share/info
+	rm -rf pkg/usr/doc pkg/usr/share/doc
+	rm -rf pkg/{usr,opt/gnome}/share/gtk-doc
+fi
 
 # move /usr/share/man files to /usr/man
 if [ -d pkg/usr/share/man ]; then
@@ -641,7 +682,7 @@ done
 cd $startdir
 
 # strip binaries
-if [ "$NOSTRIP" = "0" ]; then
+if [ ! "`check_option NOSTRIP`" -a "$NOSTRIP" = "0" ]; then
 	msg "Stripping debugging symbols from libraries..."
 	find pkg/{,usr,usr/local,opt/*}/lib -type f -not -name "*.dll" -not -name "*.exe" \
 		-exec /usr/bin/strip --strip-debug '{}' \; 2>&1 \
@@ -650,6 +691,18 @@ if [ "$NOSTRIP" = "0" ]; then
 	find pkg/{,usr,usr/local,opt/*}/{bin,sbin} -type f -not -name "*.dll" -not -name "*.exe" \
 		-exec /usr/bin/strip '{}' \; 2>&1 \
 		| grep -v "No such file" | grep -v "format not recognized"
+fi
+
+# remove libtool (.la) files
+if [ "`check_option NOLIBTOOL`" ]; then
+	msg "Removing libtool .la files..."
+	find pkg -type f -name "*.la" -exec rm -f -- '{}' \;
+fi
+
+# remove empty directories
+if [ "`check_option NOEMPTYDIRS`" ]; then
+	msg "Removing empty directories..."
+	find pkg -mindepth 1 -type d -empty -exec rmdir {} \;
 fi
 
 # get some package meta info
@@ -729,16 +782,16 @@ fi
 
 if [ "$RMDEPS" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" -a \( ! -z "$deplist" -o ! -z "$makedeplist" \) ]; then
 	msg "Removing installed dependencies..."
-	pacman -R $makedeplist $deplist
+	pacman $PACMAN_OPTS -R $makedeplist $deplist
 elif [ "$RMDEPS" = "1" -a "$DEP_SUDO" = "1" ]; then
 	msg "Removing installed dependencies..."
 	if [ "$INFAKEROOT" = "1" ]; then
 		FAKEROOTKEY2=$FAKEROOTKEY
 		unset FAKEROOTKEY
 	fi
-	sudo pacman -R $makedeplist $deplist
+	sudo pacman $PACMAN_OPTS -R $makedeplist $deplist
 	if [ "$INFAKEROOT" = "1" ]; then
-		FAKEROOTKEY=$FAKEROOTKEY2
+		export FAKEROOTKEY=$FAKEROOTKEY2
 		unset FAKEROOTKEY2
 	fi
 fi
@@ -746,8 +799,8 @@ fi
 msg "Finished making: $pkgname  (`date`)"
 
 if [ "$INSTALL" = "1" -a "`id -u`" = "0" -a "$INFAKEROOT" != "1" ]; then
-	msg "Running pacman --upgrade..."
-	pacman --upgrade $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
+	msg "Installing package with pacman -U..."
+	pacman $PACMAN_OPTS -U $PKGDEST/${pkgname}-${pkgver}-${pkgrel}.pkg.tar.gz
 	exit $?
 fi
 

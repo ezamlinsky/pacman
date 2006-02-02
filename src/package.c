@@ -1,7 +1,7 @@
 /*
  *  package.c
  * 
- *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -63,21 +63,28 @@ pkginfo_t* load_pkg(char *pkgfile)
 		}
 		if(!strcmp(th_get_pathname(tar), ".PKGINFO")) {
 			char *descfile;
+			int fd;
 
 			/* extract this file into /tmp. it has info for us */
 			descfile = strdup("/tmp/pacman_XXXXXX");
-			mkstemp(descfile);
+			fd = mkstemp(descfile);
 			tar_extract_file(tar, descfile);
 			/* parse the info file */
 			parse_descfile(descfile, info, &backup, 0);
 			if(!strlen(info->name)) {
 				fprintf(stderr, "load_pkg: missing package name in %s.\n", pkgfile);
 				FREEPKG(info);
+				unlink(descfile);
+				FREE(descfile);
+				close(fd);
 				return(NULL);
 			}
 			if(!strlen(info->version)) {
 				fprintf(stderr, "load_pkg: missing package version in %s.\n", pkgfile);
 				FREEPKG(info);
+				unlink(descfile);
+				FREE(descfile);
+				close(fd);
 				return(NULL);
 			}
 			for(lp = backup; lp; lp = lp->next) {
@@ -86,7 +93,9 @@ pkginfo_t* load_pkg(char *pkgfile)
 				}
 			}
 			config = 1;
+			unlink(descfile);
 			FREE(descfile);
+			close(fd);
 			continue;
 		} else if(!strcmp(th_get_pathname(tar), "._install") || !strcmp(th_get_pathname(tar), ".INSTALL")) {
 			info->scriptlet = 1;
@@ -96,10 +105,11 @@ pkginfo_t* load_pkg(char *pkgfile)
 			FILE *fp;
 			char *fn;
 			char *str;
+			int fd;
 			
 			MALLOC(str, PATH_MAX);
 			fn = strdup("/tmp/pacman_XXXXXX");
-			mkstemp(fn);
+			fd = mkstemp(fn);
 			tar_extract_file(tar, fn);
 			fp = fopen(fn, "r");
 			while(!feof(fp)) {
@@ -115,6 +125,7 @@ pkginfo_t* load_pkg(char *pkgfile)
 				fprintf(stderr, "warning: could not remove tempfile %s\n", fn);
 			}
 			FREE(fn);
+			close(fd);
 			filelist = 1;
 			continue;
 		} else {

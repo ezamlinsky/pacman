@@ -1,7 +1,7 @@
 /*
  *  pacman.c
  * 
- *  Copyright (c) 2002-2005 by Judd Vinet <jvinet@zeroflux.org>
+ *  Copyright (c) 2002-2006 by Judd Vinet <jvinet@zeroflux.org>
  * 
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -53,51 +53,53 @@
  */
 
 /* command line options */
-char          *pmo_root         = NULL;
-unsigned short pmo_op           = PM_MAIN;
-unsigned short pmo_verbose      = 0;
-unsigned short pmo_version      = 0;
-unsigned short pmo_help         = 0;
-unsigned short pmo_force        = 0;
-unsigned short pmo_nodeps       = 0;
-unsigned short pmo_upgrade      = 0;
-unsigned short pmo_freshen      = 0;
-unsigned short pmo_nosave       = 0;
-unsigned short pmo_noconfirm    = 0;
-unsigned short pmo_d_vertest    = 0;
-unsigned short pmo_d_resolve    = 0;
-unsigned short pmo_q_isfile     = 0;
-unsigned short pmo_q_info       = 0;
-unsigned short pmo_q_list       = 0;
-unsigned short pmo_q_orphans    = 0;
-unsigned short pmo_q_owns       = 0;
-unsigned short pmo_q_search     = 0;
-unsigned short pmo_r_cascade    = 0;
-unsigned short pmo_r_dbonly     = 0;
-unsigned short pmo_r_recurse    = 0;
-unsigned short pmo_s_clean      = 0;
+char          *pmo_root          = NULL;
+unsigned short pmo_op            = PM_MAIN;
+unsigned short pmo_verbose       = 0;
+unsigned short pmo_version       = 0;
+unsigned short pmo_help          = 0;
+unsigned short pmo_force         = 0;
+unsigned short pmo_nodeps        = 0;
+unsigned short pmo_upgrade       = 0;
+unsigned short pmo_freshen       = 0;
+unsigned short pmo_nosave        = 0;
+unsigned short pmo_noconfirm     = 0;
+unsigned short pmo_noprogressbar = 0;
+unsigned short pmo_d_vertest     = 0;
+unsigned short pmo_d_resolve     = 0;
+unsigned short pmo_q_isfile      = 0;
+unsigned short pmo_q_info        = 0;
+unsigned short pmo_q_list        = 0;
+unsigned short pmo_q_foreign     = 0;
+unsigned short pmo_q_orphans     = 0;
+unsigned short pmo_q_owns        = 0;
+unsigned short pmo_q_search      = 0;
+unsigned short pmo_r_cascade     = 0;
+unsigned short pmo_r_dbonly      = 0;
+unsigned short pmo_r_recurse     = 0;
+unsigned short pmo_s_clean       = 0;
 unsigned short pmo_s_downloadonly = 0;
-PMList        *pmo_s_ignore     = NULL;
-unsigned short pmo_s_info       = 0;
-unsigned short pmo_s_printuris  = 0;
-unsigned short pmo_s_search     = 0;
-unsigned short pmo_s_sync       = 0;
-unsigned short pmo_s_upgrade    = 0;
-unsigned short pmo_group        = 0;
+PMList        *pmo_s_ignore      = NULL;
+unsigned short pmo_s_info        = 0;
+unsigned short pmo_s_printuris   = 0;
+unsigned short pmo_s_search      = 0;
+unsigned short pmo_s_sync        = 0;
+unsigned short pmo_s_upgrade     = 0;
+unsigned short pmo_group         = 0;
 /* configuration file options */
-char          *pmo_dbpath       = NULL;
-char          *pmo_configfile   = NULL;
-char          *pmo_logfile      = NULL;
-char          *pmo_proxyhost    = NULL;
-unsigned short pmo_proxyport    = 0;
-char          *pmo_xfercommand  = NULL;
-PMList        *pmo_noupgrade    = NULL;
-PMList        *pmo_noextract    = NULL;
-PMList        *pmo_ignorepkg    = NULL;
-PMList        *pmo_holdpkg      = NULL;
-unsigned short pmo_chomp        = 0;
-unsigned short pmo_usesyslog    = 0;
-unsigned short pmo_nopassiveftp = 0;
+char          *pmo_dbpath        = NULL;
+char          *pmo_configfile    = NULL;
+char          *pmo_logfile       = NULL;
+char          *pmo_proxyhost     = NULL;
+unsigned short pmo_proxyport     = 0;
+char          *pmo_xfercommand   = NULL;
+PMList        *pmo_noupgrade     = NULL;
+PMList        *pmo_noextract     = NULL;
+PMList        *pmo_ignorepkg     = NULL;
+PMList        *pmo_holdpkg       = NULL;
+unsigned short pmo_chomp         = 0;
+unsigned short pmo_usesyslog     = 0;
+unsigned short pmo_nopassiveftp  = 0;
 
 
 /* list of sync_t structs for sync locations */
@@ -256,8 +258,10 @@ int main(int argc, char *argv[])
 	pm_packages = db_loadpkgs(db_local);
 
 	/* the operation requires at least one target */
-	if (list_count(pm_targets) == 0 && !(pmo_op == PM_QUERY || (pmo_op == PM_SYNC && (pmo_s_sync || pmo_s_upgrade || pmo_s_clean || pmo_group || pmo_q_list))))
+	if(list_count(pm_targets) == 0 && !(pmo_op == PM_QUERY || (pmo_op == PM_SYNC && (pmo_s_sync || pmo_s_upgrade || pmo_s_clean || pmo_group || pmo_q_list)))) {
+		fprintf(stderr, "error: no targets specified\n");
 		usage(pmo_op, (char*)basename(argv[0]));
+	}
 
 	/* start the requested operation */
 	switch(pmo_op) {
@@ -267,9 +271,15 @@ int main(int argc, char *argv[])
 		case PM_QUERY:   ret = pacman_query(db_local, pm_targets);         break;
 		case PM_SYNC:    ret = pacman_sync(db_local, pm_targets);          break;
 		case PM_DEPTEST: ret = pacman_deptest(db_local, pm_targets);       break;
-		case PM_MAIN:    ret = 0; break;
-		default: fprintf(stderr, "error: no operation specified (use -h for help)\n\n");
-						 ret = 1;
+		case PM_MAIN:    /* fallthrough */
+		default:
+			ret = 0;
+			if(list_count(pm_targets) > 0) {
+				fprintf(stderr, "error: no operation specified\n");
+				usage(pmo_op, (char*)basename(argv[0]));
+				ret = 1;
+			}
+			break;
 	}
 	db_close(db_local);
 	cleanup(ret);
@@ -828,6 +838,36 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 					}
 				}
 				if(!found) {
+					/* target was not found: check provides */
+					for(j = databases; !found && j; j = j->next) {
+						dbsync_t *dbs = (dbsync_t*)j->data;
+						PMList *p = whatprovides(dbs->db, targ);
+						if(p) {
+							/* we only take the first one in the list */
+							pkginfo_t *pkg = (pkginfo_t*)p->data;
+							if(treename == NULL || 
+									(treename && !strcmp(treename, dbs->sync->treename))) {
+								found = 1;
+								sync->dbs = dbs;
+								/* re-fetch the package record with dependency info */
+								sync->pkg = db_scan(sync->dbs->db, pkg->name, INFRQ_DESC | INFRQ_DEPENDS);
+								if(sync->pkg == NULL) {
+									found = 0;
+								}
+								if(pmo_d_resolve) {
+									/* looks like we're being called from 'makepkg -s' so these are all deps */
+									sync->pkg->reason = REASON_DEPEND;
+								} else {
+									/* this package was explicitly requested */
+									sync->pkg->reason = REASON_EXPLICIT;
+								}
+							}
+							p->data = NULL;
+							FREELIST(p);
+						}
+					}
+				}
+				if(!found) {
 					if(treename == NULL) {
 						/* target not found: check if it's a group */
 						k = NULL;
@@ -1338,11 +1378,50 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				depmissing_t* miss = (depmissing_t*)j->data;
 				syncpkg_t *s = find_pkginsync(miss->depend.name, final);
 				if(s == NULL) {
-					if(allgood) {
-						fprintf(stderr, "error: this will break the following dependencies:\n");
+					int pfound = 0;
+					/* If miss->depend.name depends on something that miss->target and a
+					 * package in final both provide, then it's okay...  */
+					pkginfo_t *leavingp  = db_scan(db, miss->target, INFRQ_DESC | INFRQ_DEPENDS);
+					pkginfo_t *conflictp = db_scan(db, miss->depend.name, INFRQ_DESC | INFRQ_DEPENDS);
+					if(!leavingp || !conflictp) {
+						fprintf(stderr, "error: something has gone horribly wrong\n");
 						allgood = 0;
+						goto sync_cleanup;
 					}
-					printf("  %s: is required by %s\n", miss->target, miss->depend.name);
+					/* Look through the upset package's dependencies and try to match one up
+					 * to a provisio from the package we want to remove */
+					for(k = conflictp->depends; k && !pfound; k = k->next) {
+						PMList *m;
+						for(m = leavingp->provides; m && !pfound; m = m->next) {
+							if(!strcmp(k->data, m->data)) {
+								/* Found a match -- now look through final for a package that
+								 * provides the same thing.  If none are found, then it truly
+								 * is an unresolvable conflict. */
+								PMList *n, *o;
+								for(n = final; n && !pfound; n = n->next) {
+									syncpkg_t *sp = (syncpkg_t*)n->data;
+									for(o = sp->pkg->provides; o && !pfound; o = o->next) {
+										if(!strcmp(m->data, o->data)) {
+											/* found matching provisio -- we're good to go */
+											vprint("Found a matching provides (%s) in %s, conflict aborted\n",
+													(char*)o->data, sp->pkg->name);
+											pfound = 1;
+										}
+									}
+								}
+							}
+						}
+					}
+					FREEPKG(conflictp);
+					FREEPKG(leavingp);
+
+					if(!pfound) {
+						if(allgood) {
+							fprintf(stderr, "error: this will break the following dependencies:\n");
+							allgood = 0;
+						}
+						printf("  %s: is required by %s\n", miss->target, miss->depend.name);
+					}
 				}
 			}
 			FREELIST(i);
@@ -1401,7 +1480,6 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 				allgood = !pacman_upgrade(db, files, dependonly);
 			}
 			/* propagate replaced packages' requiredby fields to their new owners */
-			/* XXX: segfault */
 			if(allgood) {
 				for(i = final; i; i = i->next) {
 					syncpkg_t *sync = (syncpkg_t*)i->data;
@@ -1420,6 +1498,13 @@ int pacman_sync(pacdb_t *db, PMList *targets)
 									/* replace old's name with new's name in the requiredby's dependency list */
 									PMList *m;
 									pkginfo_t *depender = db_scan(db, k->data, INFRQ_DEPENDS);
+									if(depender == NULL) {
+										/* If the depending package no longer exists in the local db,
+										 * then it must have ALSO conflicted with sync->pkg.  If
+										 * that's the case, then we don't have anything to propagate
+										 * here.  */
+										continue;
+									}
 									for(m = depender->depends; m; m = m->next) {
 										if(!strcmp(m->data, old->name)) {
 											FREE(m->data);
@@ -1866,17 +1951,21 @@ int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly)
 
 			if(nb) {
 				char *temp;
+				int fd;
 				char *md5_local, *md5_pkg;
 
-				md5_local = MDFile(expath);
 				/* extract the package's version to a temporary file and md5 it */
 				temp = strdup("/tmp/pacman_XXXXXX");
-				mkstemp(temp);
+				fd = mkstemp(temp);
 				if(tar_extract_file(tar, temp)) {
 					logaction(stderr, "could not extract %s: %s", pathname, strerror(errno));
 					errors++;
+					unlink(temp);
+					FREE(temp);
+					close(fd);
 					continue;
 				}
+				md5_local = MDFile(expath);
 				md5_pkg = MDFile(temp);
 				/* append the new md5 hash to it's respective entry in info->backup
 				 * (it will be the new orginal)
@@ -1938,15 +2027,10 @@ int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly)
 						vprint("  action: installing new file\n");
 						installnew = 1;
 					} else {
-						char newpath[PATH_MAX];
-						vprint("  action: saving current file and installing new one\n");
+						vprint("  action: leaving file in place, installing new one as .pacnew\n");
+						strncat(expath, ".pacnew", PATH_MAX);
+						logaction(stderr, "warning: extracting %s%s as %s", pmo_root, pathname, expath);
 						installnew = 1;
-						snprintf(newpath, PATH_MAX, "%s.pacsave", expath);
-						if(rename(expath, newpath)) {
-							logaction(stderr, "error: could not rename %s: %s", expath, strerror(errno));
-						} else {
-							logaction(stderr, "warning: %s saved as %s", expath, newpath);
-						}
 					}
 
 					if(installnew) {
@@ -1963,6 +2047,7 @@ int pacman_add(pacdb_t *db, PMList *targets, PMList *dependonly)
 				FREE(md5_orig);
 				unlink(temp);
 				FREE(temp);
+				close(fd);
 			} else {
 				if(!notouch) {
 					/*vprint("  %s\n", expath);*/
@@ -2254,12 +2339,13 @@ int pacman_remove(pacdb_t *db, PMList *targets, PMList *skiplist)
 		info = (pkginfo_t*)targ->data;
 
 		if(!pmo_upgrade) {
-			printf("removing %s... ", info->name);
-			neednl = 1;
-			fflush(stdout);
 			/* run the pre-remove scriptlet if it exists  */
 			snprintf(pm_install, PATH_MAX, "%s%s/%s/%s-%s/install", pmo_root, pmo_dbpath, db->treename, info->name, info->version);
 			runscriptlet(pm_install, "pre_remove", info->version, NULL);
+
+			printf("removing %s... ", info->name);
+			neednl = 1;
+			fflush(stdout);
 		}
 
 		if(!pmo_r_dbonly) {
@@ -2404,8 +2490,33 @@ int pacman_query(pacdb_t *db, PMList *targets)
 	char *package = NULL;
 	char path[PATH_MAX+1];
 	pkginfo_t *info = NULL;
-	PMList *targ, *lp, *q;
+	PMList *targ, *lp, *q, *databases = NULL;
 	int done = 0;
+	PMList *i, *j;
+	
+	if(pmo_q_foreign)
+	{
+		/* open sync db(s) */
+		PMList *dbp;
+		for(dbp = pmc_syncs; dbp; dbp = dbp->next) {
+			pacdb_t *db_sync = NULL;
+			dbsync_t *dbs = NULL;
+			sync_t *sync = (sync_t*)dbp->data;
+	
+			db_sync = db_open(pmo_root, pmo_dbpath, sync->treename);
+			if(db_sync == NULL) {
+				fprintf(stderr, "error: could not open sync database: %s\n", sync->treename);
+				fprintf(stderr, "       have you used --refresh yet?\n");
+				return(1);
+			}
+			MALLOC(dbs, sizeof(dbsync_t));
+			dbs->sync = sync;
+			dbs->db = db_sync;
+			/* cache packages */
+			dbs->pkgcache = db_loadpkgs(db_sync);
+			databases = list_add(databases, dbs);
+		}
+	}
 
 	if(pmo_q_search) {
 		db_search(db, pm_packages, "local", targets);
@@ -2512,7 +2623,7 @@ int pacman_query(pacdb_t *db, PMList *targets)
 			/* no target */
 			for(lp = pm_packages; lp; lp = lp->next) {
 				pkginfo_t *tmpp = (pkginfo_t*)lp->data;
-				if(pmo_q_list || pmo_q_orphans) {
+				if(pmo_q_list || pmo_q_orphans || pmo_q_foreign) {
 					info = db_scan(db, tmpp->name, INFRQ_ALL);
 					if(info == NULL) {
 						/* something weird happened */
@@ -2525,6 +2636,29 @@ int pacman_query(pacdb_t *db, PMList *targets)
 					}
 					if(pmo_q_orphans) {
 						if(info->requiredby == NULL && info->reason == REASON_EXPLICIT) {
+							printf("%s %s\n", tmpp->name, tmpp->version);
+						}
+					}
+					if(pmo_q_foreign) {
+						int match = 0;
+						for(i = databases; i; i = i->next) {
+							dbsync_t *dbs = (dbsync_t*)i->data;
+							for(j = dbs->pkgcache; j; j = j->next) {
+								pkginfo_t *pkg = (pkginfo_t*)j->data;
+								char *haystack;
+								char *needle;
+								haystack = strdup(pkg->name);
+								strtoupper(haystack);
+								needle = strdup(info->name);
+								strtoupper(needle);
+								if(strstr(haystack, needle)) {
+									match = 1;
+								}
+								FREE(haystack);
+								FREE(needle);
+							}
+						}
+						if(match==0) {
 							printf("%s %s\n", tmpp->name, tmpp->version);
 						}
 					}
@@ -2590,6 +2724,33 @@ int pacman_query(pacdb_t *db, PMList *targets)
 					return(2);
 				}
 				if(info->requiredby == NULL) {
+					printf("%s %s\n", info->name, info->version);
+				}
+			} else if(pmo_q_foreign) {
+				int match = 0;
+				info = db_scan(db, package, INFRQ_DESC | INFRQ_DEPENDS);
+				if(info == NULL) {
+					fprintf(stderr, "Package \"%s\" was not found.\n", package);
+					return(2);
+				}
+				for(i = databases; i; i = i->next) {
+					dbsync_t *dbs = (dbsync_t*)i->data;
+					for(j = dbs->pkgcache; j; j = j->next) {
+						pkginfo_t *pkg = (pkginfo_t*)j->data;
+						char *haystack;
+						char *needle;
+						haystack = strdup(pkg->name);
+						strtoupper(haystack);
+						needle = strdup(info->name);
+						strtoupper(needle);
+						if(strstr(haystack, needle)) {
+							match = 1;
+						}
+						FREE(haystack);
+						FREE(needle);
+					}
+				}
+				if(match==0) {
 					printf("%s %s\n", info->name, info->version);
 				}
 			} else {
@@ -2802,9 +2963,27 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 			return(1);
 		} else*/
 		if(miss->type == DEPEND) {
+			int provisio_match = 0;
 			syncpkg_t *sync = NULL;
 			MALLOC(sync, sizeof(syncpkg_t));
 			sync->replaces = NULL;
+
+			/* check if one of the packages in *list already provides this dependency */
+			for(j = list; j; j = j->next) {
+				syncpkg_t *sp = (syncpkg_t*)j->data;
+				if(sp == NULL) {
+					continue;
+				}
+				for(k = sp->pkg->provides; k; k = k->next) {
+					if(!strcmp(miss->depend.name, k->data)) {
+						vprint("resolvedeps: %s provides dependency %s\n", sp->pkg->name, miss->depend.name);
+						provisio_match = 1;
+					}
+				}
+			}
+			if(provisio_match) {
+				continue;
+			}
 
 			/* find the package in one of the repositories */
 			for(j = databases; !found && j; j = j->next) {
@@ -2853,7 +3032,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 				FREE(sync);
 				continue;
 			}
-			vprint("resolving %s\n", sync->pkg->name);
+			vprint("resolvedeps: resolving %s\n", sync->pkg->name);
 			found = 0;
 			for(j = trail; j; j = j->next) {
 				syncpkg_t *tmp = (syncpkg_t*)j->data;
@@ -2886,7 +3065,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 					if(resolvedeps(local, databases, sync, list, trail)) {
 						return(1);
 					}
-					vprint("adding %s-%s\n", sync->pkg->name, sync->pkg->version);				
+					vprint("resolvedeps: adding %s-%s\n", sync->pkg->name, sync->pkg->version);				
 					list = list_add(list, sync);
 				} else {
 					fprintf(stderr, "error: cannot resolve dependencies for \"%s\"\n", miss->target);
@@ -2894,7 +3073,7 @@ int resolvedeps(pacdb_t *local, PMList *databases, syncpkg_t *syncpkg, PMList *l
 				}
 			} else {
 				/* cycle detected -- skip it */
-				vprint("dependency cycle detected: %s\n", sync->pkg->name);
+				vprint("resolvedeps: dependency cycle detected: %s\n", sync->pkg->name);
 				FREEPKG(sync->pkg);
 				FREE(sync);
 			}
@@ -3014,11 +3193,15 @@ PMList* checkdeps(pacdb_t *db, unsigned short op, PMList *targets)
 
 			/* CONFLICTS */
 			for(j = tp->conflicts; j; j = j->next) {
+				if(!strcmp(tp->name, j->data)) {
+					/* a package cannot conflict with itself -- that's just not nice */
+					continue;
+				}
 				/* check targets against database */
 				for(k = pm_packages; k; k = k->next) {
 					int conflict = 0;
 					pkginfo_t *dp = (pkginfo_t*)k->data;
-					if(!strcmp(dp->name, tp->name)) {
+					if(!strcmp(tp->name, dp->name)) {
 						/* a package cannot conflict with itself -- that's just not nice */
 						continue;
 					}
@@ -3468,6 +3651,7 @@ int parseargs(int op, int argc, char **argv)
 		{"dbonly",     no_argument,       0, 'k'},
 		{"list",       no_argument,       0, 'l'},
 		{"nosave",     no_argument,       0, 'n'},
+		{"foreign",    no_argument,       0, 'm'},
 		{"owns",       no_argument,       0, 'o'},
 		{"file",       no_argument,       0, 'p'},
 		{"print-uris", no_argument,       0, 'p'},
@@ -3479,12 +3663,13 @@ int parseargs(int op, int argc, char **argv)
 		{"downloadonly", no_argument,     0, 'w'},
 		{"refresh",    no_argument,       0, 'y'},
 		{"noconfirm",  no_argument,       0, 1000},
+		{"noprogressbar", no_argument,    0, 1003},
 		{"config",     required_argument, 0, 1001},
 		{"ignore",     required_argument, 0, 1002},
 		{0, 0, 0, 0}
 	};
 
-	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vkhscVfnoldepiuwyg", opts, &option_index))) {
+	while((opt = getopt_long(argc, argv, "ARUFQSTDYr:b:vkhscVfmnoldepiuwyg", opts, &option_index))) {
 		if(opt < 0) {
 			break;
 		}
@@ -3493,6 +3678,7 @@ int parseargs(int op, int argc, char **argv)
 			case 1000: pmo_noconfirm = 1; break;
 			case 1001: strcpy(pmo_configfile, optarg); break;
 			case 1002: pmo_s_ignore = list_add(pmo_s_ignore, strdup(optarg)); break;
+			case 1003: pmo_noprogressbar = 1; break;
 			case 'A': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_ADD);     break;
 			case 'R': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_REMOVE);  break;
 			case 'U': pmo_op = (pmo_op != PM_MAIN ? 0 : PM_UPGRADE); break;
@@ -3514,6 +3700,7 @@ int parseargs(int op, int argc, char **argv)
 			case 'k': pmo_r_dbonly = 1; break;
 			case 'l': pmo_q_list = 1; break;
 			case 'n': pmo_nosave = 1; break;
+			case 'm': pmo_q_foreign = 1; break;
 			case 'p': pmo_q_isfile = 1; pmo_s_printuris = 1; break;
 			case 'o': pmo_q_owns = 1; break;
 			case 'r': if(realpath(optarg, pmo_root) == NULL) {
@@ -3853,6 +4040,7 @@ void usage(int op, char *myname)
 			printf("  -g, --groups        view all members of a package group\n");
 			printf("  -i, --info          view package information (use -ii for more)\n");
 			printf("  -l, --list          list the contents of the queried package\n");
+			printf("  -m, --foreign       list all packages that were not found in the sync db(s)\n");
 			printf("  -o, --owns <file>   query the package that owns <file>\n");
 			printf("  -p, --file          pacman will query the package file [package] instead of\n");
 			printf("                      looking in the database\n");
@@ -3875,6 +4063,7 @@ void usage(int op, char *myname)
 		}
 		printf("      --config <path> set an alternate configuration file\n");
 		printf("      --noconfirm     do not ask for any confirmation\n");
+		printf("      --noprogressbar do not show a progress bar when downloading files\n");
 		printf("  -v, --verbose       be verbose\n");
 		printf("  -r, --root <path>   set an alternate installation root\n");
 		printf("  -b, --dbpath <path> set an alternate database location\n");
@@ -3887,7 +4076,7 @@ void version(void)
 {
 	printf("\n");
 	printf(" .--.                  Pacman v%s\n", PACVER);
-	printf("/ _.-' .-.  .-.  .-.   Copyright (C) 2002-2005 Judd Vinet <jvinet@zeroflux.org>\n");
+	printf("/ _.-' .-.  .-.  .-.   Copyright (C) 2002-2006 Judd Vinet <jvinet@zeroflux.org>\n");
 	printf("\\  '-. '-'  '-'  '-'  \n");
 	printf(" '--'                  This program may be freely redistributed under\n");
 	printf("                       the terms of the GNU General Public License\n\n");
@@ -4029,6 +4218,7 @@ void cleanup(int signum)
 	FREE(pmo_logfile);
 	FREE(pmo_proxyhost);
 	FREE(pmo_xfercommand);
+	FREE(pmo_configfile);
 
 	FREELIST(pm_targets);
 
