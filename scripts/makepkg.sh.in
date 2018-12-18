@@ -85,6 +85,8 @@ SKIPPGPCHECK=0
 SIGNPKG=''
 SPLITPKG=0
 SOURCEONLY=0
+TUNE=0
+UPDATE=0
 VERIFYSOURCE=0
 
 if [[ -n $SOURCE_DATE_EPOCH ]]; then
@@ -931,6 +933,7 @@ run_split_packaging() {
 		run_package $pkgname
 		tidy_install
 		lint_package || exit $E_PACKAGE_FAILED
+		set_dependencies $pkgname $pkgdir
 		create_package
 		restore_package_variables
 	done
@@ -963,6 +966,8 @@ usage() {
 	printf -- "$(gettext "  -R, --repackage  Repackage contents of the package without rebuilding")\n"
 	printf -- "$(gettext "  -s, --syncdeps   Install missing dependencies with %s")\n" "pacman"
 	printf -- "$(gettext "  -S, --source     Generate a source-only tarball without downloaded sources")\n"
+	printf -- "$(gettext "  -t, --tune       Allow you to tune optional package dependencies before build")\n"
+	printf -- "$(gettext "  -u, --update     Update package up to new version but keep its dependencies")\n"
 	printf -- "$(gettext "  -V, --version    Show version information and exit")\n"
 	printf -- "$(gettext "  --allsource      Generate a source-only tarball including downloaded sources")\n"
 	printf -- "$(gettext "  --check          Run the %s function in the %s")\n" "check()" "$BUILDSCRIPT"
@@ -1017,12 +1022,12 @@ fi
 ARGLIST=("$@")
 
 # Parse Command Line Options.
-OPT_SHORT="AcCdefFghiLmop:rRsSV"
+OPT_SHORT="AcCdefFghiLmop:rRsStuV"
 OPT_LONG=('allsource' 'check' 'clean' 'cleanbuild' 'config:' 'force' 'geninteg'
           'help' 'holdver' 'ignorearch' 'install' 'key:' 'log' 'noarchive' 'nobuild'
           'nocolor' 'nocheck' 'nodeps' 'noextract' 'noprepare' 'nosign' 'packagelist'
           'printsrcinfo' 'repackage' 'rmdeps' 'sign' 'skipchecksums' 'skipinteg'
-          'skippgpcheck' 'source' 'syncdeps' 'verifysource' 'version')
+          'skippgpcheck' 'source' 'syncdeps' 'tune' 'update' 'verifysource' 'version')
 
 # Pacman Options
 OPT_LONG+=('asdeps' 'noconfirm' 'needed' 'noprogressbar')
@@ -1075,6 +1080,8 @@ while true; do
 		--skippgpcheck)   SKIPPGPCHECK=1;;
 		-s|--syncdeps)    DEP_BIN=1 ;;
 		-S|--source)      SOURCEONLY=1 ;;
+		-t|--tune)        TUNE=1 ;;
+		-u|--update)      UPDATE=1 ;;
 		--verifysource)   VERIFYSOURCE=1 ;;
 
 		-h|--help)        usage; exit $E_OK ;;
@@ -1344,6 +1351,7 @@ if (( INFAKEROOT )); then
 		fi
 		tidy_install
 		lint_package || exit $E_PACKAGE_FAILED
+		set_dependencies $pkgname $pkgdir
 		create_package
 		create_debug_package
 	else
@@ -1352,6 +1360,8 @@ if (( INFAKEROOT )); then
 
 	msg "$(gettext "Leaving %s environment.")" "fakeroot"
 	exit $E_OK
+else
+	customize_package
 fi
 
 msg "$(gettext "Making package: %s")" "$pkgbase $basever ($(date +%c))"

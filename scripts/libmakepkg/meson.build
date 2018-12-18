@@ -1,5 +1,6 @@
 libmakepkg_modules = [
   { 'name' : 'buildenv',      'has_subdir' : true },
+  { 'name' : 'custom',                            },
   { 'name' : 'executable',    'has_subdir' : true },
   { 'name' : 'integrity',     'has_subdir' : true },
   { 'name' : 'lint_config',   'has_subdir' : true },

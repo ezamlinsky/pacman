@@ -1,0 +1,797 @@
+#!/usr/bin/bash
+#
+#   custom.sh - package customization functions for makepkg
+#
+#   Copyright (c) 2017-2018 Pacman Development Team <pacman-dev@archlinux.org>
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+[[ -n "$LIBMAKEPKG_CUSTOM_SH" ]] && return
+LIBMAKEPKG_CUSTOM_SH=1
+
+LIBRARY=${LIBRARY:-'/usr/share/makepkg'}
+
+source "$LIBRARY/util/message.sh"
+
+# Trim version number from package name
+trim_version() {
+	local package="$1"
+	package=${package%%<*}
+	package=${package%%>*}
+	package=${package%%=*}
+	echo $package
+}
+
+# Remove version numbers from package names
+remove_versions() {
+	for package in $@; do
+		echo $(trim_version $package)
+	done
+}
+
+# Sort packages using dictionary-order
+sort_packages() {
+	for package in $@; do
+		echo $package
+	done | sort -b -d -u
+}
+
+# Check if package name is found in array
+find_package() {
+
+	# Set human readable names for function parameters
+	local pname="$1"
+	shift 1
+
+	# Check the list of packages for specified package name
+	for package in $@; do
+		if [ $package == $pname ]; then
+			return 0
+		fi
+	done
+
+	# If not found, then return error flag
+	return 1
+}
+
+# Split package runtime dependencies by types: mandatory
+# and optional (enabled and disabled)
+split_dependencies() {
+
+	# Set human readable names for function parameters
+	local -n mandatory="$1"
+	local -n enabled="$2"
+	local -n disabled="$3"
+	shift 3
+
+	# Create regular expressions for package prefixes
+	local prefix_plus='^\+'
+	local prefix_minus='^\-'
+
+	# Split package runtime dependencies by types
+	for package in $@; do
+		if [[ $package =~ $prefix_plus ]]; then
+			enabled+=(${package/#+})
+		elif [[ $package =~ $prefix_minus ]]; then
+			disabled+=(${package/#-})
+		else
+			mandatory+=($package)
+		fi
+	done
+}
+
+# Collect all package dependencies and split them into build time dependencies
+# and optional runtime dependencies
+collect_deps() {
+
+	# Set human readable names for function parameters
+	local -n enabled="$1";
+	local -n optional="$2";
+	shift 2
+
+	# Remove version numbers from all 'makedepends' package names
+	enabled+=($(remove_versions ${makedepends[@]}))
+
+	# Remove version numbers from all 'checkdepends' package names
+	enabled+=($(remove_versions ${checkdepends[@]}))
+
+	# Process all runtime dependencies
+	if (( ! SPLITPKG )); then
+
+		# Arrays for different package types
+		local -a mandatory_arr=()
+		local -a enabled_arr=()
+		local -a disabled_arr=()
+
+		# Remove version numbers from all runtime package names
+		depends=($(remove_versions ${depends[@]}))
+		depends_original=($(remove_versions ${depends_original[@]}))
+
+		# Split packages by types
+		split_dependencies mandatory_arr enabled_arr disabled_arr ${depends_original[@]}
+
+		# Update enabled packages
+		enabled+=(${depends[@]})
+
+		# Extract only optional packages
+		optional+=(${enabled_arr[@]} ${disabled_arr[@]})
+	else
+
+		# Process all split packages
+		for pname in ${pkgname[@]}; do
+
+			# Extract the package dependencies
+			local dep_str=$(declare -f package_$pname | grep -e ' depends=')
+			if [ -n "$dep_str" ]; then
+				eval $dep_str
+			fi
+
+			# Arrays for different package types
+			local -a mandatory_arr=()
+			local -a enabled_arr=()
+			local -a disabled_arr=()
+
+			# Remove version numbers from all runtime package names
+			depends=($(remove_versions ${depends[@]}))
+
+			# Split packages by types
+			split_dependencies mandatory_arr enabled_arr disabled_arr ${depends[@]}
+
+			# Extract only optional packages
+			optional+=(${enabled_arr[@]} ${disabled_arr[@]})
+		done
+	fi
+
+	# Sort all dependencies and remove duplicates
+	enabled=($(sort_packages ${enabled[@]}))
+	optional=($(sort_packages ${optional[@]}))
+}
+
+# Convert package name to logic rule is usable by 'let' builtin command
+make_rule() {
+
+	# Set human readable names for function parameters
+	local pname="$1"
+
+	# Replace '-' and '.' with '_'  in package name
+	pname=${pname//-/_}
+	pname=${pname//+/_}
+	pname=${pname//./_}
+	echo "$pname"
+}
+
+# Check rule and return its status: TRUE of FALSE
+check_rule() {
+
+	# Set human readable names for function parameters
+	local rule="$1"
+
+	# Collect all enabled and optional dependencies
+	local -a enabled_deps=()
+	local -a optional_deps=()
+	collect_deps enabled_deps optional_deps
+
+	# Replace '-' and '.' with '_' for all enabled packages and
+	# set corresponding variables
+	for pname in ${enabled_deps[@]}; do
+		pname=$(make_rule $pname)
+		eval "local $pname=1"
+	done
+
+	# Check if the rule is not empty
+	if [ -z "$rule" ]; then
+		error "$(gettext "'%s' function does not accept empty rules and always return false in this case.")" "$FUNCNAME"
+		exit 1;
+	fi
+
+	# Check if packages in rule definition have no version numbers
+	if [[ "$rule" =~ '>' || "$rule" =~ '<' || "$rule" =~ '=' ]]; then
+		error "$(gettext "'%s' can not check package version for '%s', only it existence into package dependencies.")" "$FUNCNAME" "$rule"
+	exit 1;
+	fi
+
+	# Check for broken rules that always TRUE or always FALSE
+	IFS=$' \t\n\&\|\^\!'
+	for name in $(echo $rule); do
+		if ! find_package $name ${optional_deps[@]}; then
+			if find_package $name ${enabled_deps[@]}; then
+				warning "$(gettext "Rule '%s' is supplied to '%s' has package name '%s' which is defined as mandatory (not optional) package. This rule always gets TRUE.")" "$rule" "$FUNCNAME" "$name"
+			else
+				warning "$(gettext "Rule '%s' is supplied to '%s' has package name '%s' which is not covered in either: 'depends', 'makedepends' or 'checkdepends' arrays. This rule will never come TRUE.")" "$rule" "$FUNCNAME" "$name"
+			fi
+		fi
+	done
+
+	# Check the rule and return its status
+	rule=$(make_rule "$rule")
+	if (( rule )); then
+		return 0
+	else
+		return 1
+	fi
+}
+
+# Modify configure options according to enabled and disabled package sets
+modify() {
+
+	# Collect all enabled and optional dependencies
+	local -a enabled_deps=()
+	local -a optional_deps=()
+	collect_deps enabled_deps optional_deps
+
+	# Replace '-' and '.' with '_' for all enabled packages and
+	# set corresponding variables
+	for pname in ${enabled_deps[@]}; do
+		pname=$(make_rule $pname)
+		eval "local $pname=1"
+	done
+
+	# Parse all rules from custom options array
+	for option in "$@"; do
+
+		# Split rule field and option fields, then trim them
+		local IFS=$':'
+		local -a fields=(${option//\?/:})
+		IFS=$' \t\n'
+		local rule=$(echo ${fields[0]})
+		local enabled=$(echo ${fields[1]})
+		local disabled=$(echo ${fields[2]})
+
+		# Check if the rule field is not empty
+		if [ -z "$rule" ]; then
+			error "$(gettext "PKGBUILD custom options array has a rule without a package name.")"
+			exit 1;
+		fi
+
+		# Check if packages in rule definition have no version numbers
+		if [[ "$rule" =~ '>' || "$rule" =~ '<' || "$rule" =~ '=' ]]; then
+			error "$(gettext "PKGBUILD custom options rule can not check package version for '%s', only it existence into package dependencies.")" "$rule"
+			exit 1;
+		fi
+
+		# Check for broken rules that always TRUE or always FALSE
+		IFS=$' \t\n\&\|\^\!'
+		for name in $(echo $rule); do
+			if ! find_package $name ${optional_deps[@]}; then
+				if find_package $name ${enabled_deps[@]}; then
+					warning "$(gettext "PKGBUILD custom options array rule '%s' has package name '%s' which is defined as mandatory (not optional) package. This rule always gets TRUE. Try to add its enabled options to 'config_opts' array and remove the rule.")" "$rule" "$name"
+				else
+					warning "$(gettext "PKGBUILD custom options array rule '%s' has package name '%s' which is not covered in either: 'depends', 'makedepends' or 'checkdepends' arrays. This rule will never come TRUE. Try to add this package to any dependency array or remove the rule.")" "$rule" "$name"
+				fi
+			fi
+		done
+
+		# Check if enabled features is not empty
+		if [ -z "$enabled" ]; then
+			warning "$(gettext "PKGBUILD custom options array for rule '%s' has empty string for enabled features. Use keyword 'null' instead.")" "$rule"
+			enabled='null'
+		fi
+
+		# Check if disabled features is not empty
+		if [ -z "$disabled" ]; then
+			warning "$(gettext "PKGBUILD custom options array for rule '%s' has empty string for disabled features. Use keyword 'null' instead.")" "$rule"
+			disabled='null'
+		fi
+
+		# Change configure options according to specified rule
+		rule=$(make_rule "$rule")
+		if (( rule )); then
+			if [ "$enabled" != 'null' ]; then
+				config_opts+=($enabled)
+			fi
+		else
+			if [ "$disabled" != 'null' ]; then
+				config_opts+=($disabled)
+			fi
+		fi
+	done
+
+	# Print configure options
+	msg2 "$(gettext "Configure options: %s")" "${config_opts[*]}"
+}
+
+# Warn to not mix runtime and build time dependencies
+check_makedepends() {
+
+	# Set human readable names for function parameters
+	local -n make_packages="$1";
+	local -n check_packages="$2";
+	shift 2
+
+	# Arrays for different package types
+	local -a runtime=()
+	local -a mandatory_arr=()
+	local -a enabled_arr=()
+	local -a disabled_arr=()
+
+	# Remove version numbers from all runtime package names
+	runtime=($(remove_versions $@))
+
+	# Split packages by types
+	split_dependencies mandatory_arr enabled_arr disabled_arr ${runtime[@]}
+
+	# Process all runtime dependencies
+	for rundep in ${mandatory_arr[@]} ${enabled_arr[@]} ${disabled_arr[@]}; do
+
+		# Check if runtime dependency is found in makedepends array
+		if find_package $rundep ${make_packages[@]}; then
+			warning "$(gettext "PKGBUILD 'makedepends' array should not have package '%s' because it is already used in 'depends' array.")" "$rundep"
+		fi
+
+		# Check if runtime dependency is found in checkdepends array
+		if find_package $rundep ${check_packages[@]}; then
+			warning "$(gettext "PKGBUILD 'checkdepends' array should not have package '%s' because it is already used in 'depends' array.")" "$rundep"
+		fi
+	done
+}
+
+# Update list of package runtime dependencies (disable and enable optional packages)
+# Function scan the pacman database for enabled packages and automatically
+# change optional package set
+update_package() {
+
+	# Set human readable names for function parameters
+	local pname="$1"
+	local -n packages="$2"
+
+	# Check if the package exists in the target system
+	if pacman 2>/dev/null 1>/dev/null -Qq $pname; then
+
+		# Extract the list of used package dependencies from the target system
+		local -a sys_deps=($(pacman -Qi $pname | grep Depends | sed -e 's/Depends On      : //g'))
+
+		# Remove version numbers from all runtime package names
+		sys_deps=($(remove_versions ${sys_deps[@]}))
+
+		# Arrays for different package types
+		local -a mandatory_arr=()
+		local -a optional_arr=()
+		local -a enabled_arr=()
+		local -a disabled_arr=()
+
+		# Split packages by types
+		split_dependencies mandatory_arr enabled_arr disabled_arr ${packages[@]}
+
+		# Mandatory packages are always enabled
+		packages=(${mandatory_arr[@]})
+
+		# Extract only optional packages
+		optional_arr=(${enabled_arr[@]} ${disabled_arr[@]})
+
+		# Process all optional runtime dependencies
+		for pname in ${optional_arr[@]}; do
+
+			# Trim package version
+			local name=$(trim_version $pname)
+
+			# Check package status in the target system
+			if find_package $name ${sys_deps[@]}; then
+				packages+=(+$pname)		# enable package
+			else
+				packages+=(-$pname)		# disable package
+			fi
+		done
+
+		# Remove version numbers from all runtime package names
+		mandatory_arr=($(remove_versions ${mandatory_arr[@]}))
+		optional_arr=($(remove_versions ${optional_arr[@]}))
+
+		# Check for extra packages in the system that we can not process
+		for pname in ${sys_deps[@]}; do
+
+			# Ignore empty package set
+			if [ $pname != 'None' ]; then
+
+				# If found extra package not covered by mandatory and optional packages
+				if ! find_package $pname ${mandatory_arr[@]} ${optional_arr[@]}; then
+
+					# then show warning message
+					plain "$(gettext "Package, is installed in your system, depends on '%s' which is not found among mandatory and optional packages. Ignoring this dependency...")" "$pname"
+				fi
+			fi
+		done
+	else
+
+		# If the package does not exist in the target system,
+		# then do not set dependency list for it
+		packages=()
+	fi
+}
+
+# Show sorted lists of mandatory and optional packages and illuminate
+# enabled and disabled packages
+show_packages() {
+
+	# Set human readable names for function parameters
+	local msgfunc="$1"
+	shift 1
+
+	# Arrays for different package types
+	local -a mandatory_arr=()
+	local -a enabled_arr=()
+	local -a disabled_arr=()
+
+	# Split packages by types
+	split_dependencies mandatory_arr enabled_arr disabled_arr $@
+
+	# Print mandatory packages
+	mandatory_arr=($(sort_packages ${mandatory_arr[@]}))
+	$msgfunc "$(gettext "Mandatory packages: %s")" "${mandatory_arr[*]}"
+
+	# Print optional (enabled) packages
+	enabled_arr=($(sort_packages ${enabled_arr[@]}))
+	$msgfunc "$(gettext "Enabled packages: %s")" "${enabled_arr[*]}"
+
+	# Print optional (disabled) packages
+	disabled_arr=($(sort_packages ${disabled_arr[@]}))
+	$msgfunc "$(gettext "Disabled packages: %s")" "${disabled_arr[*]}"
+}
+
+# Ask user if he/she would like to customize package dependencies
+edit_promt () {
+
+	# Show prompt message and read user's answer
+	read -p "Would you like to edit package dependencies? " response
+
+	# Get correct answer in format Y(yes) or N(no), ignoring letter case
+	while true;	do
+		case $response in
+		[yY][eE][sS]|[yY])
+			return 0 ;;
+		[nN][oO]|[nN])
+			return 1 ;;
+		*) read -p "Please, enter Y(yes) or N(no)! " response
+		esac
+	done
+}
+
+# Ask user if he/she would like to enable or disable given package
+package_promt () {
+
+	# Set human readable names for function parameters
+	local -n array="$1"
+	local pname="$2"
+	local prefix="$3"
+
+	# Show prompt message and read user's answer
+	if [ $prefix = '+' ]; then
+		read -p "        Optional package '${GREEN}$pname${ALL_OFF}' is enabled. Change? " response
+	elif [ $prefix = '-' ]; then
+		read -p "        Optional package '${RED}$pname${ALL_OFF}' is disabled. Change? " response
+	fi
+
+	# Get correct answer in format [eE] (enable), [dD] (disable), [nN] or [sS] (skip), ignoring letter case
+	while true; do
+		case $response in
+		[eE])
+			array+=("+$pname")
+			break ;;
+		[dD])
+			array+=("-$pname")
+			break ;;
+		[nN]|[sS])
+			array+=("$prefix$pname")
+			break ;;
+		*) read -p "Please, enter [E] (enable), [D] (disable), [N] or [S] (skip)! " response
+		esac
+	done
+}
+
+# Edit list of package runtime dependencies (disable and enable optional packages)
+edit_package() {
+
+	# Show prompt message and read user's answer
+	if edit_promt; then
+
+		# Show edit information and available keys
+		echo -e "\n  ${BOLD}INFO:${ALL_OFF} Type [E] to enable package, [D] to disable, [N] or [S] to skip."
+
+		# Set human readable names for function parameters
+		local -n packages="$1"
+
+		# Arrays for different package types
+		local -a mandatory=()
+		local -a optional=()
+
+		# Create regular expressions for package prefixes
+		local prefix_plus='^\+'
+		local prefix_minus='^\-'
+
+		# Split package runtime dependencies by types
+		for package in ${packages[@]}; do
+			if [[ $package =~ $prefix_plus ]]; then
+				local pname=${package/#+}
+				package_promt optional $pname '+'
+			elif [[ $package =~ $prefix_minus ]]; then
+				local pname=${package/#-}
+				package_promt optional $pname '-'
+			else
+				mandatory+=($package)
+			fi
+		done
+
+		# Update set of enabled and disabled packages
+		packages=(${mandatory[@]} ${optional[@]})
+
+		# Show new package set
+		show_packages plain ${packages[@]};
+		echo 		# add new line for better visibility
+	fi
+}
+
+# Filter out disabled packages and leave only enabled packages
+filter_enabled() {
+
+	# Local array for filtered packages
+	local -a filtered=()
+
+	# Create regular expression for excluding prefix
+	local prefix='^\-'
+
+	# Filter only mandatory and enabled optional packages
+	for package in $@; do
+		if ! [[ $package =~ $prefix ]]; then
+			filtered+=(${package/#+})
+		fi
+	done
+
+	# Return sorted list of packages
+	sort_packages ${filtered[@]}
+}
+
+# Modify package dependency list to satisfy pacman rules
+modify_package() {
+
+	# Set human readable names for function parameters
+	local pname="$1"
+	local -n packages="$2"
+
+	# Update package dependencies if asked
+	if (( UPDATE && !TUNE )); then
+		update_package $pname $2
+	fi
+
+	# Show all enabled and disabled packages
+	show_packages msg2 ${packages[@]}
+
+	# Edit package dependencies if asked
+	if (( TUNE && !UPDATE )); then
+		edit_package $2
+	fi
+
+	# Filter packages for makepkg checks
+	packages=($(filter_enabled ${packages[@]}))
+}
+
+# Store package dependencies into temporary file for fakeroot makepkg run
+store_deplist() {
+
+	# Set human readable names for function parameters
+	local name="$1"
+	local version="$2"
+
+	# Create empty file
+	local pkgconf="/tmp/$name-$version.deps"
+	echo > $pkgconf
+
+	# Store package configuration for fakeroot makepkg run
+	for depname in ${depends[@]}; do
+		echo $depname >> $pkgconf
+	done
+}
+
+# Customize package functionality (enable and disable optional packages)
+customize_package() {
+
+	# Remove version numbers from all 'makedepends' package names
+	local -a maketime=()
+	maketime=($(remove_versions ${makedepends[@]}))
+
+	# Remove version numbers from all 'checkdepends' package names
+	local -a checktime=()
+	checktime=($(remove_versions ${checkdepends[@]}))
+
+	# Process all runtime dependencies
+	if (( ! SPLITPKG )); then
+
+		# Show package info
+		msg "$(gettext "Configuring package: %s")" "$pkgname $basever"
+
+		# Save original array of the package dependencies
+		depends_original=(${depends[@]})
+
+		# Check if runtime packages conflict with 'makedepends' and 'checkdepends'
+		check_makedepends maketime checktime ${depends[@]}
+
+		# Modify package dependencies if required
+		modify_package $pkgname depends
+
+		# Store package dependencies for fakeroot makepkg run
+		store_deplist $pkgname $basever
+	else
+
+		# Process all split packages
+		for pname in ${pkgname[@]}; do
+
+			# Show package info
+			msg "$(gettext "Configuring package: %s")" "$pname $basever"
+
+			# Extract the package dependencies
+			local dep_str=$(declare -f package_$pname | grep -e ' depends=')
+			if [ -n "$dep_str" ]; then
+				eval $dep_str
+			fi
+
+			# Check if runtime packages conflict with 'makedepends' and 'checkdepends'
+			check_makedepends maketime checktime ${depends[@]}
+
+			# Modify package dependencies if required
+			modify_package $pname depends
+
+			# Store package dependencies for fakeroot makepkg run
+			store_deplist $pname $basever
+
+			# Add runtime dependencies to buildtime dependencies
+			for depname in ${depends[@]}; do
+
+				# Trim package version
+				local name=$(trim_version $depname)
+
+				# Do not add to 'makedepends' array new packages that should be build
+				if ! find_package $name ${pkgname[@]}; then
+					makedepends+=($depname)
+				fi
+			done
+		done
+
+		# Sort make dependencies and remove duplicates
+		makedepends=($(sort_packages ${makedepends[@]}))
+	fi
+}
+
+# Collect run time libraries for given package by scanning all its binaries
+runtime_libs() {
+	for file in $(find $@); do
+		objdump 2>/dev/null -p $file | grep -e 'NEEDED' | sed -e 's/  NEEDED               //g'
+	done | sort -u
+}
+
+# Extract list of all shared libraries are installed on user's computer
+# and return only libraries that needs by package binaries
+list_sharedlibs() {
+
+	# Library names needed by all package binaries
+	local deps=$(runtime_libs $@)
+
+	# If dependency list is not empty, then scan where required libraries are installed
+	if ! [ -z "$deps" ]; then
+		for file in $(ldconfig -p -N -X); do
+			echo $file
+		done | grep '/' | grep -F "$deps" | sort -u
+	fi
+}
+
+# Resolve shared library names to pacman's package names they belong to
+# Take a list of directories to scan as function argument
+runtime_deps() {
+
+	# Library files needed by all package binaries
+	local libs=$(list_sharedlibs $@)
+
+	# If file list is not empty, then scan which packages own these files
+	if ! [ -z "$libs" ]; then
+		pacman -Qoq $libs | sort -u
+	fi
+}
+
+# Resolve virtual package to real package that covers this dependency
+resolve_virtual() {
+
+	# Set human readable names for function parameters
+	local depname="$1"
+
+	# Try to resolve package name using found candidates
+	for candidate in $(pacman -Qsq $depname); do
+
+		# Extract the list of features that package provides
+		local -a provides=($(pacman -Qi $candidate | grep Provides | sed -e 's/Provides        : //g'))
+
+		# Remove version numbers from all feature names
+		provides=($(remove_versions ${provides[@]}))
+
+		# Scan the feature list for matched element
+		for entry in ${provides[@]}; do
+
+			# If provided feature is match the dependency
+			if [ $depname == $entry ]; then
+
+				# then stop searching and return found result
+				echo $candidate
+				return
+			fi
+		done
+	done
+}
+
+# Filter package runtime dependencies to allow mixing of virtual packages,
+# are set manually, and real packages, are found automatically
+filter_dependencies() {
+
+	# Set human readable names for function parameters
+	local pname="$1"
+	local -n deps="$2"
+	shift 2
+
+	# Remove version numbers from all manually set packages
+	local -a manual_deps=($(remove_versions ${deps[@]}))
+
+	# Some dependencies may be a virtual dependencies. So we should resolve
+	# dependencies to real package names
+	local -a packages=()
+	for depname in ${manual_deps[@]}; do
+
+		# Check if specified package really exists
+		if pacman 2>/dev/null 1>/dev/null -Qq $depname; then
+			packages+=($depname)
+		else
+			# If package is not found, then try to search for virtual package
+			# that covers this dependency
+			packages+=($(resolve_virtual $depname))
+		fi
+	done
+
+	# Eliminate automatically found dependencies that are already set manually
+	for depname in $@; do
+
+		# Check if automatically found dependency is not found among
+		# manually set dependencies and it does not match the package name
+		if ! [[ $depname == $pname ]]; then
+			if ! find_package $depname ${packages[@]}; then
+				echo $depname
+			fi
+		fi
+	done
+}
+
+# This functions is invoked after package installation and collects
+# a minimal set of run time dependencies are needed by the package
+set_dependencies() {
+
+	# Show information message about the running function
+	msg "$(gettext "Generating runtime dependencies...")"
+
+	# Read package dependencies that  were stored before switching to fakeroot
+	local pkgconf="/tmp/$1-$basever.deps"
+	if [ -f $pkgconf ]; then
+		readarray depends < $pkgconf
+		rm -f $pkgconf
+	fi
+
+	# Collect package runtime dependencies
+	local -a runtime=($(runtime_deps $2))
+
+	# Show manually set dependencies
+	msg2 "$(gettext "Manually set dependencies: %s")" "$(echo ${depends[*]})"
+
+	# Show automatically found dependencies
+	local -a auto=($(filter_dependencies $1 depends ${runtime[@]}))
+	msg2 "$(gettext "Automatically found dependencies: %s")" "${auto[*]}"
+
+	# Add automatically found dependencies
+	depends+=(${auto[@]})
+
+	# Sort all packages using dictionary-order
+	depends=($(sort_packages ${depends[@]}))
+}

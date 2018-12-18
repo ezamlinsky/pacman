@@ -32,14 +32,9 @@ lint_pkgbuild_functions+=('lint_pkgname')
 lint_one_pkgname() {
 	local type=$1 name=$2 ret=0
 
-
 	if [[ -z $name ]]; then
 		error "$(gettext "%s is not allowed to be empty.")" "$type"
 		return 1
-	fi
-	if [[ ${name:0:1} = "-" ]]; then
-		error "$(gettext "%s is not allowed to start with a hyphen.")" "$type"
-		ret=1
 	fi
 	if [[ ${name:0:1} = "." ]]; then
 		error "$(gettext "%s is not allowed to start with a dot.")" "$type"

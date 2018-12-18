@@ -64,6 +64,7 @@ LIBMAKEPKG_IN = \
 	libmakepkg/buildenv/compiler.sh \
 	libmakepkg/buildenv/debugflags.sh \
 	libmakepkg/buildenv/makeflags.sh \
+	libmakepkg/custom.sh \
 	libmakepkg/integrity.sh \
 	libmakepkg/integrity/generate_checksum.sh \
 	libmakepkg/integrity/generate_signature.sh \

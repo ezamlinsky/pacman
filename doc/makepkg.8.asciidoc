@@ -140,6 +140,21 @@ Options
 	remote builder, or a tarball upload. Because integrity checks are verified,
 	all source files of the package need to be present or downloadable.
 
+*-t, \--tune*::
+	Allow you to configure optional package dependencies before build. This
+	option is necessary if you build custom package for your server or
+	workstation, and need to change the set of components, the package depends of.
+	When makepkg ask if you like to edit package dependencies, then answer Y(yes),
+	and follow the Wizard. In other case answer N(no) to skip this procedure,
+	and build the package with default settings.
+
+*-u, \--update*::
+	Update existing package up to new version but keep its dependencies.
+	When a new version of software is released, you may wish to update the
+	local package, but keep all of its previously configured dependencies.
+	Use this option to do it. For new packages that are not found in your system
+	this option is ignored.
+
 *-V, \--version*::
 	Display version information.
 
